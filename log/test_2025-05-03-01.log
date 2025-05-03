@@ -1,0 +1,342 @@
+[:00000002][DEBUG][01:35:51.39]LAUNCH snlua bootstrap
+[:00000003][DEBUG][01:35:51.39]LAUNCH snlua launcher
+[:00000004][DEBUG][01:35:51.39]LAUNCH snlua cdummy
+[:00000005][DEBUG][01:35:51.39]LAUNCH harbor 0 4
+[:00000006][DEBUG][01:35:51.39]LAUNCH snlua datacenterd
+[:00000007][DEBUG][01:35:51.39]LAUNCH snlua service_mgr
+[:00000008][DEBUG][01:35:51.39]LAUNCH snlua main
+[:00000008][INFO][01:35:51.39][main.lua:9] server start
+[:00000009][DEBUG][01:35:51.39]LAUNCH snlua db/dbc
+[:00000009][INFO][01:35:51.40][dbc.lua:211]  db start
+[:00000009][INFO][01:35:51.45][dbc.lua:32]  Connected to MySQL
+[:0000000a][DEBUG][01:35:51.45]LAUNCH snlua watchdog
+[:0000000b][DEBUG][01:35:51.45]LAUNCH snlua gate
+[:0000000c][DEBUG][01:35:51.45]LAUNCH snlua protoloader
+[:0000000d][DEBUG][01:35:51.45]LAUNCH snlua gate
+[:0000000d][DEBUG][01:35:51.45]Listen on 0.0.0.0:8888
+[:0000000e][DEBUG][01:35:51.45]LAUNCH snlua login
+[:0000000f][DEBUG][01:35:51.46]LAUNCH snlua rankS
+[:0000000f][INFO][01:35:51.46][rankS.lua:102] Rank module started
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:160] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:162] Rank 1: {
+  ["score"] = 75,
+  ["key"] = "name1",
+  ["__time"] = 46,
+}
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:162] Rank 2: {
+  ["score"] = 65,
+  ["key"] = "name2",
+  ["__time"] = 56,
+}
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:162] Rank 3: {
+  ["score"] = 55,
+  ["key"] = "name3",
+  ["__time"] = 66,
+}
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:162] Rank 4: {
+  ["score"] = 45,
+  ["key"] = "name4",
+  ["__time"] = 76,
+}
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:162] Rank 5: {
+  ["score"] = 35,
+  ["key"] = "name5",
+  ["__time"] = 76,
+}
+[:0000000f][DEBUG][01:35:51.76][rank_base.lua:164] [rank_base] k2pos: {
+  ["name5"] = 5,
+  ["name1"] = 1,
+  ["name3"] = 3,
+  ["name2"] = 2,
+  ["name4"] = 4,
+}
+[:0000000f][DEBUG][01:35:51.76]init service failed: ./script/rank/rank_base.lua:96: bad argument #2 to 'insert' (number expected, got nil)
+stack traceback:
+	[C]: in function 'table.insert'
+	./script/rank/rank_base.lua:96: in function 'rank.rank_base.update_irank'
+	./script/rank/rank_base.lua:37: in function 'rank.rank_base.insert'
+	./script/rankS.lua:62: in function 'init_rank'
+	./script/rankS.lua:114: in upvalue 'start'
+	./lualib/skynet.lua:1065: in function <./lualib/skynet.lua:1063>
+	[C]: in function 'xpcall'
+	./lualib/skynet.lua:1067: in function 'skynet.init_service'
+	./lualib/skynet.lua:1080: in upvalue 'f'
+	./lualib/skynet.lua:375: in function <./lualib/skynet.lua:374>
+[:0000000f][DEBUG][01:35:51.76]KILL self
+[:00000008][DEBUG][01:35:51.76]init service failed: ./lualib/skynet.lua:720: call failed
+stack traceback:
+	[C]: in function 'error'
+	./lualib/skynet.lua:720: in upvalue 'yield_call'
+	./lualib/skynet.lua:737: in function 'skynet.call'
+	(...tail calls...)
+	./script/main.lua:21: in upvalue 'start'
+	./lualib/skynet.lua:1065: in function <./lualib/skynet.lua:1063>
+	[C]: in function 'xpcall'
+	./lualib/skynet.lua:1067: in function 'skynet.init_service'
+	./lualib/skynet.lua:1080: in upvalue 'f'
+	./lualib/skynet.lua:375: in function <./lualib/skynet.lua:374>
+[:00000008][DEBUG][01:35:51.76]KILL self
+[:00000002][DEBUG][01:35:51.76]KILL self
+[:00000002][DEBUG][01:39:43.69]LAUNCH snlua bootstrap
+[:00000003][DEBUG][01:39:43.69]LAUNCH snlua launcher
+[:00000004][DEBUG][01:39:43.69]LAUNCH snlua cdummy
+[:00000005][DEBUG][01:39:43.69]LAUNCH harbor 0 4
+[:00000006][DEBUG][01:39:43.69]LAUNCH snlua datacenterd
+[:00000007][DEBUG][01:39:43.69]LAUNCH snlua service_mgr
+[:00000008][DEBUG][01:39:43.69]LAUNCH snlua main
+[:00000008][INFO][01:39:43.69][main.lua:9] server start
+[:00000009][DEBUG][01:39:43.69]LAUNCH snlua db/dbc
+[:00000009][INFO][01:39:43.69][dbc.lua:211]  db start
+[:00000009][INFO][01:39:43.70][dbc.lua:32]  Connected to MySQL
+[:0000000a][DEBUG][01:39:43.70]LAUNCH snlua watchdog
+[:0000000b][DEBUG][01:39:43.70]LAUNCH snlua gate
+[:0000000c][DEBUG][01:39:43.70]LAUNCH snlua protoloader
+[:0000000d][DEBUG][01:39:43.70]LAUNCH snlua gate
+[:0000000d][DEBUG][01:39:43.70]Listen on 0.0.0.0:8888
+[:0000000e][DEBUG][01:39:43.70]LAUNCH snlua login
+[:0000000f][DEBUG][01:39:43.71]LAUNCH snlua rankS
+[:0000000f][INFO][01:39:43.71][rankS.lua:102] Rank module started
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:164] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 1: {
+  ["score"] = 75,
+  ["__time"] = 71,
+  ["key"] = "name1",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 2: {
+  ["score"] = 65,
+  ["__time"] = 81,
+  ["key"] = "name2",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 3: {
+  ["score"] = 55,
+  ["__time"] = 91,
+  ["key"] = "name3",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 4: {
+  ["score"] = 45,
+  ["__time"] = 101,
+  ["key"] = "name4",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 5: {
+  ["score"] = 35,
+  ["__time"] = 101,
+  ["key"] = "name5",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:168] [rank_base] k2pos: {
+  ["name3"] = 3,
+  ["name2"] = 2,
+  ["name5"] = 5,
+  ["name4"] = 4,
+  ["name1"] = 1,
+}
+[:0000000f][ERROR][01:39:44.01][rank_base.lua:191] [rank_base] Invalid slice range for rank: test
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:164] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 1: {
+  ["score"] = 75,
+  ["__time"] = 71,
+  ["key"] = "name1",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 2: {
+  ["score"] = 65,
+  ["__time"] = 81,
+  ["key"] = "name2",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 3: {
+  ["score"] = 55,
+  ["__time"] = 91,
+  ["key"] = "name3",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 4: {
+  ["score"] = 45,
+  ["__time"] = 101,
+  ["key"] = "name4",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:166] Rank 5: {
+  ["score"] = 35,
+  ["__time"] = 101,
+  ["key"] = "name5",
+}
+[:0000000f][DEBUG][01:39:44.01][rank_base.lua:168] [rank_base] k2pos: {
+  ["name3"] = 3,
+  ["name2"] = 2,
+  ["name5"] = 5,
+  ["name4"] = 4,
+  ["name1"] = 1,
+}
+[:00000008][DEBUG][01:39:44.01]KILL self
+[:00000002][DEBUG][01:39:44.01]KILL self
+[:00000002][DEBUG][01:41:24.86]LAUNCH snlua bootstrap
+[:00000003][DEBUG][01:41:24.86]LAUNCH snlua launcher
+[:00000004][DEBUG][01:41:24.86]LAUNCH snlua cdummy
+[:00000005][DEBUG][01:41:24.86]LAUNCH harbor 0 4
+[:00000006][DEBUG][01:41:24.86]LAUNCH snlua datacenterd
+[:00000007][DEBUG][01:41:24.86]LAUNCH snlua service_mgr
+[:00000008][DEBUG][01:41:24.86]LAUNCH snlua main
+[:00000008][INFO][01:41:24.86][main.lua:9] server start
+[:00000009][DEBUG][01:41:24.86]LAUNCH snlua db/dbc
+[:00000009][INFO][01:41:24.86][dbc.lua:211]  db start
+[:00000009][INFO][01:41:24.87][dbc.lua:32]  Connected to MySQL
+[:0000000a][DEBUG][01:41:24.87]LAUNCH snlua watchdog
+[:0000000b][DEBUG][01:41:24.87]LAUNCH snlua gate
+[:0000000c][DEBUG][01:41:24.87]LAUNCH snlua protoloader
+[:0000000d][DEBUG][01:41:24.87]LAUNCH snlua gate
+[:0000000d][DEBUG][01:41:24.87]Listen on 0.0.0.0:8888
+[:0000000e][DEBUG][01:41:24.87]LAUNCH snlua login
+[:0000000f][DEBUG][01:41:24.87]LAUNCH snlua rankS
+[:0000000f][INFO][01:41:24.87][rankS.lua:102] Rank module started
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:164] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 1: {
+  ["key"] = "name1",
+  ["score"] = 75,
+  ["__time"] = 87,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 2: {
+  ["key"] = "name2",
+  ["score"] = 65,
+  ["__time"] = 97,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 3: {
+  ["key"] = "name3",
+  ["score"] = 55,
+  ["__time"] = 107,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 4: {
+  ["key"] = "name4",
+  ["score"] = 45,
+  ["__time"] = 117,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 5: {
+  ["key"] = "name5",
+  ["score"] = 35,
+  ["__time"] = 117,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:168] [rank_base] k2pos: {
+  ["name4"] = 4,
+  ["name2"] = 2,
+  ["name1"] = 1,
+  ["name3"] = 3,
+  ["name5"] = 5,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:164] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 1: {
+  ["key"] = "name1",
+  ["score"] = 75,
+  ["__time"] = 87,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 2: {
+  ["key"] = "name2",
+  ["score"] = 65,
+  ["__time"] = 97,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 3: {
+  ["key"] = "name3",
+  ["score"] = 55,
+  ["__time"] = 107,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 4: {
+  ["key"] = "name4",
+  ["score"] = 45,
+  ["__time"] = 117,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:166] Rank 5: {
+  ["key"] = "name5",
+  ["score"] = 35,
+  ["__time"] = 117,
+}
+[:0000000f][DEBUG][01:41:25.17][rank_base.lua:168] [rank_base] k2pos: {
+  ["name4"] = 4,
+  ["name2"] = 2,
+  ["name1"] = 1,
+  ["name3"] = 3,
+  ["name5"] = 5,
+}
+[:00000008][DEBUG][01:41:25.17]KILL self
+[:00000002][DEBUG][01:41:25.17]KILL self
+[:00000002][DEBUG][01:42:05.00]LAUNCH snlua bootstrap
+[:00000003][DEBUG][01:42:05.01]LAUNCH snlua launcher
+[:00000004][DEBUG][01:42:05.01]LAUNCH snlua cdummy
+[:00000005][DEBUG][01:42:05.01]LAUNCH harbor 0 4
+[:00000006][DEBUG][01:42:05.01]LAUNCH snlua datacenterd
+[:00000007][DEBUG][01:42:05.01]LAUNCH snlua service_mgr
+[:00000008][DEBUG][01:42:05.01]LAUNCH snlua main
+[:00000008][INFO][01:42:05.01][main.lua:9] server start
+[:00000009][DEBUG][01:42:05.01]LAUNCH snlua db/dbc
+[:00000009][INFO][01:42:05.01][dbc.lua:211]  db start
+[:00000009][INFO][01:42:05.02][dbc.lua:32]  Connected to MySQL
+[:0000000a][DEBUG][01:42:05.02]LAUNCH snlua watchdog
+[:0000000b][DEBUG][01:42:05.02]LAUNCH snlua gate
+[:0000000c][DEBUG][01:42:05.03]LAUNCH snlua protoloader
+[:0000000d][DEBUG][01:42:05.03]LAUNCH snlua gate
+[:0000000d][DEBUG][01:42:05.03]Listen on 0.0.0.0:8888
+[:0000000e][DEBUG][01:42:05.03]LAUNCH snlua login
+[:0000000f][DEBUG][01:42:05.03]LAUNCH snlua rankS
+[:0000000f][INFO][01:42:05.03][rankS.lua:102] Rank module started
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:165] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 1: {
+  ["key"] = "name1",
+  ["__time"] = 3,
+  ["score"] = 75,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 2: {
+  ["key"] = "name2",
+  ["__time"] = 13,
+  ["score"] = 65,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 3: {
+  ["key"] = "name3",
+  ["__time"] = 23,
+  ["score"] = 55,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 4: {
+  ["key"] = "name4",
+  ["__time"] = 33,
+  ["score"] = 45,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 5: {
+  ["key"] = "name5",
+  ["__time"] = 33,
+  ["score"] = 35,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:169] [rank_base] k2pos: {
+  ["name3"] = 3,
+  ["name4"] = 4,
+  ["name5"] = 5,
+  ["name2"] = 2,
+  ["name1"] = 1,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:165] [rank_base] Rank data for test:
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 1: {
+  ["key"] = "name1",
+  ["__time"] = 3,
+  ["score"] = 75,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 2: {
+  ["key"] = "name2",
+  ["__time"] = 13,
+  ["score"] = 65,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 3: {
+  ["key"] = "name3",
+  ["__time"] = 23,
+  ["score"] = 55,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 4: {
+  ["key"] = "name4",
+  ["__time"] = 33,
+  ["score"] = 45,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:167] Rank 5: {
+  ["key"] = "name5",
+  ["__time"] = 33,
+  ["score"] = 35,
+}
+[:0000000f][DEBUG][01:42:05.33][rank_base.lua:169] [rank_base] k2pos: {
+  ["name3"] = 3,
+  ["name4"] = 4,
+  ["name5"] = 5,
+  ["name2"] = 2,
+  ["name1"] = 1,
+}
+[:00000008][DEBUG][01:42:05.33]KILL self
+[:00000002][DEBUG][01:42:05.33]KILL self
+[:00000000][FATAL][01:53:10.87]SIGHUP

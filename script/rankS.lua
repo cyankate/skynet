@@ -16,51 +16,19 @@ function init_rank()
     --         key = "name" .. k,
     --         score = math.random(1, 100),
     --     }
-    --     rank:insert(data)
+    --     rank:update(data)
     --     skynet.sleep(10)
     -- end 
-
-    local data1 = {
-        key = "name1",
-        score = 75,
-    }
-    rank:insert(data1)
-    skynet.sleep(10)
-
-    local data2 = {
-        key = "name2",
-        score = 63,
-    }
-    rank:insert(data2)
-    skynet.sleep(10)
-
-    local data3 = {
-        key = "name3",
-        score = 20,
-    }
-    rank:insert(data3)
-    skynet.sleep(10)
-
-    local data4 = {
-        key = "name4",
-        score = 50,
-    }
-    rank:insert(data4)
-
-    local data5 = {
-        key = "name5",
-        score = 50,
-    }
-    rank:insert(data5)
-    
-    rank:print()
-
-    local data = {
-        key = "name4",
-        score = 2,
-    }
-    rank:insert(data)
-    rank:print()
+    -- 运行测试
+    skynet.fork(function()
+        skynet.sleep(100) -- 等待系统稳定
+        local success = test_rank()
+        if success then
+            log.info("Rank test completed successfully")
+        else
+            log.error("Rank test failed")
+        end
+    end)
 end 
 
 function CMD.update_rank(_data)
@@ -93,10 +61,192 @@ function CMD.get_rank_list()
     return rank_list
 end
 
-function load_rank()
+function test_rank()
+    local rank = ranks["score"]
+    if not rank then
+        log.error("Rank not found")
+        return false
+    end
 
-end 
+    -- 验证函数
+    local function verify_rank()
+        log.info("Verifying rank data...")
+        
+        -- 1. 验证排名顺序
+        for i = 1, #rank.irank_ - 1 do
+            local current = rank.irank_[i]
+            local next = rank.irank_[i + 1]
+            if rank:conpare_func_with_time(current, next) > 0 then
+                log.error(string.format("Rank order error at position %d: %s(%d) > %s(%d)", 
+                    i, current.key, current.score, next.key, next.score))
+                return false
+            end
+        end
 
+        -- 2. 验证k2pos映射
+        for i, data in ipairs(rank.irank_) do
+            local key = rank:rkey(data)
+            if rank.k2pos_[key] ~= i then
+                log.error(string.format("Position mapping error for %s: expected %d, got %d", 
+                    key, i, rank.k2pos_[key]))
+                return false
+            end
+        end
+
+        -- 3. 验证__old_pos的正确性
+        for i, data in ipairs(rank.irank_) do
+            if data.__opos ~= i then
+                log.error(string.format("Old position error for %s: expected %d, got %d", 
+                    data.key, i, data.__opos))
+                return false
+            end
+        end
+
+        return true
+    end
+
+    -- 打印排行榜状态
+    local function print_rank_status(scenario_name)
+        log.info(string.format("=== Rank Status after %s ===", scenario_name))
+        for pos, data in ipairs(rank.irank_) do
+            log.info(string.format("Rank %d: %s (score: %d, old_pos: %d)", 
+                pos, data.key, data.score, data.__opos))
+        end
+    end
+
+    -- 测试场景
+    local test_scenarios = {
+        -- 场景1: 初始数据，不同分数
+        function()
+            log.info("Scenario 1: Initial data with different scores")
+            local players = {
+                {key = "player1", score = 100},
+                {key = "player2", score = 200},
+                {key = "player3", score = 300},
+                {key = "player4", score = 400},
+                {key = "player5", score = 500}
+            }
+            for _, player in ipairs(players) do
+                rank:update(player)
+            end
+            return "Initial data"
+        end,
+
+        -- 场景2: 同分玩家同时首次上榜
+        function()
+            log.info("Scenario 2: Same score players first time on rank")
+            local players = {
+                {key = "player6", score = 250},
+                {key = "player7", score = 250}
+            }
+            for _, player in ipairs(players) do
+                rank:update(player)
+            end
+            return "Same score first time"
+        end,
+
+        -- 场景3: 已在榜内的玩家分数变化
+        function()
+            log.info("Scenario 3: Existing player score change")
+            local player = {key = "player3", score = 450}  -- 从300升到450
+            rank:update(player)
+            return "Score increase"
+        end,
+
+        -- 场景4: 已在榜内的玩家分数下降到与其他人相同
+        function()
+            log.info("Scenario 4: Existing player score decrease to same as others")
+            local player = {key = "player3", score = 250}  -- 从450降到250
+            rank:update(player)
+            return "Score decrease to same"
+        end,
+
+        -- 场景5: 新玩家分数与榜内玩家相同
+        function()
+            log.info("Scenario 5: New player with same score as existing")
+            local player = {key = "player8", score = 250}
+            rank:update(player)
+            return "New player same score"
+        end,
+
+        -- 场景6: 榜内玩家分数变化导致位置交换
+        function()
+            log.info("Scenario 6: Score change causing position swap")
+            local player = {key = "player2", score = 350}  -- 从200升到350
+            rank:update(player)
+            return "Position swap"
+        end,
+
+        -- 场景7: 多个玩家同时更新
+        function()
+            log.info("Scenario 7: Multiple players update simultaneously")
+            local players = {
+                {key = "player1", score = 150},  -- 从100升到150
+                {key = "player4", score = 350},  -- 从400降到350
+                {key = "player9", score = 250}   -- 新玩家
+            }
+            for _, player in ipairs(players) do
+                rank:update(player)
+            end
+            return "Multiple updates"
+        end,
+
+        -- 场景8: 分数相同但位置不同的玩家更新
+        function()
+            log.info("Scenario 8: Same score different position updates")
+            local players = {
+                {key = "player3", score = 250},  -- 已在榜内
+                {key = "player6", score = 250},  -- 已在榜内
+                {key = "player10", score = 250}  -- 新玩家
+            }
+            for _, player in ipairs(players) do
+                rank:update(player)
+            end
+            return "Same score position test"
+        end,
+
+        -- 场景9: 分数变化导致位置大幅变动
+        function()
+            log.info("Scenario 9: Large position change")
+            local player = {key = "player5", score = 100}  -- 从500降到100
+            rank:update(player)
+            return "Large position change"
+        end,
+
+        -- 场景10: 边界情况测试
+        function()
+            log.info("Scenario 10: Edge cases")
+            local players = {
+                {key = "player11", score = 600},  -- 超过最高分
+                {key = "player12", score = 50},   -- 低于最低分
+                {key = "player13", score = 250}   -- 与多个玩家同分
+            }
+            for _, player in ipairs(players) do
+                rank:update(player)
+            end
+            return "Edge cases"
+        end
+    }
+
+    -- 执行测试
+    log.info("Starting rank test...")
+    
+    for i, scenario in ipairs(test_scenarios) do
+        log.info(string.format("Executing test scenario %d", i))
+        local scenario_name = scenario()
+        
+        if not verify_rank() then
+            log.error(string.format("Test scenario %d verification failed", i))
+            return false
+        end
+        
+        print_rank_status(scenario_name)
+        skynet.sleep(10) -- 等待更新完成
+    end
+
+    log.info("All test scenarios passed")
+    return true
+end
 
 skynet.start(function()
     log.info("Rank module started")
