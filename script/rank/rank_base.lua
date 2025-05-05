@@ -75,7 +75,7 @@ function rank_base:update_irank(_data)
             log.error("[rank_base] update_irank: key = name4, opos = " .. opos)
         end 
         -- 跟榜内的自己比, 就不需要对比时间了
-        local dir = self:compare_func(_data, self.irank_[opos])
+        local dir = self:conpare_func_with_time(_data, self.irank_[opos])
         local npos
         if dir > 0 then 
             local srank = self:slice_irank(opos + 1, #self.irank_)
@@ -85,7 +85,7 @@ function rank_base:update_irank(_data)
             end
             -- 因为compare_func_with_time函数的设计上, 目标元素和对比元素如果时间戳相同
             -- 则会把目标元素放到对比元素的后面, 但此处的目标元素本来就在对比元素的前面, 所以干脆不比较时间了
-            local offset = tableUtils.binary_search(srank, _data, self.compare_func, self)
+            local offset = tableUtils.binary_search(srank, _data, self.conpare_func_with_time, self)
             if offset == 0 then
                 self.irank_[opos] = _data
                 return false
@@ -227,7 +227,7 @@ function rank_base:conpare_func_with_time(_a, _b)
     end
     local ret = self:compare_func(_a, _b)
     if ret == 0 then
-        -- 如果分数相同
+        -- 如果分数相同, 验证历史位置
         local a_in_rank = _a.__opos > 0
         local b_in_rank = _b.__opos > 0
         
@@ -475,5 +475,4 @@ function rank_base:batch_update(_datas)
     return true
 end
 
-return rank_base
--- end
+return rank_base-- end

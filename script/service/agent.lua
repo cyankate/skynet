@@ -7,6 +7,7 @@ local ctn_bag = require "ctn.ctn_bag"
 local ctn_kv = require "ctn.ctn_kv"
 local log = require "log"
 local msg_handle = require "msg_handle"
+local eventS = skynet.uniqueservice("event")
 
 local CMD = {}
 local account_key
@@ -106,15 +107,15 @@ function load_player_data()
     end
 end
 
-function ctn_loaded(ctn)
+function ctn_loaded(_ctn)
     if not player then 
         return 
     end 
-    if not player.ctn_loading_[ctn.name_] then 
+    if not player.ctn_loading_[_ctn.name_] then 
         return 
     end
-    log.info(string.format("Container %s loaded", ctn))
-    player.ctn_loading_[ctn.name_] = nil
+    log.info(string.format("Container %s loaded", _ctn))
+    player.ctn_loading_[_ctn.name_] = nil
     if not next(player.ctn_loading_) then 
         log.info(string.format("All containers loaded for player %s", player.player_id_))
         player:loaded()
@@ -122,6 +123,30 @@ function ctn_loaded(ctn)
     local login = skynet.localname(".login")
     skynet.send(login, "lua", "player_loaded", account_key, player.player_id_)
 end
+
+function handle_login(_player_id)
+    -- 处理登录逻辑
+    
+    
+    -- 触发登录事件
+    skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LOGIN, _player_id, {
+        level = player.level,
+        vip_level = player.vip_level,
+        -- 其他登录相关信息
+    })
+end 
+
+function handle_level_up(_player_id, _new_level)
+    -- 处理升级逻辑
+    
+    
+    -- 触发升级事件
+    skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LEVEL_UP, _player_id, {
+        old_level = player.level,
+        new_level = _new_level,
+        -- 其他升级相关信息
+    })
+end 
 
 function CMD.disconnect()
     log.info(string.format("Agent %s disconnecting", fd))

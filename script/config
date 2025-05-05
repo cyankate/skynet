@@ -1,12 +1,12 @@
 thread = 8
-logger = "logger" -- 日志服务名
+logger = "loggerS" -- 日志服务名
 logservice = "snlua"
 logpath = "./log/"	-- 日志路径
-loggroup = "test"	-- 日志组名
+loggroup = "debug"	-- 日志组名
 harbor = 0
 start = "main"
 bootstrap = "snlua bootstrap"	-- The service for bootstrap
-luaservice = "./script/?.lua;./service/?.lua;"
+luaservice = "./script/?.lua;./service/?.lua;./script/service/?.lua"
 lualoader = "lualib/loader.lua"
 cpath = "./cservice/?.so"
 snax = "./examples/?.lua;"

@@ -11,24 +11,17 @@ function init_rank()
     local rank = score_rank.new("test")
     ranks["score"] = rank
     rank.loaded_ = true 
-    -- for k = 1, 3 do 
-    --     local data = {
-    --         key = "name" .. k,
-    --         score = math.random(1, 100),
-    --     }
-    --     rank:update(data)
-    --     skynet.sleep(10)
-    -- end 
+
     -- 运行测试
-    skynet.fork(function()
-        skynet.sleep(100) -- 等待系统稳定
-        local success = test_rank()
-        if success then
-            log.info("Rank test completed successfully")
-        else
-            log.error("Rank test failed")
-        end
-    end)
+    -- skynet.fork(function()
+    --     skynet.sleep(100) -- 等待系统稳定
+    --     local success = test_rank()
+    --     if success then
+    --         log.info("Rank test completed successfully")
+    --     else
+    --         log.error("Rank test failed")
+    --     end
+    -- end)
 end 
 
 function CMD.update_rank(_data)
@@ -60,6 +53,25 @@ function CMD.get_rank_list()
     }
     return rank_list
 end
+
+function CMD.on_event(_event_name, ...)
+    local player_id, ... = ...
+    if _event_name == event_def.PLAYER.LOGIN then
+        -- 处理玩家登录排行榜逻辑
+        handle_player_login(player_id, ...)
+    elseif _event_name == event_def.PLAYER.LEVEL_UP then
+        -- 处理玩家升级排行榜逻辑
+        handle_player_level_up(player_id, ...)
+    end
+end
+
+function handle_player_login()
+
+end 
+
+function handle_player_level_up()
+
+end 
 
 function test_rank()
     local rank = ranks["score"]
@@ -252,6 +264,12 @@ skynet.start(function()
     log.info("Rank module started")
 
     skynet.register(".rank")
+    -- 监听玩家登录事件
+    skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
+    -- 监听玩家升级事件
+    skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LEVEL_UP, skynet.self())
+    
+
     
     skynet.dispatch("lua", function(_, _, cmd, ...)
         local f = CMD[cmd]
