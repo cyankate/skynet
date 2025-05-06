@@ -1,6 +1,8 @@
+package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 local skynet = require "skynet"
 local netpack = require "skynet.netpack"
 local socketdriver = require "skynet.socketdriver"
+local log = require "log"
 
 local gateserver = {}
 
@@ -42,7 +44,7 @@ function gateserver.start(handler)
 		local port = assert(conf.port)
 		maxclient = conf.maxclient or 1024
 		nodelay = conf.nodelay
-		skynet.error(string.format("Listen on %s:%d", address, port))
+		log.error(string.format("Listen on %s:%d", address, port))
 		socket = socketdriver.listen(address, port, conf.backlog)
 		listen_context.co = coroutine.running()
 		listen_context.fd = socket
@@ -67,7 +69,7 @@ function gateserver.start(handler)
 		if connection[fd] then
 			handler.message(fd, msg, sz)
 		else
-			skynet.error(string.format("Drop message from fd (%d) : %s", fd, netpack.tostring(msg,sz)))
+			log.error(string.format("Drop message from fd (%d) : %s", fd, netpack.tostring(msg,sz)))
 		end
 	end
 
@@ -118,7 +120,7 @@ function gateserver.start(handler)
 
 	function MSG.error(fd, msg)
 		if fd == socket then
-			skynet.error("gateserver accept error:",msg)
+			log.error("gateserver accept error:",msg)
 		else
 			socketdriver.shutdown(fd)
 			if handler.error then

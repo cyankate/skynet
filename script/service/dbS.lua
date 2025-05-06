@@ -49,7 +49,7 @@ function CMD.select(_tbl, _cond, _options)
         sql = sql .. string.format(" LIMIT %d", _options.limit)
     end
 
-    log.debug("SQL Query: %s", sql)
+    --log.debug("SQL Query: %s", sql)
     local result, err = db:query(sql)
     release(db)
 
@@ -98,7 +98,6 @@ function CMD.update(_tbl, _cond, _data, _options)
         return nil
     end
     local set_list = {}
-    print(_tbl, _data)
     for k, v in pairs(_data) do
         table.insert(set_list, string.format("%s=%s", k, mysql.quote_sql_str(tostring(v))))
     end

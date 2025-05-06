@@ -28,13 +28,12 @@ local function unpack_package(text)
 	if size < s+2 then
 		return nil, text
 	end
-
 	return text:sub(3,2+s), text:sub(3+s)
 end
 
-local function recv_package(last)
+local function recv_package(_last)
 	local result
-	result, last = unpack_package(last)
+	result, last = unpack_package(_last)
 	if result then
 		return result, last
 	end
@@ -86,6 +85,23 @@ local function print_package(t, ...)
 	end
 end
 
+-- 处理服务器消息，添加对被顶号消息的处理
+local function handle_server_message(name, args)
+    if name == "kicked_out" then
+        print("您的账号在其他设备登录，已被强制下线")
+        print("原因:", args.reason)
+        print("消息:", args.message)
+        
+        -- 这里可以添加额外的客户端逻辑，如自动重新登录尝试等
+        -- 在实际游戏中，可能需要弹出对话框提示用户
+        
+        -- 终止客户端
+        os.exit(0)
+    end
+    
+    -- 处理其他消息类型...
+end
+
 local function dispatch_package()
 	while true do
 		local v
@@ -128,6 +144,8 @@ while true do
 			end
 			if cmd == "login" then
 				send_request(cmd, { name = args[1], password = args[2] })
+			elseif cmd == "chat" then 
+				send_request("send_channel_message", { channel_id = "global", content = args[1] })
 			else 
 				send_package(fd, cmd)
 			end 

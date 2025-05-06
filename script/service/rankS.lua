@@ -3,6 +3,7 @@ local skynet = require "skynet"
 local manager = require "skynet.manager"
 local log = require "log"
 local score_rank = require "rank.score_rank"
+local event_def = require "define.event_def"
 
 local CMD = {}
 local ranks = {}
@@ -55,13 +56,12 @@ function CMD.get_rank_list()
 end
 
 function CMD.on_event(_event_name, ...)
-    local player_id, ... = ...
     if _event_name == event_def.PLAYER.LOGIN then
         -- 处理玩家登录排行榜逻辑
-        handle_player_login(player_id, ...)
+        handle_player_login(...)
     elseif _event_name == event_def.PLAYER.LEVEL_UP then
         -- 处理玩家升级排行榜逻辑
-        handle_player_level_up(player_id, ...)
+        handle_player_level_up(...)
     end
 end
 
@@ -264,6 +264,8 @@ skynet.start(function()
     log.info("Rank module started")
 
     skynet.register(".rank")
+
+    local eventS = skynet.localname(".event")
     -- 监听玩家登录事件
     skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
     -- 监听玩家升级事件
