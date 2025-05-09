@@ -35,8 +35,8 @@ local function gen_interface(protocol, fd)
 			SSLCTX_SERVER = tls.newctx()
 			-- gen cert and key
 			-- openssl req -x509 -newkey rsa:2048 -days 3650 -nodes -keyout server-key.pem -out server-cert.pem
-			local certfile = skynet.getenv("certfile") or "./server-cert.pem"
-			local keyfile = skynet.getenv("keyfile") or "./server-key.pem"
+			local certfile = skynet.getenv("certfile") or "./cert/server.crt"
+			local keyfile = skynet.getenv("keyfile") or "./cert/server.key"
 			print(certfile, keyfile)
 			SSLCTX_SERVER:set_cert(certfile, keyfile)
 		end
@@ -102,13 +102,13 @@ else
 
 skynet.start(function()
 	local agent = {}
-	local protocol = "http"
+	local protocol = "https"
 	for i= 1, 20 do
 		agent[i] = skynet.newservice(SERVICE_NAME, "agent", protocol)
 	end
 	local balance = 1
-	local id = socket.listen("0.0.0.0", 8001)
-	skynet.error(string.format("Listen web port 8001 protocol:%s", protocol))
+	local id = socket.listen("0.0.0.0", 8889)
+	skynet.error(string.format("Listen web port 8889 protocol:%s", protocol))
 	socket.start(id , function(id, addr)
 		skynet.error(string.format("%s connected, pass it to agent :%08x", addr, agent[balance]))
 		skynet.send(agent[balance], "lua", id)

@@ -30,6 +30,8 @@ skynet.start(function()
     -- skynet.name(".season", season)
     local chat = skynet.newservice("chatS")
     skynet.name(".chat", chat)
-    
+
+    local http = skynet.newservice("httpS")
+    skynet.name(".http", http)
     skynet.exit()
 end)
