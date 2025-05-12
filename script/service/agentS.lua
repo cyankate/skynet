@@ -22,10 +22,12 @@ local logout_timer = nil
 
 -- 定时器函数
 local function start_timer()
-    local interval = 1 * 60 * 100 -- 3 分钟，单位是 0.01 秒
+    local interval = 1 * 180 * 100 -- 3 分钟，单位是 0.01 秒
     local function timer_loop()
         skynet.timeout(interval, timer_loop) -- 设置下一次定时器
         if player and player.loaded_ then
+            local ctn = player:get_ctn("bag")
+            ctn:add_item({item_id = math.random(1, 9), count = 5})
             -- 在这里添加需要轮询的逻辑
             -- 例如：保存玩家数据、检查状态等
             player:save_to_db()
@@ -46,17 +48,17 @@ end
 
 function CMD.load()
     local _, player_info = next(account_data.players)
-    local dbc = skynet.localname(".dbc")
+    local db = skynet.localname(".db")
     local player_data
     if player_info then 
-        local data = skynet.call(dbc, "lua", "query_player", player_info.player_id)
+        local data = skynet.call(db, "lua", "query_player", player_info.player_id)
         if next(data) then
             data = data[1]
             player_data = {
                 account_key = data.account_key,
                 player_id = data.player_id,
                 player_name = data.player_name,
-                info = tableUtils.deserialize_table(data.info),
+                info = data.info,
             }
             player_id = data.player_id
             log.info(string.format("Player %s loaded", player_id))
@@ -70,13 +72,14 @@ function CMD.load()
             player_name = "Player_" .. math.random(1000, 9999),
             info = {},
         }
-        local ret = skynet.call(dbc, "lua", "create_player", account_key, {
+        local ret = skynet.call(db, "lua", "create_player", account_key, {
             account_key = account_key,
             player_name = player_data.player_name,
-            info = tableUtils.serialize_table(player_data.info),
+            info = player_data.info,
         })
         if ret then 
-            player_id = ret.insert_id
+            local db = skynet.localname(".db")
+            player_id = skynet.call(db, "lua", "gen_id", "player")
             log.info(string.format("Player %s created", player_id))
             -- 这里可以添加更多的逻辑来处理新创建的玩家数据
             account_data.players[player_id] = {

@@ -13,8 +13,8 @@ local CONTAINER_STATE = {
     ERROR = 3,     -- 错误状态
 }
 
-function ctn_base:ctor(owner, _name)
-    self.owner_ = owner -- 容器所属的玩家对象
+function ctn_base:ctor(_owner, _name)
+    self.owner_ = _owner -- 容器所属的玩家对象
     self.name_ = _name or "noname" -- 容器名称
     self.data_ = {}     -- 容器内的数据
     self.state_ = CONTAINER_STATE.UNLOADED -- 容器状态
@@ -23,6 +23,7 @@ function ctn_base:ctor(owner, _name)
     self.last_save_time_ = 0 -- 上次保存时间
     self.auto_save_interval_ = 300 -- 自动保存间隔（秒）
     self.dirty_ = false -- 数据是否被修改
+
 end
 
 -- 获取容器名称
@@ -149,28 +150,29 @@ end
 function ctn_base:save()
     if not self.loaded_ then
         log.error(string.format("[ctn_base] Invalid save, Data not loaded for ctn: %s", self.owner_))
-        return false
+        return 
     end
     
-    local ok, err = pcall(function()
-        local data = self:onsave()
-        if not data then
-            log.error(string.format("[ctn_base] No data to save for ctn: %s", self.owner_))
-            return false
+    skynet.fork(function()
+        local ok, err = pcall(function()
+            self:dosave()
+        end)
+        
+        if not ok then
+            self:set_error(err)
+            log.error(string.format("[ctn_base] Failed to save data for ctn: %s, name: %s, error: %s", 
+                self.owner_, self.name_, err))
+            return 
         end
-        -- 子类需要实现具体的数据库保存逻辑
+
+        self:clear_dirty()
+        self.last_save_time_ = skynet.time()
     end)
-    
-    if not ok then
-        self:set_error(err)
-        log.error(string.format("[ctn_base] Failed to save data for ctn: %s, error: %s", 
-            self.owner_, err))
-        return false
-    end
-    
-    self:clear_dirty()
-    self.last_save_time_ = skynet.time()
-    return true
+end
+
+-- 保存数据到数据库
+function ctn_base:dosave()
+    -- 子类需要实现具体的数据库保存逻辑
 end
 
 -- 添加数据

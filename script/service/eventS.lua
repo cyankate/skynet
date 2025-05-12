@@ -13,6 +13,7 @@ function event.subscribe(event_name, service_address)
     if not subscribers[event_name] then
         subscribers[event_name] = {}
     end
+    --log.info(string.format("subscribe event: %s, %s", event_name, service_address))
     table.insert(subscribers[event_name], service_address)
 end
 

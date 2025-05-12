@@ -42,7 +42,7 @@ function rank_base:update(_data)
         _data.__opos = -1
     end
     -- 记录更新时间
-    _data.__time = skynet.now()
+    _data.__time = os.time()
 
     if self:is_realtime_update() then
         self:update_irank(_data)
@@ -157,6 +157,16 @@ function rank_base:update_irank(_data)
     end
 end 
 
+--子类重写
+function rank_base:check_data(_data)
+    local key = self:rkey(_data)
+    if not key then
+        log.error(string.format("[rank_base] Invalid key for rank: %s", self.name_))
+        return false
+    end
+    return true
+end
+
 function rank_base:rerank()
     if not self.loaded_ then
         log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
@@ -264,19 +274,25 @@ function rank_base:is_realtime_update()
     return false
 end
 
+--子类重写
 function rank_base:rkey(_data)
     return _data.key 
 end 
 
 function rank_base:onsave()
-    -- 这里可以添加保存数据的逻辑
-    -- 例如将 self.datas_ 保存到数据库
-    return self.datas_
+    local data = {}
+    data.name = self.name_
+    data.irank = self.irank_
+    return data
 end
 function rank_base:onload(_datas)
-    -- 这里可以添加加载数据的逻辑
-    -- 例如将从数据库加载的数据赋值给 self.datas_
-    self.datas_ = _datas or {}
+    self.irank_ = _datas.irank
+    for i, data in ipairs(self.irank_) do
+        local key = self:rkey(data)
+        if key then
+            self.k2pos_[key] = i
+        end
+    end
 end
 
 function rank_base:load(_loaded_cb)
@@ -294,16 +310,15 @@ function rank_base:load(_loaded_cb)
 end
 
 function rank_base:doload()
-    local dbc = skynet.localname(".dbc")
+    local dbc = skynet.localname(".db")
     local cond = {name = self.name_}
-    local ret = skynet.call(dbc, "lua", "select", "rank", cond)
+    local ret = skynet.call(dbc, "lua", "select", "ranking", cond)
     
     if ret and #ret > 0 then
-        local data = tableUtils.unserialize_table(ret[1].data)
+        local data = ret[1].data
         self:onload(data)
+        self.inserted_ = true 
         log.info(string.format("[rank_base] Rank data loaded successfully for rank: %s", self.name_))
-    else
-        log.error(string.format("[rank_base] Failed to load rank data for rank: %s", self.name_))
     end
 end
 
@@ -312,17 +327,16 @@ function rank_base:save()
         log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
         return false
     end
-    local datas = self:onsave()
-    if not datas then
+    local data = self:onsave()
+    if not data then
         log.error(string.format("[rank_base] No data to save for rank: %s", self.name_))
         return false
     end
-    local dbc = skynet.localname(".dbc")
-    local cond = {name = self.name_}
-    local fields = {data = tableUtils.serialize_table(datas)}
+    local dbc = skynet.localname(".db")
+    local values = {name = self.name_, data = data}
     skynet.fork(function()
         if self.inserted_ then
-            local ret = skynet.call(dbc, "lua", "update", "rank", cond, fields)
+            local ret = skynet.call(dbc, "lua", "update", "ranking", values)
             if ret then
                 self.dirty_ = false
                 log.info(string.format("[rank_base] Rank data updated successfully for rank: %s", self.name_))
@@ -330,7 +344,7 @@ function rank_base:save()
                 log.error(string.format("[rank_base] Failed to update rank data for rank: %s", self.name_))
             end
         else
-            local ret = skynet.call(dbc, "lua", "insert", "rank", cond, fields)
+            local ret = skynet.call(dbc, "lua", "insert", "ranking", values)
             if ret and ret.insert_id then
                 self.inserted_ = true
                 log.info(string.format("[rank_base] Rank data inserted successfully for rank: %s", self.name_))
@@ -354,7 +368,7 @@ function rank_base:batch_update(_datas)
 
     -- 1. 预处理数据，添加时间戳
     for _, data in ipairs(_datas) do
-        data.__time = skynet.now()
+        data.__time = os.time()
     end
 
     -- 2. 分离已存在和新增的数据

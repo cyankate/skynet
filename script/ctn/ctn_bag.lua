@@ -20,21 +20,19 @@ local SPECIAL_KEYS = {
 
 function ctn_bag:ctor(_player_id, _tbl, _name)
     ctn_mf.ctor(self, _player_id, _tbl, _name)
-    self.datas_ = {}  -- 存储所有数据，包括物品和配置
     self.slots_ = {}  -- 内存中的物品数据
     self.config_ = {  -- 背包配置信息
         max_slots = BAG_CONFIG.MAX_SLOTS,
         max_stack = BAG_CONFIG.MAX_STACK,
         batch_size = BAG_CONFIG.BATCH_SIZE,
-        custom_settings = {},  -- 自定义设置
     }
 end
 
 -- 保存数据
 function ctn_bag:onsave()
+    local datas = {}
     -- 保存配置信息
-    self.datas_[SPECIAL_KEYS.CONFIG] = self.config_
-    self.field_dirty_[SPECIAL_KEYS.CONFIG] = true
+    datas[SPECIAL_KEYS.CONFIG] = self.config_
 
     -- 将物品数据分批存储
     local batch_index = 1
@@ -46,8 +44,7 @@ function ctn_bag:onsave()
         -- 当达到批次大小时，保存当前批次
         if #current_batch >= BAG_CONFIG.BATCH_SIZE then
             local batch_key = string.format("items_batch_%d", batch_index)
-            self.datas_[batch_key] = current_batch
-            self.field_dirty_[batch_key] = true
+            datas[batch_key] = current_batch
             current_batch = {}
             batch_index = batch_index + 1
         end
@@ -56,20 +53,27 @@ function ctn_bag:onsave()
     -- 保存最后一个不完整的批次
     if next(current_batch) then
         local batch_key = string.format("items_batch_%d", batch_index)
-        self.datas_[batch_key] = current_batch
-        self.field_dirty_[batch_key] = true
+        datas[batch_key] = current_batch
     end
-    
-    return self.datas_
+    local rows = {}
+    for idx, data in pairs(datas) do
+        table.insert(rows, {player_id = self.owner_, idx = idx, data = data})
+    end
+    log.debug("ctn_bag:onsave %s", tableUtils.serialize_table(rows))
+    return rows
 end
 
 -- 加载数据
-function ctn_bag:onload(_datas)
-    self.datas_ = _datas or {}
-    
+function ctn_bag:onload(_rows)
+    if not _rows then return end
+    local datas = {}
+    for _, row in pairs(_rows) do
+        datas[row.idx] = row.data
+        self.sub_inserted_[row.idx] = true
+    end
     -- 加载配置信息
-    if self.datas_[SPECIAL_KEYS.CONFIG] then
-        self.config_ = self.datas_[SPECIAL_KEYS.CONFIG]
+    if datas[SPECIAL_KEYS.CONFIG] then
+        self.config_ = datas[SPECIAL_KEYS.CONFIG]
     end
     
     -- 加载所有物品数据
@@ -77,7 +81,7 @@ function ctn_bag:onload(_datas)
     local batch_index = 1
     while true do
         local batch_key = string.format("items_batch_%d", batch_index)
-        local batch = self.datas_[batch_key]
+        local batch = _rows[batch_key]
         if not batch then break end
         
         for slot, item in pairs(batch) do
@@ -139,7 +143,6 @@ function ctn_bag:add_item(item)
                 if can_add > 0 then
                     existing_item.count = existing_item.count + can_add
                     item.count = item.count - can_add
-                    self.field_dirty_[self:get_batch_key(slot)] = true
                     if item.count == 0 then
                         return true
                     end
@@ -147,7 +150,7 @@ function ctn_bag:add_item(item)
             end
         end
     end
-    
+    log.debug("ctn_bag:add_item %s", tableUtils.serialize_table(self.config_))
     -- 寻找空格子
     for slot = 1, self.config_.max_slots do
         if self:is_slot_empty(slot) then
@@ -158,7 +161,6 @@ function ctn_bag:add_item(item)
                 expire_time = item.expire_time or 0,
                 extra = item.extra or {},
             }
-            self.field_dirty_[self:get_batch_key(slot)] = true
             return true
         end
     end
@@ -181,7 +183,6 @@ function ctn_bag:remove_item(slot, count)
     if item.count == 0 then
         self.slots_[slot] = nil
     end
-    self.field_dirty_[self:get_batch_key(slot)] = true
     return true
 end
 
@@ -198,8 +199,6 @@ function ctn_bag:move_item(from_slot, to_slot)
     if not to_item then
         self.slots_[to_slot] = from_item
         self.slots_[from_slot] = nil
-        self.field_dirty_[self:get_batch_key(from_slot)] = true
-        self.field_dirty_[self:get_batch_key(to_slot)] = true
         return true
     end
     
@@ -212,8 +211,6 @@ function ctn_bag:move_item(from_slot, to_slot)
             if from_item.count == 0 then
                 self.slots_[from_slot] = nil
             end
-            self.field_dirty_[self:get_batch_key(from_slot)] = true
-            self.field_dirty_[self:get_batch_key(to_slot)] = true
             return true
         end
     end
@@ -221,8 +218,6 @@ function ctn_bag:move_item(from_slot, to_slot)
     -- 交换物品
     self.slots_[from_slot] = to_item
     self.slots_[to_slot] = from_item
-    self.field_dirty_[self:get_batch_key(from_slot)] = true
-    self.field_dirty_[self:get_batch_key(to_slot)] = true
     return true
 end
 
@@ -270,22 +265,9 @@ end
 function ctn_bag:set_config(key, value)
     if key == "max_slots" or key == "max_stack" or key == "batch_size" then
         self.config_[key] = value
-        self.field_dirty_[SPECIAL_KEYS.CONFIG] = true
         return true
     end
     return false, "无效的配置项"
-end
-
--- 设置自定义配置
-function ctn_bag:set_custom_setting(key, value)
-    self.config_.custom_settings[key] = value
-    self.field_dirty_[SPECIAL_KEYS.CONFIG] = true
-    return true
-end
-
--- 获取自定义配置
-function ctn_bag:get_custom_setting(key)
-    return self.config_.custom_settings[key]
 end
 
 return ctn_bag

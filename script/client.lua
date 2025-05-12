@@ -124,8 +124,8 @@ end
 
 send_request("login", {account_id = "tom"})
 
-socket.usleep(30000)
-send_request("signin", {idx = 1})
+-- socket.usleep(30000)
+-- send_request("signin", {idx = 1})
 
 --send_package(fd, "hello")
 while true do
@@ -140,10 +140,10 @@ while true do
 				args = ssplit(args, " ")
 				for i = 1, #args do
 					args[i] = tonumber(args[i]) or args[i]
-				end
+				end	
 			end
 			if cmd == "login" then
-				send_request(cmd, { name = args[1], password = args[2] })
+				send_request(cmd, { account_id = args[1] })
 			elseif cmd == "chat" then 
 				send_request("send_channel_message", { channel_id = "global", content = args[1] })
 			else 

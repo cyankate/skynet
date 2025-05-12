@@ -134,16 +134,6 @@ function handler.message(fd, msg, sz)
                     c.agent = account_info.agent
                     c.client = fd
                     
-                    -- 发送登录成功响应
-                    CMD.send_message(fd, {
-                        name = "login_response",
-                        data = {
-                            success = true,
-                            player_id = player_info.player_id,
-                            player_name = player_info.player_name
-                        }
-                    })
-                    
                     log.info(string.format("Account %s reconnected to agent %s", args.account_id, account_info.agent))
                     return
                 else
@@ -153,7 +143,7 @@ function handler.message(fd, msg, sz)
             end
             
             -- 正常登录流程
-            local success, agent = skynet.call(loginS, "lua", "login", fd, args.account_id, args.password)
+            local success, agent = skynet.call(loginS, "lua", "login", fd, args.account_id)
             if success then
                 -- 绑定连接到 agent 服务
                 c.agent = agent
@@ -170,7 +160,7 @@ function handler.message(fd, msg, sz)
             if c.agent then
                 skynet.redirect(c.agent, c.client, "client", 0, skynet.pack(name, args))
             else
-                log.error(string.format("Message received before login for fd: %d", fd))
+                log.error(string.format("Message received before login for fd: %d, name: %s", fd, name))
                 CMD.send_error(fd, 1002, "Please login first")
                 skynet.trash(msg, sz)
             end

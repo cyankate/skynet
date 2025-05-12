@@ -2,6 +2,7 @@ package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
+local mail_cache = require "cache.mail_cache"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -11,6 +12,7 @@ function Player:ctor(_player_id, _player_data)
     self.ctns_ = {} -- 存储容器对象
     self.ctn_loading_ = {} -- 正在加载的容器
     self.loaded_ = false 
+    self.mail_cache_ = nil
 end
 
 function Player:loaded()
@@ -20,11 +22,22 @@ function Player:loaded()
     self.loaded_ = true 
     local loginS = skynet.localname(".login")
     skynet.send(loginS, "lua", "player_join_loginS", self.account_key_, self.player_id_)
+    self.mail_cache_ = mail_cache.new()
+
+    local rankS = skynet.localname(".rank")
+    skynet.send(rankS, "lua", "update_rank", "score", {
+        player_id = self.player_id_,
+        score = 100,
+    })
 end 
+
+function Player:get_ctn(name)
+    return self.ctns_[name]
+end
 
 function Player:save_to_db()
     -- 这里可以添加保存玩家数据到数据库的逻辑
-    --log.info(string.format("Saving player %s data to DB", self.player_id_))
+    log.info(string.format("Saving player %s data to DB", self.player_id_))
     -- 例如将玩家数据保存到数据库
     for _, ctn in pairs(self.ctns_) do
         ctn:save()

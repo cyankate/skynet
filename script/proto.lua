@@ -35,7 +35,6 @@ quit 4 {}
 login 5 {
 	request {
 		account_id 0 : string
-		password 1 : string
 	}
 }
 

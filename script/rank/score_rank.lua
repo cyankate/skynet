@@ -32,12 +32,26 @@ function score_rank:rkey(_data)
     if not _data or type(_data) ~= "table" then
         return nil
     end
-    local key = _data.key
+    local key = _data.player_id
     if not key then
         return nil
     end
     return key
 end
+
+function score_rank:check_data(_data)
+    if not _data or type(_data) ~= "table" then
+        return false
+    end
+    if not _data.player_id then
+        return false
+    end 
+    if not _data.score then
+        return false
+    end
+    return true
+end 
+
 
 function score_rank:is_realtime_update()
     return true

@@ -7,28 +7,57 @@ local event_def = require "define.event_def"
 
 local CMD = {}
 local ranks = {}
+-- 定义保存间隔，单位为0.01秒，默认每10分钟保存一次（10分钟=600秒=60000单位）
+local SAVE_INTERVAL = 3000
 
 function init_rank()
-    local rank = score_rank.new("test")
+    local rank = score_rank.new("score")
     ranks["score"] = rank
-    rank.loaded_ = true 
-
-    -- 运行测试
-    -- skynet.fork(function()
-    --     skynet.sleep(100) -- 等待系统稳定
-    --     local success = test_rank()
-    --     if success then
-    --         log.info("Rank test completed successfully")
-    --     else
-    --         log.error("Rank test failed")
-    --     end
-    -- end)
+    load_all_ranks()
 end 
 
-function CMD.update_rank(_data)
-    log.info(string.format("Updating rank for player %s"))
+function load_all_ranks()
+    for name, rank in pairs(ranks) do
+        rank:load()
+    end
+end
+
+-- 定时保存排行榜数据
+function save_all_ranks()
+    log.info("Saving all rank data...")
+    for name, rank in pairs(ranks) do
+        if rank.loaded_ and rank.dirty_ then
+            log.info(string.format("Saving rank data for %s", name))
+            rank:save()
+        end
+    end
+    log.info("All rank data saved")
+end
+
+-- 启动定时保存功能
+function start_rank_save_timer()
+    local function timer_func()
+        skynet.timeout(SAVE_INTERVAL, timer_func)
+        save_all_ranks()
+    end
+    
+    -- 启动定时器
+    skynet.timeout(SAVE_INTERVAL, timer_func)
+end
+
+function CMD.update_rank(_rank_name, _data)
+    log.debug(string.format("Updating rank for player %s", _rank_name))
     -- 这里可以添加更新排名的逻辑
-    -- 例如将 rank_data 保存到数据库
+    local rank = ranks[_rank_name]
+    if not rank then
+        log.error(string.format("Rank not found: %s", _rank_name))
+        return false
+    end
+    if not rank:check_data(_data) then
+        log.error(string.format("Data is not valid: %s", _data))
+        return false
+    end 
+    rank:update(_data)
     return true
 end
 
@@ -63,6 +92,12 @@ function CMD.on_event(_event_name, ...)
         -- 处理玩家升级排行榜逻辑
         handle_player_level_up(...)
     end
+end
+
+-- 添加手动保存接口，方便需要立即保存的场景使用
+function CMD.save_ranks()
+    save_all_ranks()
+    return true
 end
 
 function handle_player_login()
@@ -260,6 +295,13 @@ function test_rank()
     return true
 end
 
+function CMD.shutdown()
+    log.info("Rank service is shutting down, saving all data...")
+    save_all_ranks()
+    skynet.exit()
+    return true
+end
+
 skynet.start(function()
     log.info("Rank module started")
 
@@ -271,8 +313,6 @@ skynet.start(function()
     -- 监听玩家升级事件
     skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LEVEL_UP, skynet.self())
     
-
-    
     skynet.dispatch("lua", function(_, _, cmd, ...)
         local f = CMD[cmd]
         if f then
@@ -281,5 +321,9 @@ skynet.start(function()
             log.error(string.format("Unknown command %s", cmd))
         end
     end)
+    
     init_rank()
+    
+    -- 启动定时保存功能
+    start_rank_save_timer()
 end)

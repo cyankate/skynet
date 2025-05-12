@@ -44,7 +44,7 @@ function gateserver.start(handler)
 		local port = assert(conf.port)
 		maxclient = conf.maxclient or 1024
 		nodelay = conf.nodelay
-		log.error(string.format("Listen on %s:%d", address, port))
+		log.info(string.format("Listen on %s:%d", address, port))
 		socket = socketdriver.listen(address, port, conf.backlog)
 		listen_context.co = coroutine.running()
 		listen_context.fd = socket

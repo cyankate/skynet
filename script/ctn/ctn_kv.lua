@@ -51,28 +51,11 @@ function ctn_kv:set_max_data_size(size)
     self.max_data_size_ = size
 end
 
--- 检查数据大小是否合法
-function ctn_kv:check_data_size(data)
-    local size = #tableUtils.serialize_table(data)
-    return size <= self.max_data_size_, size
-end
-
 -- 保存数据
 function ctn_kv:onsave()
-    if not self:is_loaded() then
-        self:set_error("Data not loaded")
-        return nil, ERROR_CODE.NOT_LOADED
-    end
-    
     local data = {}
     for k, v in pairs(self.data_) do
         data[k] = v
-    end
-    
-    local ok, size = self:check_data_size(data)
-    if not ok then
-        self:set_error(string.format("Data size %d exceeds limit %d", size, self.max_data_size_))
-        return nil, ERROR_CODE.INVALID_DATA
     end
     
     return data
@@ -91,7 +74,7 @@ end
 
 -- 从数据库加载数据
 function ctn_kv:doload()
-    local dbc = skynet.localname(".dbc")
+    local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
     local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
     
@@ -102,7 +85,7 @@ function ctn_kv:doload()
     
     self.inserted_ = true 
     if next(ret) then 
-        local data = tableUtils.deserialize_table(ret[1].data)
+        local data = ret[1].data
         self:onload(data)
     end
     
@@ -110,46 +93,34 @@ function ctn_kv:doload()
 end
 
 -- 保存数据到数据库
-function ctn_kv:save()
-    if not self:is_loaded() then
-        self:set_error("Data not loaded")
-        return false, ERROR_CODE.NOT_LOADED
-    end
-    
+function ctn_kv:dosave()
     local data, err_code = self:onsave()
     if not data then
         return false, err_code
     end
     
-    local dbc = skynet.localname(".dbc")
+    local db = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
-    local fields = {data = tableUtils.serialize_table(data)}
-    
-    local ok, err = pcall(function()
-        if not self.inserted_ then
-            local ret = skynet.call(dbc, "lua", "insert", self.tbl_, cond, fields)
-            if ret then
-                self.inserted_ = true
-                self:clear_dirty()
-            else
-                error("Failed to insert data")
-            end
-        else 
-            local ret = skynet.call(dbc, "lua", "update", self.tbl_, cond, fields)
-            if not ret then
-                error("Failed to update data")
-            end
-            self:clear_dirty()
-        end
-    end)
-    
-    if not ok then
-        self:set_error(err)
-        return false, ERROR_CODE.DB_ERROR
+    local fields = {data = data}
+    for k, v in pairs(cond) do
+        fields[k] = v
     end
-    
-    self.last_save_time_ = skynet.time()
-    return true
+    if not self.inserted_ then
+        local ret = skynet.call(db, "lua", "insert", self.tbl_, fields)
+        if ret then
+            self.inserted_ = true
+            self:clear_dirty()
+        else
+            error("Failed to insert data")
+        end
+    else 
+        local ret = skynet.call(db, "lua", "update", self.tbl_, fields)
+        if not ret then
+            error("Failed to update data")
+        end
+    end
+    self:clear_dirty()
+    return true 
 end
 
 -- 批量添加数据

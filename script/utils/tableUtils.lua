@@ -31,6 +31,44 @@ function M.ssplit(input, delimiter)
     return result
 end
 
+-- 将 table 序列化为紧凑字符串
+function M.serialize_table_compact(tbl)
+    local function serialize(tbl)
+        if type(tbl) ~= "table" then
+            error("Input must be a table")
+        end
+
+        local result = {}
+        for k, v in pairs(tbl) do
+            local key = type(k) == "string" and string.format("[%q]", k) or string.format("[%s]", tostring(k))
+            if type(v) == "table" then
+                table.insert(result, string.format("%s=%s", key, serialize(v)))
+            elseif type(v) == "string" then
+                table.insert(result, string.format("%s=%q", key, v))
+            else
+                table.insert(result, string.format("%s=%s", key, tostring(v)))
+            end
+        end
+        return "{" .. table.concat(result, ",") .. "}"
+    end
+
+    return "TBL:" .. serialize(tbl)
+end
+
+-- 将紧凑字符串反序列化为 table
+function M.deserialize_table_compact(str)
+    -- 检查序列化标记
+    if str:match("^TBL:") then
+        -- 移除序列化标记
+        str = str:sub(5)
+    end
+    local func, err = load("return " .. str, "deserialize", "t", {})
+    if not func then
+        error("Failed to deserialize string: " .. err)
+    end
+    return func()
+end
+
 -- 将 table 序列化为字符串
 function M.serialize_table(tbl)
     local function serialize(tbl, indent)
@@ -43,30 +81,37 @@ function M.serialize_table(tbl)
         end
 
         table.insert(result, "{\n")
+        local first = true
         for k, v in pairs(tbl) do
+            if not first then
+                table.insert(result, ",\n")
+            end
+            first = false
+            
             local key = type(k) == "string" and string.format("[%q]", k) or string.format("[%s]", tostring(k))
             if type(v) == "table" then
                 table.insert(result, string.format("%s  %s = %s", prefix, key, serialize(v, indent + 1)))
             elseif type(v) == "string" then
-                table.insert(result, string.format("%s  %s = %q,\n", prefix, key, v))
+                table.insert(result, string.format("%s  %s = %q", prefix, key, v))
             else
-                table.insert(result, string.format("%s  %s = %s,\n", prefix, key, tostring(v)))
+                table.insert(result, string.format("%s  %s = %s", prefix, key, tostring(v)))
             end
         end
-        table.insert(result, prefix .. "}")
+        table.insert(result, "\n" .. prefix .. "}")
         return table.concat(result)
     end
 
-    return serialize(tbl)
+    return M.serialize_table_compact(tbl)
 end
 
 -- 将字符串反序列化为 table
 function M.deserialize_table(str)
-    local func, err = load("return " .. str, "deserialize", "t", {})
-    if not func then
-        error("Failed to deserialize string: " .. err)
-    end
-    return func()
+    -- print("deserialize_table", str)
+    -- local func, err = load("return " .. str, "deserialize", "t", {})
+    -- if not func then
+    --     error("Failed to deserialize string: " .. err)
+    -- end
+    return M.deserialize_table_compact(str)
 end
 
 -- 二分查找
@@ -100,5 +145,17 @@ function M.binary_insert(arr, value, compare)
     table.insert(arr, pos, value) -- 在指定位置插入值
     return arr
 end
+
+function M.deep_copy(obj)
+    if type(obj) ~= "table" then
+        return obj
+    end
+    local copy = {}
+    for k, v in pairs(obj) do
+        copy[k] = M.deep_copy(v)
+    end
+    return copy
+end
+
 
 return M

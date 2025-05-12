@@ -33,16 +33,16 @@ function CMD.login(fd, account_key)
         return false
     end
     account_loading[account_key] = true
-    -- 请求 dbc 服务查询账号数据
-    local dbc = skynet.localname(".dbc")
-    local data = skynet.call(dbc, "lua", "query_account", account_key)
+    -- 请求 db 服务查询账号数据
+    local db = skynet.localname(".db")
+    local data = skynet.call(db, "lua", "query_account", account_key)
     local account_data
     if not next(data) then
         account_data = {
             account_key = account_key,
             players = {},
         }
-        local ret = skynet.call(dbc, "lua", "create_account", account_key, {
+        local ret = skynet.call(db, "lua", "create_account", account_key, {
             account_key = account_key,
             players = tableUtils.serialize_table(account_data.players),
         })
@@ -56,7 +56,7 @@ function CMD.login(fd, account_key)
         data = data[1]
         account_data = {
             account_key = data.account_key,
-            players = tableUtils.deserialize_table(data.players),
+            players = data.players,
         }
     end
     -- 创建新的 agent 服务 
@@ -70,10 +70,10 @@ end
 
 function CMD.account_update(account_key, account_data)
     log.info(string.format("Account %s updated", account_key))
-    local dbc = skynet.localname(".dbc")
-    local ret = skynet.call(dbc, "lua", "update_account", account_key, {
+    local db = skynet.localname(".db")
+    local ret = skynet.call(db, "lua", "update_account", account_key, {
         account_key = account_key,
-        players = tableUtils.serialize_table(account_data.players),
+        players = account_data.players,
     })
     if not ret then
         log.error(string.format("Failed to update account %s", account_key))
