@@ -229,6 +229,7 @@ end
 
 -- 事件处理函数
 function CMD.on_event(event_name, event_data)
+    log.debug(string.format("on_event %s %s", event_name, tableUtils.serialize_table(event_data)))
     if event_name == "player.login" then
         -- 可以在玩家登录时自动加入全局频道
         local player_id = event_data.player_id

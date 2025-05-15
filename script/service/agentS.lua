@@ -196,7 +196,7 @@ function handle_login(account_key)
     -- 触发登录事件
     skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LOGIN, {
         player_id = account.player_id,
-        level = account.player.level,
+        player_name = account.player.player_name_,
         agent = skynet.self(),
         -- 其他登录相关信息
     })
@@ -389,7 +389,7 @@ function CMD.disconnect(account_key)
     local eventS = skynet.localname(".event")
     if eventS and account.player then
         skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LOGOUT, {
-            player_id = account.player_id
+            player_id = account.player_id,
         })
     end
     
