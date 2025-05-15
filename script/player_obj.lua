@@ -1,4 +1,4 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
@@ -20,8 +20,7 @@ function Player:loaded()
     log.info(string.format("Player %s loaded successfully", self.player_id_))
     -- 例如通知其他服务，或者进行一些初始化操作
     self.loaded_ = true 
-    local loginS = skynet.localname(".login")
-    skynet.send(loginS, "lua", "player_join_loginS", self.account_key_, self.player_id_)
+
     self.mail_cache_ = mail_cache.new()
 
     local rankS = skynet.localname(".rank")
@@ -36,9 +35,6 @@ function Player:get_ctn(name)
 end
 
 function Player:save_to_db()
-    -- 这里可以添加保存玩家数据到数据库的逻辑
-    log.info(string.format("Saving player %s data to DB", self.player_id_))
-    -- 例如将玩家数据保存到数据库
     for _, ctn in pairs(self.ctns_) do
         ctn:save()
     end

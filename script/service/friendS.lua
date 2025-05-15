@@ -1,13 +1,14 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 
 local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local friend_cache = require "cache.friend_cache"
+require "skynet.manager"
+local service_wrapper = require "utils.service_wrapper"
 
 local friend_mgr = nil 
 
-function add_friend(player_id, target_id)
+function CMD.add_friend(player_id, target_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -15,14 +16,14 @@ function add_friend(player_id, target_id)
     if operator.friend_map[target_id] then
         return false 
     end 
-    local ret = add_apply(player_id, target_id)
+    local ret = CMD.add_apply(player_id, target_id)
     if not ret then
         return false
     end
     return true
 end
 
-function delete_friend(player_id, target_id)
+function CMD.delete_friend(player_id, target_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -35,7 +36,7 @@ function delete_friend(player_id, target_id)
     return true
 end
 
-function add_apply(player_id, target_id)
+function CMD.add_apply(player_id, target_id)
     local target = friend_mgr:get_friend_data(target_id)
     if not target then
         return false
@@ -48,7 +49,7 @@ function add_apply(player_id, target_id)
     return true 
 end
 
-function delete_apply(player_id, target_id)
+function CMD.delete_apply(player_id, target_id)
     local target = friend_mgr:get_friend_data(target_id)
     if not target then
         return false
@@ -58,7 +59,7 @@ function delete_apply(player_id, target_id)
     return true
 end
 
-function agree_apply(player_id, target_id)
+function CMD.agree_apply(player_id, target_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -73,7 +74,7 @@ function agree_apply(player_id, target_id)
     friend_mgr:mark_dirty(player_id)
 end
 
-function reject_apply(player_id, target_id)
+function CMD.reject_apply(player_id, target_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -86,7 +87,7 @@ function reject_apply(player_id, target_id)
     return true
 end 
 
-function get_friend_list(player_id)
+function CMD.get_friend_list(player_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -98,7 +99,7 @@ function get_friend_list(player_id)
     return list
 end
 
-function get_apply_list(player_id)
+function CMD.get_apply_list(player_id)
     local operator = friend_mgr:get_friend_data(player_id)
     if not operator then
         return false
@@ -110,8 +111,7 @@ function get_apply_list(player_id)
     return list
 end
 
-function on_event(event, data)
-    log.info(string.format("on_event: %s, %s", event, data))
+function CMD.on_event(event, data)
     if event == "player.login" then
         local player_id = data.player_id
         local player_name = data.player_name
@@ -119,33 +119,8 @@ function on_event(event, data)
     end
 end
 
--- 启动服务
-skynet.start(function()
-    -- 注册好友服务处理函数
-    skynet.dispatch("lua", function(session, source, cmd, ...)
-        local cmd_map = {
-            add_friend = add_friend,
-            delete_friend = delete_friend,
-            add_apply = add_apply,
-            delete_apply = delete_apply,
-            agree_apply = agree_apply,
-            reject_apply = reject_apply,
-            get_friend_list = get_friend_list,
-            get_apply_list = get_apply_list,
-            on_event = on_event,
-        }
-        local f = cmd_map[cmd]
-        if f then
-            if session == 0 then
-                f(...)
-            else
-                skynet.ret(skynet.pack(f(...)))
-            end
-        else
-            log.error(string.format("Unknown command: %s", cmd))
-        end
-    end)
-    
+-- 主服务函数
+local function main()
     friend_mgr = friend_cache.new()
 
     -- 注册事件处理
@@ -153,5 +128,12 @@ skynet.start(function()
     skynet.send(event, "lua", "subscribe", "player.login", skynet.self())
     skynet.send(event, "lua", "subscribe", "player.logout", skynet.self())
     
+    -- 注册服务名
+    skynet.register(".friend")
+    
     log.info("Friend service initialized")
-end)
+end
+
+service_wrapper.create_service(main, {
+    name = "friend",
+})

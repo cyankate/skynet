@@ -1,8 +1,9 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 
 local skynet = require "skynet"
 local log = require "log"
+require "skynet.manager"
 local mail_cache = require "cache.mail_cache"
+local service_wrapper = require "utils.service_wrapper"
 
 -- 邮件类型
 local MAIL_TYPE = {
@@ -65,7 +66,7 @@ local function check_mail_content(title, content)
 end
 
 -- 发送邮件
-local function send_mail(sender_id, receiver_id, mail_type, title, content, attachments)
+function CMD.send_mail(sender_id, receiver_id, mail_type, title, content, attachments)
     -- 参数检查
     if not check_mail_count(receiver_id) then
         return false, "收件人邮箱已满"
@@ -95,17 +96,17 @@ local function send_mail(sender_id, receiver_id, mail_type, title, content, atta
 end
 
 -- 发送系统邮件
-local function send_system_mail(receiver_id, title, content, attachments)
+function CMD.send_system_mail(receiver_id, title, content, attachments)
     return send_mail(0, receiver_id, MAIL_TYPE.SYSTEM, title, content, attachments)
 end
 
 -- 发送系统奖励邮件
-local function send_system_reward_mail(receiver_id, title, content, attachments)
+function CMD.send_system_reward_mail(receiver_id, title, content, attachments)
     return send_mail(0, receiver_id, MAIL_TYPE.SYSTEM_REWARD, title, content, attachments)
 end
 
 -- 发送公会邮件
-local function send_guild_mail(sender_id, guild_id, title, content, attachments)
+function CMD.send_guild_mail(sender_id, guild_id, title, content, attachments)
     -- 获取公会所有成员
     local members = skynet.call(".GUILD", "lua", "get_guild_members", guild_id)
     if not members then
@@ -127,12 +128,12 @@ local function send_guild_mail(sender_id, guild_id, title, content, attachments)
 end
 
 -- 获取玩家邮件列表
-local function get_mail_list(player_id, page, page_size)
+function CMD.get_mail_list(player_id, page, page_size)
     return skynet.call(".DB", "lua", "get_mail_list", player_id, page, page_size)
 end
 
 -- 获取邮件详情
-local function get_mail_detail(player_id, mail_id)
+function CMD.get_mail_detail(player_id, mail_id)
     local mail = skynet.call(".DB", "lua", "get_mail", mail_id)
     if not mail then
         return false, "邮件不存在"
@@ -151,7 +152,7 @@ local function get_mail_detail(player_id, mail_id)
 end
 
 -- 领取邮件附件
-local function claim_attachment(player_id, mail_id)
+function CMD.claim_attachment(player_id, mail_id)
     local mail = skynet.call(".DB", "lua", "get_mail", mail_id)
     if not mail then
         return false, "邮件不存在"
@@ -183,7 +184,7 @@ local function claim_attachment(player_id, mail_id)
 end
 
 -- 删除邮件
-local function delete_mail(player_id, mail_id)
+function CMD.delete_mail(player_id, mail_id)
     local mail = skynet.call(".DB", "lua", "get_mail", mail_id)
     if not mail then
         return false, "邮件不存在"
@@ -205,45 +206,20 @@ local function delete_mail(player_id, mail_id)
 end
 
 -- 清理过期邮件
-local function clean_expired_mails()
+function CMD.clean_expired_mails()
     local now = os.time()
-
+    -- 添加清理逻辑
 end
 
-function on_event(event, data)
-    log.info(string.format("on_event: %s, %s", event, data))
+-- 事件处理
+function CMD.on_event(event, data)
     if event == "player.login" then
-
+        -- 处理玩家登录事件
     end
 end
 
--- 启动服务
-skynet.start(function()
-    -- 注册邮件服务处理函数
-    skynet.dispatch("lua", function(session, source, cmd, ...)
-        local cmd_map = {
-            send = send_mail,
-            send_system = send_system_mail,
-            send_system_reward = send_system_reward_mail,
-            send_guild = send_guild_mail,
-            get_list = get_mail_list,
-            get_detail = get_mail_detail,
-            claim_attachment = claim_attachment,
-            delete = delete_mail,
-            on_event = on_event,
-        }
-        local f = cmd_map[cmd]
-        if f then
-            if session == 0 then
-                f(...)
-            else
-                skynet.ret(skynet.pack(f(...)))
-            end
-        else
-            log.error(string.format("Unknown command: %s", cmd))
-        end
-    end)
-    
+-- 主服务函数
+local function main()
     mail_mgr = mail_cache.new()
 
     -- 注册事件处理
@@ -251,13 +227,20 @@ skynet.start(function()
     skynet.call(event, "lua", "subscribe", "player.login", skynet.self())
     skynet.call(event, "lua", "subscribe", "player.logout", skynet.self())
     
+    -- 注册服务名
+    skynet.register(".mail")
+    
     log.info("Mail service initialized")
 
     -- 启动定时清理过期邮件
     skynet.fork(function()
         while true do
-            clean_expired_mails()
+            CMD.clean_expired_mails()
             skynet.sleep(3600 * 100)  -- 每小时清理一次
         end
     end)
-end)
+end
+
+service_wrapper.create_service(main, {
+    name = "mail",
+})

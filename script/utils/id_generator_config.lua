@@ -1,5 +1,5 @@
 
-local bit = require("bit")
+local bit = require("utils.bit")
 local zone_id = 123
 
 local IDGeneratorConfig = {

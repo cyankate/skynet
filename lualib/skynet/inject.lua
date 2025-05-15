@@ -25,7 +25,6 @@ return function(skynet, source, filename, args, ...)
 		filename = "=(load)"
 	end
 	local output = {}
-
 	local function print(...)
 		local value = { ... }
 		for k,v in ipairs(value) do

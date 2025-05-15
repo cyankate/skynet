@@ -1,39 +1,15 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 local skynet = require "skynet"
 local log = require "log"
 require "skynet.manager"
+local service_wrapper = require "utils.service_wrapper"
+local protocol_handler = require "protocol_handler"
 
-local CMD = {}
+-- 聊天服务数据
 local channels = {}     -- 聊天频道 {channel_id = {name=频道名, members={玩家列表}, history={历史消息}}}
 local private_msgs = {} -- 私聊消息 {player_id = {历史消息}}
-local player_agents = {} -- 玩家对应的agent服务 {player_id = agent_handle}
 
 -- 消息最大历史记录数
 local MAX_HISTORY = 100
-
--- 建立玩家和Agent服务的映射
-function CMD.register_player(player_id, agent)
-    player_agents[player_id] = agent
-    log.info("Player %d registered in chat service with agent %s", player_id, agent)
-    return true
-end
-
--- 取消玩家注册
-function CMD.unregister_player(player_id)
-    player_agents[player_id] = nil
-    log.info("Player %d unregistered from chat service", player_id)
-    
-    -- 离开所有频道
-    for channel_id, channel in pairs(channels) do
-        if channel.members[player_id] then
-            channel.members[player_id] = nil
-            -- 通知频道其他成员该玩家离开
-            broadcast_to_channel(channel_id, "system", string.format("Player %d has left the channel", player_id))
-        end
-    end
-    
-    return true
-end
 
 -- 创建新频道
 function CMD.create_channel(channel_id, channel_name, creator_id)
@@ -55,207 +31,118 @@ end
 
 -- 加入频道
 function CMD.join_channel(channel_id, player_id, player_name)
+    if not channels[channel_id] then
+        return false, "Channel not found"
+    end
+    
     local channel = channels[channel_id]
-    if not channel then
-        return false, "Channel does not exist"
+    
+    if channel.members[player_id] then
+        return true, "Already in channel"
     end
     
     channel.members[player_id] = {
-        id = player_id,
-        name = player_name,
+        player_id = player_id,
+        player_name = player_name,
         join_time = os.time()
     }
     
-    -- 通知频道其他成员新玩家加入
+    log.info("Player %d joined channel %s", player_id, channel.name)
+    
+    -- 通知频道内其他成员
     broadcast_to_channel(channel_id, "system", string.format("Player %s has joined the channel", player_name))
     
-    log.info("Player %d joined channel %s", player_id, channel.name)
     return true
 end
 
 -- 离开频道
 function CMD.leave_channel(channel_id, player_id)
-    local channel = channels[channel_id]
-    if not channel then
-        return false, "Channel does not exist"
+    if not channels[channel_id] then
+        return false, "Channel not found"
     end
+    
+    local channel = channels[channel_id]
     
     if not channel.members[player_id] then
-        return false, "Player not in channel"
+        return false, "Not in channel"
     end
     
-    local player_name = channel.members[player_id].name
+    local player_name = channel.members[player_id].player_name
     channel.members[player_id] = nil
     
-    -- 通知频道其他成员该玩家离开
+    log.info("Player %d left channel %s", player_id, channel.name)
+    
+    -- 通知频道内其他成员
     broadcast_to_channel(channel_id, "system", string.format("Player %s has left the channel", player_name))
     
-    log.info("Player %d left channel %s", player_id, channel.name)
     return true
 end
 
 -- 发送频道消息
-function CMD.send_channel_msg(channel_id, player_id, message)
-    log.debug(string.format("send_channel_msg %s %s %s", channel_id, player_id, message))
+function CMD.send_channel_msg(channel_id, player_id, content)
+    if not channels[channel_id] then
+        return false, "Channel not found"
+    end
+    
     local channel = channels[channel_id]
-    if not channel then
-        return false, "Channel does not exist"
-    end
+    
     if not channel.members[player_id] then
-        return false, "Player not in channel"
+        return false, "Not in channel"
     end
     
-    -- 过滤消息内容
-    message = filter_message(message)
+    local player_name = channel.members[player_id].player_name
     
-    local player_name = channel.members[player_id].name
-    local msg = {
-        type = "channel",
-        channel_id = channel_id,
-        from_id = player_id,
-        from_name = player_name,
-        content = message,
-        timestamp = os.time()
-    }
+    log.debug(string.format("Channel message from %s to channel %s: %s", 
+        player_name, channel.name, content))
     
-    -- 保存到历史记录
-    table.insert(channel.history, msg)
-    if #channel.history > MAX_HISTORY then
-        table.remove(channel.history, 1)
-    end
+    -- 广播给频道内所有成员
+    broadcast_to_channel(channel_id, player_name, content)
     
-    -- 广播给频道内所有玩家
-    for member_id, _ in pairs(channel.members) do
-        local agent = player_agents[member_id]
-        if agent then
-            skynet.send(agent, "lua", "chat_message", msg)
-        end
-    end
-    
-    log.info("Channel message from player %d to channel %s: %s", player_id, channel.name, message)
     return true
 end
 
 -- 发送私聊消息
-function CMD.send_private_msg(from_id, to_id, message)
-    -- 检查目标玩家是否在线
-    if not player_agents[to_id] then
-        return false, "Target player not online"
+function CMD.send_private_msg(from_id, to_id, content)
+    -- 验证发送者
+    local player_mapper = skynet.localname(".player_mapper")
+    if not player_mapper then
+        return false, "Player mapper service not available"
     end
     
-    -- 过滤消息内容
-    message = filter_message(message)
-    
-    -- 获取玩家名称
-    local from_name = get_player_name(from_id)
-    local to_name = get_player_name(to_id)
-    
-    local msg = {
-        type = "private",
-        from_id = from_id,
-        from_name = from_name,
-        to_id = to_id,
-        to_name = to_name,
-        content = message,
-        timestamp = os.time()
-    }
-    
-    -- 保存到发送者的历史记录
-    if not private_msgs[from_id] then
-        private_msgs[from_id] = {}
-    end
-    table.insert(private_msgs[from_id], msg)
-    if #private_msgs[from_id] > MAX_HISTORY then
-        table.remove(private_msgs[from_id], 1)
+    local from_online = skynet.call(player_mapper, "lua", "is_player_online", from_id)
+    if not from_online then
+        return false, "You are not online"
     end
     
-    -- 保存到接收者的历史记录
-    if not private_msgs[to_id] then
-        private_msgs[to_id] = {}
-    end
-    table.insert(private_msgs[to_id], msg)
-    if #private_msgs[to_id] > MAX_HISTORY then
-        table.remove(private_msgs[to_id], 1)
+    -- 发送私聊消息
+    local success, err = send_private_message(from_id, to_id, content)
+    if not success then
+        return false, err
     end
     
-    -- 发送消息给接收者
-    local agent = player_agents[to_id]
-    if agent then
-        skynet.send(agent, "lua", "chat_message", msg)
-    end
+    log.debug(string.format("Private message from %d to %d: %s", from_id, to_id, content))
     
-    log.info("Private message from player %d to player %d: %s", from_id, to_id, message)
-    return true
-end
-
--- 获取频道历史消息
-function CMD.get_channel_history(channel_id, count)
-    local channel = channels[channel_id]
-    if not channel then
-        return nil, "Channel does not exist"
-    end
-    
-    count = count or MAX_HISTORY
-    local history = {}
-    local start = math.max(1, #channel.history - count + 1)
-    
-    for i = start, #channel.history do
-        table.insert(history, channel.history[i])
-    end
-    
-    return history
-end
-
--- 获取私聊历史消息
-function CMD.get_private_history(player_id, other_id, count)
-    if not private_msgs[player_id] then
-        return {}
-    end
-    
-    count = count or MAX_HISTORY
-    local history = {}
-    
-    for _, msg in ipairs(private_msgs[player_id]) do
-        if (msg.from_id == other_id or msg.to_id == other_id) then
-            table.insert(history, msg)
-            if #history >= count then
-                break
-            end
-        end
-    end
-    
-    return history
-end
-
--- 广播系统消息给所有在线玩家
-function CMD.broadcast_system_msg(message)
-    local msg = {
-        type = "system",
-        from_id = 0,
-        from_name = "System",
-        content = message,
-        timestamp = os.time()
-    }
-    
-    for player_id, agent in pairs(player_agents) do
-        skynet.send(agent, "lua", "chat_message", msg)
-    end
-    
-    log.info("System broadcast: %s", message)
     return true
 end
 
 -- 获取频道列表
 function CMD.get_channel_list()
     local result = {}
+    
     for id, channel in pairs(channels) do
+        local member_count = 0
+        for _ in pairs(channel.members) do
+            member_count = member_count + 1
+        end
+        
         table.insert(result, {
-            id = id,
+            channel_id = id,
             name = channel.name,
-            member_count = get_table_size(channel.members),
+            member_count = member_count,
             create_time = channel.create_time
         })
     end
+    
     return result
 end
 
@@ -269,8 +156,8 @@ function CMD.get_channel_members(channel_id)
     local members = {}
     for _, member in pairs(channel.members) do
         table.insert(members, {
-            id = member.id,
-            name = member.name,
+            id = member.player_id,
+            name = member.player_name,
             join_time = member.join_time
         })
     end
@@ -281,50 +168,39 @@ end
 -- 内部辅助函数
 
 -- 向频道广播系统消息
-function broadcast_to_channel(channel_id, from_name, message)
-    local channel = channels[channel_id]
-    if not channel then
-        return
+function broadcast_to_channel(channel_id, sender_name, content)
+    if not channels[channel_id] then
+        return false, "Channel not found"
     end
     
+    local channel = channels[channel_id]
+    local members = {}
+    
+    -- 收集频道成员ID
+    for player_id in pairs(channel.members) do
+        table.insert(members, player_id)
+    end
+    
+    -- 创建消息内容
     local msg = {
         type = "channel",
         channel_id = channel_id,
-        from_id = 0,
-        from_name = from_name or "System",
-        content = message,
+        channel_name = channel.name,
+        sender = sender_name,
+        content = content,
         timestamp = os.time()
     }
     
-    -- 保存到历史记录
+    -- 记录到历史消息
     table.insert(channel.history, msg)
     if #channel.history > MAX_HISTORY then
         table.remove(channel.history, 1)
     end
     
-    -- 广播给频道内所有玩家
-    for member_id, _ in pairs(channel.members) do
-        local agent = player_agents[member_id]
-        if agent then
-            skynet.send(agent, "lua", "chat_message", msg)
-        end
-    end
-end
-
--- 获取玩家名称
-function get_player_name(player_id)
-    -- 实际应用中可能需要从玩家服务获取玩家名称
-    -- 这里简化处理
-    return "Player_" .. player_id
-end
-
--- 获取表的大小
-function get_table_size(t)
-    local count = 0
-    for _, _ in pairs(t) do
-        count = count + 1
-    end
-    return count
+    -- 直接使用protocol_handler发送给所有频道成员
+    protocol_handler.send_to_players(members, "chat_message", msg)
+    
+    return true
 end
 
 -- 消息过滤
@@ -348,46 +224,156 @@ function CMD.init()
     skynet.call(event, "lua", "subscribe", "player.login", skynet.self())
     skynet.call(event, "lua", "subscribe", "player.logout", skynet.self())
     
-    log.info("Chat service initialized")
     return true
 end
 
 -- 事件处理函数
 function CMD.on_event(event_name, event_data)
     if event_name == "player.login" then
-        CMD.register_player(event_data.player_id, event_data.agent)
         -- 可以在玩家登录时自动加入全局频道
         local player_id = event_data.player_id
-        local player_name = get_player_name(player_id)
+        local player_name = event_data.player_name
         CMD.join_channel("global", player_id, player_name)
     elseif event_name == "player.logout" then
-        -- 玩家登出时取消注册
+        -- 玩家登出时离开所有频道
         local player_id = event_data.player_id
-        CMD.unregister_player(player_id)
+        CMD.leave_channel("global", player_id)
     end
 end
 
--- 服务启动
-skynet.start(function()
+-- 获取频道历史消息
+function CMD.get_channel_history(channel_id, count)
+    if not channels[channel_id] then
+        return nil, "Channel not found"
+    end
+    
+    count = count or MAX_HISTORY
+    local history = channels[channel_id].history
+    local result = {}
+    
+    -- 从最新的消息开始，最多返回count条
+    for i = #history, math.max(1, #history - count + 1), -1 do
+        table.insert(result, history[i])
+    end
+    
+    return result
+end
+
+-- 获取私聊历史消息
+function CMD.get_private_history(player_id, other_id, count)
+    if not private_msgs[player_id] then
+        return {}
+    end
+    
+    count = count or MAX_HISTORY
+    local result = {}
+    
+    -- 筛选与指定玩家的私聊消息
+    for i, msg in ipairs(private_msgs[player_id]) do
+        if (msg.from_id == player_id and msg.to_id == other_id) or
+           (msg.from_id == other_id and msg.to_id == player_id) then
+            table.insert(result, msg)
+            if #result >= count then
+                break
+            end
+        end
+    end
+    
+    return result
+end
+
+-- 系统公告
+function CMD.system_announcement(message, target_players)
+    local msg = {
+        type = "system",
+        content = message,
+        timestamp = os.time()
+    }
+    
+    if target_players then
+        -- 发送给指定玩家
+        return protocol_handler.send_to_players(target_players, "chat_message", msg)
+    else
+        -- 广播给所有在线玩家
+        return protocol_handler.broadcast("chat_message", msg)
+    end
+end
+
+-- 清理玩家聊天数据
+function CMD.cleanup_player_data(player_id)
+    -- 从所有频道中移除玩家
+    for channel_id, channel in pairs(channels) do
+        if channel.members[player_id] then
+            channel.members[player_id] = nil
+            log.info("Removed player %d from channel %s during cleanup", player_id, channel.name)
+        end
+    end
+    
+    -- 清理私聊历史
+    private_msgs[player_id] = nil
+    
+    return true
+end
+
+-- 发送私聊消息的内部实现
+local function send_private_message(from_id, to_id, content)
+    -- 检查目标玩家是否存在
+    local player_mapper = skynet.localname(".player_mapper")
+    if not player_mapper then
+        return false, "Player mapper service not available"
+    end
+    
+    local is_online = skynet.call(player_mapper, "lua", "is_player_online", to_id)
+    if not is_online then
+        return false, "Player is not online"
+    end
+    
+    -- 创建消息内容
+    local msg = {
+        type = "private",
+        from_id = from_id,
+        to_id = to_id,
+        content = content,
+        timestamp = os.time()
+    }
+    
+    -- 初始化历史记录容器
+    if not private_msgs[from_id] then
+        private_msgs[from_id] = {}
+    end
+    if not private_msgs[to_id] then
+        private_msgs[to_id] = {}
+    end
+    
+    -- 添加到发送者历史
+    table.insert(private_msgs[from_id], msg)
+    if #private_msgs[from_id] > MAX_HISTORY then
+        table.remove(private_msgs[from_id], 1)
+    end
+    
+    -- 添加到接收者历史
+    table.insert(private_msgs[to_id], msg)
+    if #private_msgs[to_id] > MAX_HISTORY then
+        table.remove(private_msgs[to_id], 1)
+    end
+    
+    -- 直接使用protocol_handler发送给接收者
+    protocol_handler.send_to_player(to_id, "chat_message", msg)
+    
+    return true
+end
+
+-- 主服务函数
+local function main()
     -- 初始化聊天服务
     CMD.init()
     
-    -- 注册消息分发
-    skynet.dispatch("lua", function(session, source, cmd, ...)
-        local f = CMD[cmd]
-        if f then
-            if session == 0 then
-                f(...)
-            else
-                skynet.ret(skynet.pack(f(...)))
-            end
-        else
-            log.error("Unknown command: %s", cmd)
-            if session ~= 0 then
-                skynet.ret(skynet.pack(false, "Unknown command: " .. cmd))
-            end
-        end
-    end)
+    -- 注册服务名
+    skynet.register(".chat")
     
     log.info("Chat service started %s", skynet.self())
-end)
+end
+
+service_wrapper.create_service(main, {
+    name = "chat",
+})

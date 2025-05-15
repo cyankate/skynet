@@ -1,4 +1,4 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local netpack = require "skynet.netpack"
 local socketdriver = require "skynet.socketdriver"

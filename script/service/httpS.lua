@@ -1,4 +1,4 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local socket = require "skynet.socket"
 local httpd = require "http.httpd"
@@ -6,8 +6,9 @@ local sockethelper = require "http.sockethelper"
 local urllib = require "http.url"
 local cjson = require "cjson"
 local log = require "log"
-local tableUtils = require "tableUtils"
-local common = require "common"
+local tableUtils = require "utils.tableUtils"
+local common = require "utils.common"
+require "skynet.manager"
 
 -- 配置管理
 local config = {
@@ -538,6 +539,8 @@ local function start_http_server()
             end
         end
     }
+
+    skynet.register(".http")
 end
 
 -- 启动服务

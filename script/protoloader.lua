@@ -1,4 +1,3 @@
-package.path = "./script/?.lua;" .. package.path
 
 local skynet = require "skynet"
 local sprotoparser = require "sprotoparser"

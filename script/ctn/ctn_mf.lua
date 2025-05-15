@@ -1,4 +1,3 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 local skynet = require "skynet"
 local ctn_base = require "ctn.ctn_base"
 local class = require "utils.class"

@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local class = require "utils.class"
-local common = require "common"
+local common = require "utils.common"
 
 -- 基础缓存管理类
 local base_cache = class("base_cache")

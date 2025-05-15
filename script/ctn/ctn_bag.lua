@@ -59,7 +59,7 @@ function ctn_bag:onsave()
     for idx, data in pairs(datas) do
         table.insert(rows, {player_id = self.owner_, idx = idx, data = data})
     end
-    log.debug("ctn_bag:onsave %s", tableUtils.serialize_table(rows))
+    --log.debug("ctn_bag:onsave %s", tableUtils.serialize_table(rows))
     return rows
 end
 
@@ -150,7 +150,7 @@ function ctn_bag:add_item(item)
             end
         end
     end
-    log.debug("ctn_bag:add_item %s", tableUtils.serialize_table(self.config_))
+    --log.debug("ctn_bag:add_item %s", tableUtils.serialize_table(self.config_))
     -- 寻找空格子
     for slot = 1, self.config_.max_slots do
         if self:is_slot_empty(slot) then

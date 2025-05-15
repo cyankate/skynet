@@ -16,6 +16,21 @@ CREATE TABLE `mail` (
   KEY `idx_expire_time` (`expire_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮件表';
 
+-- 账号表
+CREATE TABLE IF NOT EXISTS `account` (
+  `account_key` varchar(20) NOT NULL COMMENT '账号标识',
+  `account_id` int NOT NULL AUTO_INCREMENT COMMENT '账号ID',
+  `players` text COMMENT '玩家列表数据',
+  `last_login_ip` varchar(16) DEFAULT NULL COMMENT '最后登录IP',
+  `last_login_time` datetime DEFAULT NULL COMMENT '最后登录时间',
+  `device_id` varchar(32) DEFAULT NULL COMMENT '设备ID',
+  `register_ip` varchar(16) DEFAULT NULL COMMENT '注册IP',
+  `register_time` datetime DEFAULT NULL COMMENT '注册时间',
+  PRIMARY KEY (`account_key`),
+  UNIQUE KEY `account_key` (`account_key`),
+  UNIQUE KEY `uk_account_id` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账号表';
+
 CREATE TABLE `guild` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '公会ID',
   `name` varchar(32) NOT NULL COMMENT '公会名称',
@@ -50,3 +65,42 @@ CREATE TABLE IF NOT EXISTS `ranking` (
     `data` text COMMENT '排行榜数据',
     PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='排行榜表';
+
+-- 支付表
+CREATE TABLE IF NOT EXISTS `payment` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '支付记录ID',
+    `order_id` varchar(64) NOT NULL COMMENT '订单ID',
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `account_id` int NOT NULL COMMENT '账号ID',
+    `product_id` varchar(32) NOT NULL COMMENT '商品ID',
+    `amount` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '支付金额',
+    `currency` varchar(8) NOT NULL DEFAULT 'CNY' COMMENT '货币类型',
+    `channel` varchar(16) NOT NULL COMMENT '支付渠道',
+    `channel_order_id` varchar(64) DEFAULT NULL COMMENT '渠道订单ID',
+    `status` tinyint NOT NULL DEFAULT '0' COMMENT '支付状态:0=创建,1=处理中,2=成功,3=失败,4=退款',
+    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `pay_time` datetime DEFAULT NULL COMMENT '支付时间',
+    `ip_address` varchar(16) DEFAULT NULL COMMENT '支付IP',
+    `device_id` varchar(32) DEFAULT NULL COMMENT '设备ID',
+    `extra_data` text DEFAULT NULL COMMENT '额外数据',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_order_id` (`order_id`),
+    KEY `idx_player_id` (`player_id`),
+    KEY `idx_account_id` (`account_id`),
+    KEY `idx_create_time` (`create_time`),
+    KEY `idx_channel_order` (`channel`, `channel_order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付表';
+
+-- 支付日志表（可选）
+-- 用于记录支付过程中的状态变更，便于问题排查
+CREATE TABLE IF NOT EXISTS `payment_log` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '日志ID',
+    `order_id` varchar(64) NOT NULL COMMENT '订单ID',
+    `status` tinyint NOT NULL COMMENT '状态变更',
+    `log_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '日志时间',
+    `log_content` text NOT NULL COMMENT '日志内容',
+    `operator` varchar(32) DEFAULT NULL COMMENT '操作人/系统',
+    PRIMARY KEY (`id`),
+    KEY `idx_order_id` (`order_id`),
+    KEY `idx_log_time` (`log_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付日志表'; 

@@ -1,3 +1,4 @@
+
 local skynet = require "skynet"
 local codecache = require "skynet.codecache"
 local core = require "skynet.core"
@@ -6,11 +7,13 @@ local snax = require "skynet.snax"
 local memory = require "skynet.memory"
 local httpd = require "http.httpd"
 local sockethelper = require "http.sockethelper"
+local log = require "log"
+local hotfix_cmd = require "tools.hotfix_cmd"
 
-local arg = table.pack(...)
-assert(arg.n <= 2)
-local ip = (arg.n == 2 and arg[1] or "127.0.0.1")
-local port = tonumber(arg[arg.n])
+-- local arg = table.pack(...)
+-- assert(arg.n <= 2)
+local ip = "0.0.0.0"
+local port = 8890
 local TIMEOUT = 300 -- 3 sec
 
 local COMMAND = {}
@@ -90,8 +93,7 @@ local function docmd(cmdline, print, fd)
 end
 
 local function console_main_loop(stdin, print, addr)
-	print("Welcome to skynet console")
-	skynet.error(addr, "connected")
+	log.info(addr, "debug_console connected")
 	local ok, err = pcall(function()
 		while true do
 			local cmdline = socket.readline(stdin, "\n")
@@ -125,7 +127,7 @@ end
 
 skynet.start(function()
 	local listen_socket, ip, port = socket.listen (ip, port)
-	skynet.error("Start debug console at " .. ip .. ":" .. port)
+	log.info("Start debug console at " .. ip .. ":" .. port)
 	socket.start(listen_socket , function(id, addr)
 		local function print(...)
 			local t = { ... }
@@ -174,6 +176,7 @@ function COMMAND.help()
 		dbgcmd = "run address debug command",
 		getenv = "getenv name : skynet.getenv(name)",
 		setenv = "setenv name value: skynet.setenv(name,value)",
+		hotfix = "热更新命令: hotfix [list|update|service|register|status|reload_all]",
 	}
 end
 
@@ -486,4 +489,25 @@ end
 
 function COMMAND.setenv(name,value)
 	return skynet.setenv(name,value)
+end
+
+function COMMAND.hotfix(cmd, ...)
+	-- 命令帮助信息
+	if cmd == nil then
+		return hotfix_cmd.help()
+	end
+	
+	-- 执行命令
+	local f = hotfix_cmd[cmd]
+	if f then
+		local args = {...}
+		local ok, result = pcall(f, table.unpack(args))
+		
+		if not ok then
+			return "命令执行错误: " .. tostring(result)
+		end
+		return result
+	else
+		return "未知命令: " .. tostring(cmd) .. "\n" .. hotfix_cmd.help()
+	end
 end

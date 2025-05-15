@@ -1,9 +1,9 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local mysql = require "skynet.db.mysql"
 local cjson = require "cjson"
 local log = require "log"
-local tableUtils = require "tableUtils"
+local tableUtils = require "utils.tableUtils"
 
 -- 数据库配置
 local db_config = {
@@ -18,7 +18,7 @@ local db_config = {
 local function connect_db()
     local db = mysql.connect(db_config)
     if not db then
-        error("Failed to connect to database")
+        log.error("Failed to connect to database")
     end
     return db
 end
@@ -28,7 +28,7 @@ local function get_table_schema(db, table_name)
     local sql = string.format("SHOW FULL COLUMNS FROM %s", table_name)
     local result = db:query(sql)
     if not result then
-        error("Failed to get table schema: " .. table_name)
+        log.error("Failed to get table schema: " .. table_name)
     end
     return result
 end
@@ -38,7 +38,7 @@ local function get_primary_keys(db, table_name)
     local sql = string.format("SHOW KEYS FROM %s WHERE Key_name = 'PRIMARY'", table_name)
     local result = db:query(sql)
     if not result then
-        error("Failed to get primary keys: " .. table_name)
+        log.error("Failed to get primary keys: " .. table_name)
     end
     local primary_keys = {}
     for _, row in ipairs(result) do
@@ -52,7 +52,7 @@ local function get_indexes(db, table_name)
     local sql = string.format("SHOW INDEX FROM %s", table_name)
     local result = db:query(sql)
     if not result then
-        error("Failed to get indexes: " .. table_name)
+        log.error("Failed to get indexes: " .. table_name)
     end
     local indexes = {}
     for _, row in ipairs(result) do
@@ -112,7 +112,7 @@ end
 local function export_to_file(all_configs)
     local file = io.open("script/sql/table_schema.lua", "w")
     if not file then
-        error("Failed to open file: table_schema.lua")
+        log.error("Failed to open file: table_schema.lua")
     end
     
     file:write("-- 自动生成的表结构配置\n")
@@ -181,7 +181,7 @@ local function main()
     local sql = string.format("SHOW TABLES FROM %s", db_config.database)
     local result = db:query(sql)
     if not result then
-        error("Failed to get tables from database")
+        log.error("Failed to get tables from database")
     end
     
     local tables = {}
@@ -191,7 +191,7 @@ local function main()
         table.insert(tables, table_name)
     end
     
-    log.info("Found %d tables in database", #tables)
+    --log.debug("Found %d tables in database", #tables)
     
     -- 收集所有表的配置
     local all_configs = {}
@@ -200,12 +200,12 @@ local function main()
         local primary_keys = get_primary_keys(db, table_name)
         local indexes = get_indexes(db, table_name)
         all_configs[table_name] = generate_table_config(table_name, schema, primary_keys, indexes)
-        log.info("Collected table schema: %s", table_name)
+        --log.debug("Collected table schema: %s", table_name)
     end
     
     -- 导出所有配置到一个文件
     export_to_file(all_configs)
-    log.info("Exported all table schemas to table_schema.lua")
+    --log.debug("Exported all table schemas to table_schema.lua")
 end
 
 -- 运行脚本

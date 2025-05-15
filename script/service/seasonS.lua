@@ -1,4 +1,3 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
 local skynet = require "skynet"
 local log = require "log"
 local season_def = require "define.season_def"

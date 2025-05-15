@@ -31,8 +31,8 @@ function M.ssplit(input, delimiter)
     return result
 end
 
--- 将 table 序列化为紧凑字符串
-function M.serialize_table_compact(tbl)
+-- 将 table 序列化为字符串
+function M.serialize_table(tbl)
     local function serialize(tbl)
         if type(tbl) ~= "table" then
             error("Input must be a table")
@@ -56,7 +56,7 @@ function M.serialize_table_compact(tbl)
 end
 
 -- 将紧凑字符串反序列化为 table
-function M.deserialize_table_compact(str)
+function M.deserialize_table(str)
     -- 检查序列化标记
     if str:match("^TBL:") then
         -- 移除序列化标记
@@ -67,51 +67,6 @@ function M.deserialize_table_compact(str)
         error("Failed to deserialize string: " .. err)
     end
     return func()
-end
-
--- 将 table 序列化为字符串
-function M.serialize_table(tbl)
-    local function serialize(tbl, indent)
-        indent = indent or 0
-        local result = {}
-        local prefix = string.rep("  ", indent)
-
-        if type(tbl) ~= "table" then
-            error("Input must be a table")
-        end
-
-        table.insert(result, "{\n")
-        local first = true
-        for k, v in pairs(tbl) do
-            if not first then
-                table.insert(result, ",\n")
-            end
-            first = false
-            
-            local key = type(k) == "string" and string.format("[%q]", k) or string.format("[%s]", tostring(k))
-            if type(v) == "table" then
-                table.insert(result, string.format("%s  %s = %s", prefix, key, serialize(v, indent + 1)))
-            elseif type(v) == "string" then
-                table.insert(result, string.format("%s  %s = %q", prefix, key, v))
-            else
-                table.insert(result, string.format("%s  %s = %s", prefix, key, tostring(v)))
-            end
-        end
-        table.insert(result, "\n" .. prefix .. "}")
-        return table.concat(result)
-    end
-
-    return M.serialize_table_compact(tbl)
-end
-
--- 将字符串反序列化为 table
-function M.deserialize_table(str)
-    -- print("deserialize_table", str)
-    -- local func, err = load("return " .. str, "deserialize", "t", {})
-    -- if not func then
-    --     error("Failed to deserialize string: " .. err)
-    -- end
-    return M.deserialize_table_compact(str)
 end
 
 -- 二分查找
@@ -157,5 +112,198 @@ function M.deep_copy(obj)
     return copy
 end
 
+-- 深拷贝表
+function M.deep_copy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[M.deep_copy(orig_key)] = M.deep_copy(orig_value)
+        end
+        setmetatable(copy, M.deep_copy(getmetatable(orig)))
+    else
+        copy = orig
+    end
+    return copy
+end
+
+-- 合并两个表
+function M.merge(t1, t2)
+    for k, v in pairs(t2) do
+        if type(v) == "table" and type(t1[k]) == "table" then
+            M.merge(t1[k], v)
+        else
+            t1[k] = v
+        end
+    end
+    return t1
+end
+
+-- 获取表大小（包括非整数键）
+function M.table_size(t)
+    if type(t) ~= "table" then
+        return 0
+    end
+    
+    local count = 0
+    for _ in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
+
+-- 检查表是否为空
+function M.is_empty(t)
+    if type(t) ~= "table" then
+        return true
+    end
+    return next(t) == nil
+end
+
+-- 检查表中是否包含指定值
+function M.contains_value(t, value)
+    if type(t) ~= "table" then
+        return false
+    end
+    
+    for _, v in pairs(t) do
+        if v == value then
+            return true
+        end
+    end
+    return false
+end
+
+-- 检查表中是否包含指定键
+function M.contains_key(t, key)
+    if type(t) ~= "table" then
+        return false
+    end
+    return t[key] ~= nil
+end
+
+-- 获取表中的所有键
+function M.keys(t)
+    if type(t) ~= "table" then
+        return {}
+    end
+    
+    local keys = {}
+    for k, _ in pairs(t) do
+        table.insert(keys, k)
+    end
+    return keys
+end
+
+-- 获取表中的所有值
+function M.values(t)
+    if type(t) ~= "table" then
+        return {}
+    end
+    
+    local values = {}
+    for _, v in pairs(t) do
+        table.insert(values, v)
+    end
+    return values
+end
+
+-- 过滤表
+function M.filter(t, filter_func)
+    if type(t) ~= "table" or type(filter_func) ~= "function" then
+        return {}
+    end
+    
+    local result = {}
+    for k, v in pairs(t) do
+        if filter_func(v, k, t) then
+            result[k] = v
+        end
+    end
+    return result
+end
+
+-- 映射表
+function M.map(t, map_func)
+    if type(t) ~= "table" or type(map_func) ~= "function" then
+        return {}
+    end
+    
+    local result = {}
+    for k, v in pairs(t) do
+        result[k] = map_func(v, k, t)
+    end
+    return result
+end
+
+-- 数组转换为以元素值为键的表
+function M.array_to_map(array, value_func)
+    if type(array) ~= "table" then
+        return {}
+    end
+    
+    local result = {}
+    for i, v in ipairs(array) do
+        if value_func then
+            result[v] = value_func(v, i)
+        else
+            result[v] = true
+        end
+    end
+    return result
+end
+
+-- 合并两个数组
+function M.concat_arrays(t1, t2)
+    if type(t1) ~= "table" or type(t2) ~= "table" then
+        return t1
+    end
+    
+    local result = M.deep_copy(t1)
+    for _, v in ipairs(t2) do
+        table.insert(result, v)
+    end
+    return result
+end
+
+-- 获取数组的子集
+function M.slice(array, start_idx, end_idx)
+    if type(array) ~= "table" then
+        return {}
+    end
+    
+    start_idx = start_idx or 1
+    end_idx = end_idx or #array
+    
+    if start_idx < 0 then
+        start_idx = #array + start_idx + 1
+    end
+    
+    if end_idx < 0 then
+        end_idx = #array + end_idx + 1
+    end
+    
+    local result = {}
+    for i = start_idx, end_idx do
+        table.insert(result, array[i])
+    end
+    return result
+end
+
+-- 移除数组中的指定元素
+function M.remove_element(array, element)
+    if type(array) ~= "table" then
+        return false
+    end
+    
+    for i, v in ipairs(array) do
+        if v == element then
+            table.remove(array, i)
+            return true
+        end
+    end
+    return false
+end
 
 return M

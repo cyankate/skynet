@@ -122,7 +122,7 @@ function ssplit(input, delimiter)
     return result 
 end
 
-send_request("login", {account_id = "tom"})
+--send_request("login", {account_id = "tom"})
 
 -- socket.usleep(30000)
 -- send_request("signin", {idx = 1})

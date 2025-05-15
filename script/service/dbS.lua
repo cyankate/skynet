@@ -1,4 +1,4 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local mysql = require "skynet.db.mysql"
 local sprotoloader = require "sprotoloader"
@@ -7,10 +7,10 @@ local log = require "log"
 local table_schema = require "sql.table_schema"
 require "skynet.manager"
 local IDGenerator = require "utils.id_generator"
+local service_wrapper = require "utils.service_wrapper"
 
 local pool = {}
 local POOL_SIZE = 10
-local CMD = {}
 
 local DB_CONNECTION = {
     host = "127.0.0.1",
@@ -226,7 +226,7 @@ function CMD.insert(_tbl, _data, _options)
 
             -- 处理text类型
             if field_type == "text" and type(value) == "table" then
-                table.insert(values, mysql.quote_sql_str(tableUtils.serialize_table_compact(value)))
+                table.insert(values, mysql.quote_sql_str(tableUtils.serialize_table(value)))
             else
                 table.insert(values, mysql.quote_sql_str(tostring(value)))
             end
@@ -310,7 +310,7 @@ function CMD.update(_tbl, _data, _options)
 
             -- 处理text类型
             if field_type == "text" and type(value) == "table" then
-                table.insert(set_list, string.format("%s=%s", field_name, mysql.quote_sql_str(tableUtils.serialize_table_compact(value))))
+                table.insert(set_list, string.format("%s=%s", field_name, mysql.quote_sql_str(tableUtils.serialize_table(value))))
             else
                 table.insert(set_list, string.format("%s=%s", field_name, mysql.quote_sql_str(tostring(value))))
             end
@@ -377,6 +377,23 @@ end
 
 function CMD.update_account(account_key, account_data)
     local ret = CMD.update("account", { account_key = account_key, players = account_data.players })
+    return ret
+end
+
+-- 更新账号登录信息
+function CMD.update_account_login(account_key, ip, login_time, device_id)
+    local data = {
+        account_key = account_key,
+        last_login_ip = ip,
+        last_login_time = os.date("%Y-%m-%d %H:%M:%S", login_time) -- 转换为datetime格式
+    }
+    
+    -- 只有当设备ID存在时才更新
+    if device_id and device_id ~= "unknown" then
+        data.device_id = device_id
+    end
+    
+    local ret = CMD.update("account", data)
     return ret
 end
 
@@ -465,21 +482,13 @@ function CMD.save_friend_data(player_id, data)
     return ret
 end
 
-skynet.start(function()
-    log.info(" db start")
-
-    skynet.dispatch("lua", function(_, _, cmd, ...)
-        local f = CMD[cmd]
-        if f then
-            skynet.ret(skynet.pack(f(...)))
-        else
-            log.error("Unknown command: " .. tostring(cmd))
-        end
-    end)
+service_wrapper.create_service(function()
     skynet.name(".db", skynet.self())
     connect({})
     if not id_generator then
         id_generator = IDGenerator.new()
     end
-end
-)
+end, {
+    name = "db",
+    register_hotfix = false,
+})

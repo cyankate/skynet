@@ -1,11 +1,11 @@
-package.path = package.path .. ";./script/?.lua;./script/utils/?.lua"
+
 local skynet = require "skynet"
 local manager = require "skynet.manager"
 local log = require "log"
 local score_rank = require "rank.score_rank"
 local event_def = require "define.event_def"
+local service_wrapper = require "utils.service_wrapper"
 
-local CMD = {}
 local ranks = {}
 -- 定义保存间隔，单位为0.01秒，默认每10分钟保存一次（10分钟=600秒=60000单位）
 local SAVE_INTERVAL = 3000
@@ -24,14 +24,11 @@ end
 
 -- 定时保存排行榜数据
 function save_all_ranks()
-    log.info("Saving all rank data...")
     for name, rank in pairs(ranks) do
         if rank.loaded_ and rank.dirty_ then
-            log.info(string.format("Saving rank data for %s", name))
             rank:save()
         end
     end
-    log.info("All rank data saved")
 end
 
 -- 启动定时保存功能
@@ -59,29 +56,6 @@ function CMD.update_rank(_rank_name, _data)
     end 
     rank:update(_data)
     return true
-end
-
-function CMD.get_rank(player_id)
-    log.info(string.format("Getting rank for player %s", player_id))
-    -- 这里可以添加获取排名的逻辑
-    -- 例如从数据库中查询排名数据
-    local rank_data = {
-        rank = 1,
-        score = 1000,
-    }
-    return rank_data
-end
-
-function CMD.get_rank_list()
-    log.info("Getting rank list")
-    -- 这里可以添加获取排名列表的逻辑
-    -- 例如从数据库中查询排名数据
-    local rank_list = {
-        { player_id = 1, score = 1000 },
-        { player_id = 2, score = 900 },
-        { player_id = 3, score = 800 },
-    }
-    return rank_list
 end
 
 function CMD.on_event(_event_name, ...)
@@ -302,7 +276,7 @@ function CMD.shutdown()
     return true
 end
 
-skynet.start(function()
+local function main()
     log.info("Rank module started")
 
     skynet.register(".rank")
@@ -313,17 +287,12 @@ skynet.start(function()
     -- 监听玩家升级事件
     skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LEVEL_UP, skynet.self())
     
-    skynet.dispatch("lua", function(_, _, cmd, ...)
-        local f = CMD[cmd]
-        if f then
-            skynet.ret(skynet.pack(f(...)))
-        else
-            log.error(string.format("Unknown command %s", cmd))
-        end
-    end)
-    
     init_rank()
     
     -- 启动定时保存功能
     start_rank_save_timer()
-end)
+end
+
+service_wrapper.create_service(main, {
+    name = "rank",
+})
