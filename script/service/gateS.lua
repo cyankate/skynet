@@ -168,7 +168,7 @@ function CMD.unregister_player(player_id)
         log.info(string.format("Unregistered player %s with fd %s", player_id, fd))
         return true
     else
-        log.warn(string.format("Player %s was not registered", player_id))
+        log.warning(string.format("Player %s was not registered", player_id))
         return false
     end
 end
@@ -187,7 +187,7 @@ function CMD.unregister_fd(fd)
         log.info(string.format("Unregistered fd %s for player %s", fd, player_id))
         return true
     else
-        log.warn(string.format("Fd %s was not registered to any player", fd))
+        log.warning(string.format("Fd %s was not registered to any player", fd))
         return false
     end
 end
@@ -223,7 +223,7 @@ end
 function CMD.send_to_player(player_id, msg)
     local fd = player_fd_map[player_id]
     if not fd then
-        log.warn("Player %s not connected", player_id)
+        log.warning("Player %s not connected", player_id)
         return false
     end
     
@@ -303,7 +303,7 @@ function handler.message(fd, msg, sz)
                     return
                 else
                     -- agent服务可能已不存在，继续常规登录流程
-                    log.warn(string.format("Reconnect failed for account %s: %s", args.account_id, player_info))
+                    log.warning(string.format("Reconnect failed for account %s: %s", args.account_id, player_info))
                 end
             end
             
@@ -324,7 +324,7 @@ function handler.message(fd, msg, sz)
                 log.info(string.format("Login success for account %s, agent: %s", args.account_id, agent))
             else
                 -- 登录失败，返回错误信息
-                log.warn(string.format("Login failed for account %s: %s", args.account_id, error_msg or "Unknown error"))
+                log.warning(string.format("Login failed for account %s: %s", args.account_id, error_msg or "Unknown error"))
             end
             return
         elseif name == "token_login" then
@@ -415,7 +415,7 @@ function handler.error(fd, msg)
 end
 
 function handler.warning(fd, size)
-    log.warn(string.format("Client warning: fd=%d, size=%d", fd, size))
+    log.warning(string.format("Client warning: fd=%d, size=%d", fd, size))
 end
 
 -- 处理指令

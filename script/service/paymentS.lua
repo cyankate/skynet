@@ -81,7 +81,7 @@ function CMD.create_order(player_id, account_id, product_id, channel, device_id,
         account_id, player_id, ip_address, device_id, product.amount)
     
     if not is_safe then
-        log.warn("订单风控检查不通过: player_id=%d, account_id=%d, product_id=%s, reason=%s", 
+        log.warning("订单风控检查不通过: player_id=%d, account_id=%d, product_id=%s, reason=%s", 
             player_id, account_id, product_id, risk_message)
         return {code = 3, message = risk_message}
     end
@@ -282,7 +282,7 @@ function CMD.handle_notify(channel, notify_data)
                 amount = order.amount
             })
         else
-            log.warn("玩家不在线，无法立即发放商品: player_id=%d, order_id=%s", 
+            log.warning("玩家不在线，无法立即发放商品: player_id=%d, order_id=%s", 
                 order.player_id, order_id)
             -- 可以将订单标记为待发放，等玩家上线时处理
         end
@@ -403,7 +403,7 @@ function CMD.manual_deliver(order_id, admin_id)
         
         return {code = 0, message = "商品发放成功"}
     else
-        log.warn("玩家不在线，无法立即发放商品: player_id=%d, order_id=%s", 
+        log.warning("玩家不在线，无法立即发放商品: player_id=%d, order_id=%s", 
             order.player_id, order_id)
         
         -- 可以将订单标记为待发放，等玩家上线时处理

@@ -58,7 +58,7 @@ function log.info(fmt, ...)
     send_log(LOG_LEVEL.INFO, fmt, ...)
 end
 
-function log.warn(fmt, ...)
+function log.warning(fmt, ...)
     send_log(LOG_LEVEL.WARN, fmt, ...)
 end
 

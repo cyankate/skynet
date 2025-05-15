@@ -11,7 +11,6 @@ local service_wrapper = require "utils.service_wrapper"
 -- agent池管理
 local agent_pool = {}           -- 存储所有agent服务实例
 local agent_to_accounts = {}    -- 每个agent负责的账号 {agent_handle = {account_key1, account_key2, ...}}
-local MAX_ACCOUNTS_PER_AGENT = 20   -- 每个agent最多处理的账号数量
 local INIT_AGENT_COUNT = 5      -- 初始创建的agent数量
 
 -- 获取安全服务实例
@@ -66,29 +65,20 @@ local function init_agent_pool()
         local agent = skynet.newservice("agentS")
         table.insert(agent_pool, agent)
         agent_to_accounts[agent] = {}
-        log.debug("Created agent %d: %s", i, agent)
     end
 end
 
 -- 获取负载最小的agent
 local function get_available_agent()
-    local min_load = MAX_ACCOUNTS_PER_AGENT
+    local min_load
     local selected_agent = nil
     
     for _, agent in ipairs(agent_pool) do
         local account_count = #(agent_to_accounts[agent] or {})
-        if account_count < min_load then
+        if not min_load or account_count < min_load then
             min_load = account_count
             selected_agent = agent
         end
-    end
-    
-    -- 如果所有agent都已满负载或没有agent，创建新agent
-    if not selected_agent or min_load >= MAX_ACCOUNTS_PER_AGENT then
-        selected_agent = skynet.newservice("agentS")
-        table.insert(agent_pool, selected_agent)
-        agent_to_accounts[selected_agent] = {}
-        log.info("Created new agent due to high load: %s", selected_agent)
     end
     
     return selected_agent
@@ -100,8 +90,6 @@ local function assign_account_to_agent(agent, account_key)
         agent_to_accounts[agent] = {}
     end
     table.insert(agent_to_accounts[agent], account_key)
-    log.debug("Account %s assigned to agent %s (total accounts: %d)", 
-        account_key, agent, #agent_to_accounts[agent])
 end
 
 -- 从agent中移除账号
@@ -113,8 +101,6 @@ local function remove_account_from_agent(agent, account_key)
     for i, acc_key in ipairs(agent_to_accounts[agent]) do
         if acc_key == account_key then
             table.remove(agent_to_accounts[agent], i)
-            log.debug("Account %s removed from agent %s (remaining accounts: %d)", 
-                account_key, agent, #agent_to_accounts[agent])
             break
         end
     end
@@ -135,15 +121,14 @@ function CMD.login(fd, account_key, ip, device_id)
     if ainfo and ainfo.agent then
         log.debug(string.format("Account %s already logged in, handling relogin", account_key))
         
-        ainfo.fd = fd
         ainfo.last_login_ip = ip
         ainfo.last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time())
         ainfo.device_id = device_id
         
         -- 向agent服务发送顶号通知
-        skynet.send(ainfo.agent, "lua", "kicked_out", ainfo.fd)
+        skynet.send(ainfo.agent, "lua", "kicked_out", account_key, fd)
 
-        log.debug(string.format("Account %s kicked out from fd %s", account_key, ainfo.fd))
+        log.debug(string.format("Account %s kicked out from fd %s", account_key, fd))
         
         -- 生成新的令牌
         local token = generate_token(account_key, device_id)
@@ -207,7 +192,6 @@ function CMD.login(fd, account_key, ip, device_id)
     
     account_info[account_key] = {
         agent = agent, 
-        fd = fd,
         last_login_ip = ip,
         last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time()),
         device_id = device_id
@@ -245,7 +229,7 @@ function CMD.token_login(token_str, fd, ip, device_id)
         -- 可能的设备盗用，将此IP加入黑名单
         local security = get_security_service()
         if security then
-            skynet.call(security, "lua", "add_to_blacklist", ip, "设备不匹配，可能的令牌盗用", 3600)
+            skynet.send(security, "lua", "add_to_blacklist", ip, "设备不匹配，可能的令牌盗用", 3600)
         end
         
         return false, nil, "设备不匹配，拒绝登录"
@@ -335,7 +319,6 @@ function CMD.reconnect(account_key, fd)
         return false
     end
     ainfo.reconnecting = true
-    ainfo.fd = fd
     local ok = skynet.call(ainfo.agent, "lua", "reconnect", account_key, fd)   
     if not ok then
         log.error(string.format("Failed to reconnect account %s", account_key))

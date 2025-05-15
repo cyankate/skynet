@@ -65,7 +65,7 @@ function CMD.select(_tbl, _cond, _options)
             if table_schema[_tbl].fields[field] then
                 table.insert(valid_fields, string.format("`%s`", field))
             else
-                log.warn("Field %s not found in table %s", field, _tbl)
+                log.warning("Field %s not found in table %s", field, _tbl)
             end
         end
         
@@ -81,7 +81,7 @@ function CMD.select(_tbl, _cond, _options)
         for k, v in pairs(_cond) do
             -- 验证字段是否存在
             if not table_schema[_tbl].fields[k] then
-                log.warn("Condition field %s not found in table %s", k, _tbl)
+                log.warning("Condition field %s not found in table %s", k, _tbl)
                 goto continue
             end
             
@@ -113,7 +113,7 @@ function CMD.select(_tbl, _cond, _options)
                 end
                 table.insert(valid_orders, string.format("`%s` %s", field, dir))
             else
-                log.warn("Order field %s not found in table %s", field, _tbl)
+                log.warning("Order field %s not found in table %s", field, _tbl)
             end
         end
         
@@ -319,7 +319,7 @@ function CMD.update(_tbl, _data, _options)
 
     -- 如果没有要更新的字段，直接返回成功
     if #set_list == 0 then
-        log.warn("dbS:update TBL %s No fields to update", _tbl)
+        log.warning("dbS:update TBL %s No fields to update", _tbl)
         return {affected_rows = 0}  -- 返回一个模拟的成功结果
     end
 

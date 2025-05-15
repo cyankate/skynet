@@ -344,7 +344,7 @@ function CMD.reconnect(account_key, fd)
 end
 
 -- 处理账号在其他地方登录的顶号逻辑
-function CMD.kicked_out(account_key, fd)
+function CMD.kicked_out(account_key, new_fd)
     local account = accounts[account_key]
     if not account then
         return false, "Account not found"
@@ -358,24 +358,20 @@ function CMD.kicked_out(account_key, fd)
         logout_timers[account_key] = nil
     end
 
-    protocol_handler.send_to_player(account.player_id, "kicked_out", {
-            reason = "kicked_out",
-            message = "您的账号在其他设备登录，已被强制下线"
-        }
-    )
-    
+    local gateS = skynet.localname(".gate")
+    local fd = skynet.call(gateS, "lua", "get_player_fd", account.player_id)
+    skynet.call(gateS, "lua", "kick_client", fd, "kicked_out", "您的账号在其他设备登录，已被强制下线")
+
     -- 如果玩家有需要保存的数据，这里可以保存
     if account.player and account.player.loaded_ then
         account.player:save_to_db()
     end
 
     local gateS = skynet.localname(".gate")
-    skynet.call(gateS, "lua", "register_player", fd, account.player_id)
+    skynet.call(gateS, "lua", "register_player", new_fd, account.player_id)
 
     -- 下发玩家数据
     send_player_data(account_key)
-    
-    log.debug(string.format("Player %s kicked out", account.player_id))
     
     return true
 end
@@ -494,7 +490,6 @@ skynet.register_protocol {
 
 -- 主服务函数
 local function main()
-    log.info("Multi-account agent service started")
     start_timer()
 end
 
