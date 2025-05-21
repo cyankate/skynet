@@ -11,10 +11,10 @@ local ip_blacklist = {}
 
 -- 请求类型限制配置
 local REQUEST_LIMITS = {
-    login = { count = 5, window = 60 },     -- 60秒内最多5次登录尝试
-    register = { count = 3, window = 300 }, -- 5分钟内最多3次注册尝试
+    login = { count = 1000, window = 60 },     -- 60秒内最多5次登录尝试
+    register = { count = 300, window = 300 }, -- 5分钟内最多3次注册尝试
     payment = { count = 10, window = 3600 },-- 1小时内最多10次支付请求
-    default = { count = 100, window = 60 }  -- 默认60秒内最多100次请求
+    default = { count = 10000, window = 60 }  -- 默认60秒内最多100次请求
 }
 
 -- 频率限制检查（ip + uid + action基础上的限制）

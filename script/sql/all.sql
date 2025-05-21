@@ -104,3 +104,18 @@ CREATE TABLE IF NOT EXISTS `payment_log` (
     KEY `idx_order_id` (`order_id`),
     KEY `idx_log_time` (`log_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付日志表'; 
+
+CREATE TABLE channel (
+    channel_id INT PRIMARY KEY,
+    channel_type TINYINT NOT NULL COMMENT '1:私聊 2:世界 3:公会 4:系统',
+    channel_key VARCHAR(32) NOT NULL COMMENT '私聊:player1_id_player2_id, 世界:global, 公会:guild_id',
+    data TEXT NOT NULL,
+    update_time INT NOT NULL DEFAULT 0 ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_channel_key (channel_key)
+);
+
+CREATE TABLE channel (
+    channel_id INT PRIMARY KEY,
+    data TEXT NOT NULL,
+    update_time INT NOT NULL DEFAULT 0 ON UPDATE CURRENT_TIMESTAMP,
+);

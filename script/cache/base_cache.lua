@@ -7,7 +7,8 @@ local common = require "utils.common"
 local base_cache = class("base_cache")
 
 -- 构造函数
-function base_cache:ctor(config)
+function base_cache:ctor(name, config)
+    self.name = name
     self.config = config or {
         max_size = 1000,           -- 最大缓存条目数
         ttl = 3600,               -- 默认过期时间（秒）
@@ -19,7 +20,8 @@ function base_cache:ctor(config)
     self.size = 0                -- 当前缓存大小
     self.cleanup_running = false -- 清理是否正在运行
     self.loading = {}            -- 正在加载的数据 {key = {waiting = {}, loading = true, timeout = timeout}}
-    
+    self.dirty_keys = {}         -- 需要保存的key
+    self.news = {}               -- 需要插入的key
     -- 统计信息
     self.hit_count = 0           -- 缓存命中次数
     self.miss_count = 0          -- 缓存未命中次数
@@ -55,7 +57,6 @@ function base_cache:acquire_load(key)
         }
         return true
     end
-    
     -- 如果已经在加载中，等待加载完成
     local co = coroutine.running()
     table.insert(self.loading[key].waiting, co)
@@ -96,7 +97,7 @@ function base_cache:release_load(key, data)
 end
 
 -- 获取缓存项
-function base_cache:get(key, loader)
+function base_cache:get(key)
     local item = self.cache[key]
     local result = nil
     
@@ -110,23 +111,19 @@ function base_cache:get(key, loader)
     end
     
     -- 如果缓存未命中且提供了加载器，则尝试加载
-    if not result and loader then
+    if not result then
         -- 尝试获取加载锁
         local is_first_loader = self:acquire_load(key)
         if is_first_loader then
             -- 第一个加载者
-            result = loader(key)
+            result = self:load_item(key)
             if result then
                 self:set(key, result)
+            else 
+                log.error("load_item failed for key: " .. key)  
             end
             self:release_load(key, result)
         else
-            -- 等待其他协程加载完成
-            local co = coroutine.running()
-            local timeout = skynet.wait(co)
-            if timeout == "timeout" then
-                log.error(string.format("Cache load timeout for key: %s", key))
-            end
             item = self.cache[key]
             if item then
                 result = item.data
@@ -135,6 +132,10 @@ function base_cache:get(key, loader)
     end
     
     return result
+end
+
+function base_cache:load_item(key)
+    return nil
 end
 
 -- 设置缓存项
@@ -290,11 +291,14 @@ function base_cache:mark_dirty(key)
 end
 
 function base_cache:is_dirty(key)
-    return self.dirty_keys[key]
+    return self.dirty_keys[key] or self.news[key]
 end
 
-function base_cache:save()
+function base_cache:save_all()
     for key, item in pairs(self.cache) do
+        if type(key) ~= "number" and type(key) ~= "string" then
+           log.error("save_all key is not a number or string: " .. key)
+        end
         if self:is_dirty(key) then
             self:save_item(key, item)
         end
@@ -303,18 +307,18 @@ end
 
 function base_cache:save_item(key, item)
     local data = item.data
-    local ret = self:onsave(key, data)
+    local ret = self:save(key, data)
     if ret then
         self.dirty_keys[key] = nil
     end
 end
 
-function base_cache:onsave(key, data)
+function base_cache:save(key, data)
     return true
 end
 
 function base_cache:tick()
-    self:save()
+    self:save_all()
     self:cleanup()
 end
 

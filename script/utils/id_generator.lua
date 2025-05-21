@@ -28,7 +28,7 @@ function IDGenerator:init_increment_generator(name, cfg)
         max_id = cfg.init_value
     end
     -- 保存到内存
-    cfg.current_id = 1
+    cfg.current_id = max_id
 end
 
 -- 生成递增ID

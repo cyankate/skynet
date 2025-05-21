@@ -339,7 +339,6 @@ function rank_base:save()
             local ret = skynet.call(dbc, "lua", "update", "ranking", values)
             if ret then
                 self.dirty_ = false
-                log.debug(string.format("[rank_base] Rank data updated successfully for rank: %s", self.name_))
             else
                 log.error(string.format("[rank_base] Failed to update rank data for rank: %s", self.name_))
             end
@@ -347,7 +346,6 @@ function rank_base:save()
             local ret = skynet.call(dbc, "lua", "insert", "ranking", values)
             if ret and ret.insert_id then
                 self.inserted_ = true
-                log.debug(string.format("[rank_base] Rank data inserted successfully for rank: %s", self.name_))
             else
                 log.error(string.format("[rank_base] Failed to insert rank data for rank: %s", self.name_))
             end

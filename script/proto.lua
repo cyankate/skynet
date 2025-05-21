@@ -8,93 +8,101 @@ proto.c2s = sprotoparser.parse [[
 	session 1 : integer
 }
 
-handshake 1 {
-	response {
-		msg 0  : string
-	}
-}
 
-get 2 {
+get 1 {
 	request {
 		what 0 : string
 	}
-	response {
-		result 0 : string
-	}
 }
 
-set 3 {
+set 2 {
 	request {
 		what 0 : string
 		value 1 : string
 	}
 }
 
-quit 4 {}
-
-login 5 {
+login 3 {
 	request {
 		account_id 0 : string
 	}
 }
 
-signin 6 {
+signin 4 {
 	request {
 		idx 0 : integer
 	}
 }
 
-add_item 7 {
+add_item 5 {
 	request {
-		idx 0 : integer
+		item_id 0 : integer
+		count 1 : integer
 	}
 }
 
-change_name 8 {
+change_name 6 {
 	request {
-		idx 0 : integer
+		name 0 : string
 	}
 }
 
-send_channel_message 9 {
+send_channel_message 7 {
 	request {
-		channel_id 0 : string
+		channel_id 0 : integer
 		content 1 : string
 	}
 }
 
-send_private_message 10 {
+send_private_message 8 {
 	request {
 		to_player_id 0 : integer
 		content 1 : string
 	}
 }
 
-get_channel_list 11 {}
+.channel_info {
+	id 0 : string
+	name 1 : string
+	member_count 2 : integer
+	create_time 3 : integer
+}
 
-join_channel 12 {
+get_channel_list 9 {
 	request {
-		channel_id 0 : string
+}	
+	response {
+		channels 0 : *channel_info
 	}
 }
 
-leave_channel 13 {
-	request {
-		channel_id 0 : string
-	}
+.chat_message {
+	type 0 : string
+	channel_id 1 : integer	
+	channel_name 2 : string
+	sender_id 3 : integer
+	sender_name 4 : string	
+	content 5 : string
+	timestamp 6 : integer
 }
 
-get_channel_history 14 {
+get_channel_history 12 {
 	request {
-		channel_id 0 : string
+		channel_id 0 : integer
 		count 1 : integer
 	}
 }
 
-get_private_history 15 {
+get_private_history 13 {
 	request {
 		player_id 0 : integer
 		count 1 : integer
+	}
+}
+
+add_score 14 {
+	request {
+		score 0 : integer
 	}
 }
 
@@ -132,13 +140,12 @@ login_response 4 {
 chat_message 5 {
 	request {
 		type 0 : string
-		channel_id 1 : string
-		from_id 2 : integer
-		from_name 3 : string
-		to_id 4 : integer
-		to_name 5 : string
-		content 6 : string
-		timestamp 7 : integer
+		channel_id 1 : integer	
+		channel_name 2 : string
+		sender_id 3 : integer
+		sender_name 4 : string	
+		content 5 : string
+		timestamp 6 : integer
 	}
 }
 
@@ -150,7 +157,7 @@ channel_list 6 {
 
 channel_history 7 {
 	request {
-		channel_id 0 : string
+		channel_id 0 : integer
 		messages 1 : *chat_message
 	}
 }
@@ -171,13 +178,12 @@ private_history 8 {
 
 .chat_message {
 	type 0 : string
-	channel_id 1 : string
-	from_id 2 : integer
-	from_name 3 : string
-	to_id 4 : integer
-	to_name 5 : string
-	content 6 : string
-	timestamp 7 : integer
+	channel_id 1 : integer	
+	channel_name 2 : string
+	sender_id 3 : integer
+	sender_name 4 : string	
+	content 5 : string
+	timestamp 6 : integer
 }
 
 kicked_out 9 {
@@ -191,6 +197,12 @@ player_data 10 {
 	request {
 		player_id 0 : integer
 		player_name 1 : string
+	}
+}
+
+login_failed 11 {
+	request {
+		reason 0 : string
 	}
 }
 

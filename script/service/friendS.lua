@@ -115,7 +115,7 @@ function CMD.on_event(event, data)
     if event == "player.login" then
         local player_id = data.player_id
         local player_name = data.player_name
-        local player_data = friend_mgr:get_friend_data(player_id)
+        --local player_data = friend_mgr:get_friend_data(player_id)
     end
 end
 

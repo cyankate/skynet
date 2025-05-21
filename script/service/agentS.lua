@@ -1,13 +1,13 @@
-
 local player_obj = require "player_obj"
 local ctn_bag = require "ctn.ctn_bag"
 local ctn_kv = require "ctn.ctn_kv"
 local common = require "utils.common"
 local msg_handle = require "msg_handle"
-local event_def = require "define.event_def"  -- 添加事件定义
+local event_def = require "define.event_def"
+local user_mgr = require "user_mgr"
 
 -- 多账号支持
-local accounts = {}  -- account_key => {account_data, player_id, player}
+local accounts = {}  -- account_key => {account_data, player_id}
 local logout_timers = {} -- account_key => timer_function
 
 -- 定时器函数
@@ -19,8 +19,6 @@ local function start_timer()
         -- 遍历所有账号，执行定时任务
         for account_key, account in pairs(accounts) do
             if account.player and account.player.loaded_ then
-                local ctn = account.player:get_ctn("bag")
-                ctn:add_item({item_id = math.random(1, 9), count = 5})
                 -- 在这里添加需要轮询的逻辑
                 account.player:save_to_db()
             end
@@ -36,17 +34,14 @@ function CMD.start(account_key, account_data, args)
     if accounts[account_key] then
         return false
     end
-
     accounts[account_key] = {
         account_data = account_data,
         player_id = nil,
-        player = nil,
         loaded = false,
         args = args,
     }
     -- 加载玩家数据
     CMD.load(account_key)
-    
     return true
 end
 
@@ -63,8 +58,7 @@ function CMD.load(account_key)
     
     if player_info then 
         local data = skynet.call(db, "lua", "query_player", player_info.player_id)
-        if next(data) then
-            data = data[1]
+        if data then
             player_data = {
                 account_key = data.account_key,
                 player_id = data.player_id,
@@ -76,23 +70,19 @@ function CMD.load(account_key)
             log.error(string.format("Failed to load player data for %s", player_info.player_id))
         end
     else
+        local db = skynet.localname(".db")
+        local player_id = skynet.call(db, "lua", "gen_id", "player")
         player_data = {
             account_key = account_key,
+            player_id = player_id,
             player_name = "Player_" .. math.random(1000, 9999),
             info = {},
         }
-        local ret = skynet.call(db, "lua", "create_player", account_key, {
-            account_key = account_key,
-            player_name = player_data.player_name,
-            info = player_data.info,
-        })
+        local ret = skynet.call(db, "lua", "create_player", player_id, player_data)
         if ret then 
-            local db = skynet.localname(".db")
-            account.player_id = skynet.call(db, "lua", "gen_id", "player")
-            log.debug(string.format("Player %s created", account.player_id))
-            
-            account.account_data.players[account.player_id] = {
-                player_id = account.player_id,
+            account.player_id = player_id
+            account.account_data.players[player_id] = {
+                player_id = player_id,
                 player_name = player_data.player_name,
             }
             local login = skynet.localname(".login")
@@ -106,213 +96,119 @@ function CMD.load(account_key)
         log.error(string.format("No player data found for %s", account_key))
         return false
     end
-    
-    account.player = player_obj.new(account.player_id, player_data)
-    load_player_data(account_key)
-    return true
-end
-
-function load_player_data(account_key)
-    local account = accounts[account_key]
-    if not account or not account.player then
+    if account_key ~= player_data.account_key then
+        log.error(string.format("account_key not match %s %s", account_key, player_info.player_id))
         return false
     end
     
-    account.player.ctns_  = {
-        bag = ctn_bag.new(account.player_id, "bag", "bag"),
-        base = ctn_kv.new(account.player_id, "base", "base"),
+    local player = player_obj.new(account.player_id, player_data)
+    user_mgr.add_player_obj(account.player_id, player)
+    load_player_data(player)
+    return true
+end
+
+function load_player_data(player)
+    player.ctns_  = {
+        bag = ctn_bag.new(player.player_id_, "bag", "bag"),
+        base = ctn_kv.new(player.player_id_, "base", "base"),
     }
+    player.ctn_loading_ = {}
     
-    account.player.ctn_loading_ = {}
-    
-    for k, v in pairs(account.player.ctns_) do
+    for k, v in pairs(player.ctns_) do
         v:load(function(_ctn)
-            ctn_loaded(account_key, _ctn)
+            ctn_loaded(player.player_id_, _ctn)
         end)
-        account.player.ctn_loading_[k] = true
+        player.ctn_loading_[k] = true
     end
 end 
 
-function ctn_loaded(account_key, _ctn)
-    local account = accounts[account_key]
-    if not account or not account.player then 
+function ctn_loaded(player_id, _ctn)
+    local player = user_mgr.get_player_obj(player_id)
+    if not player then 
         return 
     end 
     
-    if not account.player.ctn_loading_[_ctn.name_] then 
+    if not player.ctn_loading_[_ctn.name_] then 
         return 
     end
     
-    account.player.ctn_loading_[_ctn.name_] = nil
-    if not next(account.player.ctn_loading_) then 
-        on_player_loaded(account_key)
+    player.ctn_loading_[_ctn.name_] = nil
+    if not next(player.ctn_loading_) then 
+        on_player_loaded(player_id)
     end
 end
 
-function on_player_loaded(account_key)
-    local account = accounts[account_key]
-    if not account or not account.player then
+function on_player_loaded(player_id)
+    local player = user_mgr.get_player_obj(player_id)
+    if not player then
         return
     end
     
-    account.player:loaded()
-    account.loaded = true
-
+    player:on_loaded()
+    player.loaded = true
+    local account = accounts[player.account_key_]
+    if not account then
+        log.error("account not found %s", player.account_key_)
+        return
+    end
+    
     local gateS = skynet.localname(".gate")
-    skynet.call(gateS, "lua", "register_player", account.args.fd, account.player_id)
+    skynet.send(gateS, "lua", "register_player", account.args.fd, player_id)
     account.args = nil
 
     local loginS = skynet.localname(".login")
-    skynet.call(loginS, "lua", "account_loaded", account_key)
+    skynet.send(loginS, "lua", "account_loaded", player.account_key_)
     
     -- 触发登录事件
-    handle_login(account_key)
-    
+    handle_login(player)
     -- 下发玩家数据
-    send_player_data(account_key)
+    send_player_data(player)
 end
 
-function send_player_data(account_key)
-    local account = accounts[account_key]
-    if not account or not account.player then
-        return
-    end
+function send_player_data(player)
+    protocol_handler.send_to_player(player.player_id_, "login_response", {
+        success = true,
+        player_id = player.player_id_,
+        player_name = player.player_name_,
+    })
     
-    protocol_handler.send_to_player(account.player_id, "player_data", {
-            player_id = account.player_id,
-            player_name = account.player.player_name_,
+    protocol_handler.send_to_player(player.player_id_, "player_data", {
+            player_id = player.player_id_,
+            player_name = player.player_name_,
         }
     )
 end
 
-function handle_login(account_key)
-    local account = accounts[account_key]
-    if not account or not account.player_id then
+function handle_login(player)
+    if not player then
         return
     end
     
     -- 处理登录逻辑
     local eventS = skynet.localname(".event")
     -- 触发登录事件
-    skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LOGIN, {
-        player_id = account.player_id,
-        player_name = account.player.player_name_,
+    skynet.send(eventS, "lua", "trigger", event_def.PLAYER.LOGIN, {
+        player_id = player.player_id_,
+        player_name = player.player_name_,
         agent = skynet.self(),
         -- 其他登录相关信息
     })
 end
 
-function handle_level_up(account_key, _new_level)
-    local account = accounts[account_key]
-    if not account or not account.player then
+function handle_level_up(player, _new_level)
+    if not player then
         return
     end
     
     -- 处理升级逻辑
     local eventS = skynet.localname(".event")
     -- 触发升级事件
-    skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LEVEL_UP, {
-        player_id = account.player_id,
-        old_level = account.player.level,
+    skynet.send(eventS, "lua", "trigger", event_def.PLAYER.LEVEL_UP, {
+        player_id = player.player_id_,
+        old_level = player.level_,
         new_level = _new_level,
         -- 其他升级相关信息
     })
-end
-
--- 处理发送频道消息请求
-function CMD.send_channel_message(account_key, channel_id, message)
-    local account = accounts[account_key]
-    if not account or not account.player or not account.player.loaded_ then
-        return false, "Player not loaded"
-    end
-    
-    log.debug(string.format("send_channel_message %s %s", channel_id, message))
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return false, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "send_channel_msg", channel_id, account.player_id, message)
-end
-
--- 处理发送私聊消息请求
-function CMD.send_private_message(account_key, to_player_id, message)
-    local account = accounts[account_key]
-    if not account or not account.player or not account.player.loaded_ then
-        return false, "Player not loaded"
-    end
-    
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return false, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "send_private_msg", account.player_id, to_player_id, message)
-end
-
--- 处理获取频道列表请求
-function CMD.get_channel_list(account_key)
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return nil, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "get_channel_list")
-end
-
--- 处理加入频道请求
-function CMD.join_channel(account_key, channel_id)
-    local account = accounts[account_key]
-    if not account or not account.player or not account.player.loaded_ then
-        return false, "Player not loaded"
-    end
-    
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return false, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "join_channel", channel_id, account.player_id, account.player.player_name_)
-end
-
--- 处理离开频道请求
-function CMD.leave_channel(account_key, channel_id)
-    local account = accounts[account_key]
-    if not account or not account.player or not account.player.loaded_ then
-        return false, "Player not loaded"
-    end
-    
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return false, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "leave_channel", channel_id, account.player_id)
-end
-
--- 处理获取频道历史消息请求
-function CMD.get_channel_history(account_key, channel_id, count)
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return nil, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "get_channel_history", channel_id, count)
-end
-
--- 处理获取私聊历史消息请求
-function CMD.get_private_history(account_key, other_player_id, count)
-    local account = accounts[account_key]
-    if not account or not account.player or not account.player.loaded_ then
-        return nil, "Player not loaded"
-    end
-    
-    local chatS = skynet.localname(".chat")
-    if not chatS then
-        return nil, "Chat service not available"
-    end
-    
-    return skynet.call(chatS, "lua", "get_private_history", account.player_id, other_player_id, count)
 end
 
 function CMD.reconnect(account_key, fd)
@@ -325,18 +221,21 @@ function CMD.reconnect(account_key, fd)
     if logout_timers[account_key] then
         logout_timers[account_key]()
         logout_timers[account_key] = nil 
-        log.debug(string.format("Player %s reconnected, cancel exit timer", account.player_id))
+    end
+    local player = user_mgr.get_player_obj(account.player_id)
+    if not player then
+        return false, "Player not found"
     end
 
     local gateS = skynet.localname(".gate")
-    skynet.call(gateS, "lua", "register_player", fd, account.player_id)
+    skynet.send(gateS, "lua", "register_player", fd, account.player_id)
     
     -- 触发登录事件
-    handle_login(account_key)
+    handle_login(player)
 
     -- 下发玩家数据
-    if account.player and account.player.loaded_ then
-        send_player_data(account_key)
+    if player and player.loaded_ then
+        send_player_data(player)
     end
     
     log.info(string.format("Player %s reconnected", account.player_id))
@@ -359,19 +258,24 @@ function CMD.kicked_out(account_key, new_fd)
     end
 
     local gateS = skynet.localname(".gate")
-    local fd = skynet.call(gateS, "lua", "get_player_fd", account.player_id)
-    skynet.call(gateS, "lua", "kick_client", fd, "kicked_out", "您的账号在其他设备登录，已被强制下线")
+
+    skynet.send(gateS, "lua", "kick_client", account.player_id, "kicked_out", "您的账号在其他设备登录，已被强制下线")
+
+    local player = user_mgr.get_player_obj(account.player_id)
+    if not player then
+        return false, "Player not found"
+    end
 
     -- 如果玩家有需要保存的数据，这里可以保存
-    if account.player and account.player.loaded_ then
-        account.player:save_to_db()
+    if player and player.loaded_ then
+        player:save_to_db()
     end
 
     local gateS = skynet.localname(".gate")
-    skynet.call(gateS, "lua", "register_player", new_fd, account.player_id)
+    skynet.send(gateS, "lua", "register_player", new_fd, account.player_id)
 
     -- 下发玩家数据
-    send_player_data(account_key)
+    send_player_data(player)
     
     return true
 end
@@ -385,11 +289,16 @@ function CMD.disconnect(account_key)
     
     log.info(string.format("Player %s disconnected", account.player_id))
 
+    local player = user_mgr.get_player_obj(account.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+
     -- 触发登出事件
     local eventS = skynet.localname(".event")
-    if eventS and account.player then
-        skynet.call(eventS, "lua", "trigger", event_def.PLAYER.LOGOUT, {
-            player_id = account.player_id,
+    if eventS and player then
+        skynet.send(eventS, "lua", "trigger", event_def.PLAYER.LOGOUT, {
+            player_id = player.player_id_,
         })
     end
     
@@ -400,23 +309,24 @@ function CMD.disconnect(account_key)
     end
     
     -- 3分钟 = 180秒 = 18000单位（skynet的timeout单位是0.01秒）
-    logout_timers[account_key] = common.set_timeout(18000, function()
+    logout_timers[account_key] = common.set_timeout(10 * 100, function()
         log.debug(string.format("Player %s didn't reconnect within 3 minutes, removing from agent", account.player_id))
         
         -- 保存玩家数据
-        if account.player and account.player.loaded_ then
-            account.player:save_to_db()
+        if player and player.loaded_ then
+            player:save_to_db()
         end
         
         -- 通知登录服务，账号已完全登出
         local loginS = skynet.localname(".login")
         if loginS then
-            skynet.call(loginS, "lua", "account_exit", account_key)
+            skynet.send(loginS, "lua", "account_exit", account_key)
         end
-        
+        log.error(" remove     account_key %s", account_key)
         -- 从账号表中移除
         accounts[account_key] = nil
         logout_timers[account_key] = nil
+        user_mgr.del_player_obj(account.player_id)
     end)
     
     log.debug(string.format("Set exit timer for player %s, will be removed in 3 minutes if not reconnected", account.player_id))
@@ -448,8 +358,9 @@ function CMD.shutdown()
     
     -- 保存所有账号玩家数据
     for account_key, account in pairs(accounts) do
-        if account.player and account.player.loaded_ then
-            account.player:save_to_db()
+        local player = user_mgr.get_player_obj(account.player_id)
+        if player and player.loaded_ then
+            player:save_to_db()
         end
         
         -- 取消计时器
@@ -461,7 +372,7 @@ function CMD.shutdown()
         -- 通知登录服务，此账号已完全退出
         local loginS = skynet.localname(".login")
         if loginS then
-            skynet.call(loginS, "lua", "agent_exit", account_key)
+            skynet.send(loginS, "lua", "agent_exit", account_key)
         end
     end
     
@@ -475,16 +386,16 @@ skynet.register_protocol {
 	unpack = function (msg, sz)
 		return skynet.unpack(msg, sz)
 	end,
-	dispatch = function (_, _, name, args)
-		skynet.ignoreret()
-        if msg_handle[name] then
-            local ok, result = pcall(msg_handle[name], args)
-            if not ok then
-                log.error(string.format("Error handling message %s: %s", name, result))
-            end
-        else
-            log.error(string.format("Unknown message type: %s", name))
-        end
+	dispatch = function (fd, _, player_id, name, args)
+        skynet.ignoreret()
+		if msg_handle[name] then
+			local ok, result = pcall(msg_handle[name], player_id, args)
+			if not ok then
+				log.error(string.format("Error handling message %s for player %s: %s", name, player_id, result))
+			end
+		else
+			log.error(string.format("Unknown message type: %s for player %s", name, player_id))
+		end
 	end
 }
 

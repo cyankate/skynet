@@ -103,14 +103,12 @@ function ctn_mf:dosave()
             local ret = skynet.call(db, "lua", "insert", self.tbl_, values)
             if not ret then
                 error(string.format("Failed to insert data with primary keys: %s", prikeys_str))
+                return
             end
             self.sub_inserted_[prikeys_str] = true
         else 
             -- 执行更新操作
-            local ret = skynet.call(db, "lua", "update", self.tbl_, values)
-            if not ret then
-                error(string.format("Failed to update data with primary keys: %s", prikeys_str))
-            end
+            skynet.send(db, "lua", "update", self.tbl_, values)
         end 
     end
     

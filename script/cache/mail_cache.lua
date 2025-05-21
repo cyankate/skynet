@@ -6,7 +6,8 @@ local class = require "utils.class"
 local mail_cache = class("mail_cache", base_cache)
 
 -- 构造函数
-function mail_cache:ctor(player_id, config)
+function mail_cache:ctor(player_id)
+    base_cache.ctor(self, "mail_ctn_cache")
     self.player_id = player_id
     -- 邮件详情缓存配置
     local detail_config = {
@@ -16,7 +17,7 @@ function mail_cache:ctor(player_id, config)
     }
     
     -- 初始化缓存实例
-    self.detail_cache = base_cache.new(detail_config)
+    self.detail_cache = base_cache.new("mail_cache", detail_config)
     
     -- 邮件列表缓存
     self.mail_list = {}         -- 完整的邮件列表

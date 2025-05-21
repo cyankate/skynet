@@ -1,6 +1,5 @@
 local core = require "sproto.core"
 local assert = assert
-
 local sproto = {}
 local host = {}
 
@@ -185,6 +184,11 @@ local function gen_response(self, response, session)
 		header_tmp.type = nil
 		header_tmp.session = session
 		header_tmp.ud = ud
+		if log then 
+			log.debug("gen_response >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s, args = %s", session, tableUtils.serialize_table(args))
+		else 
+			print("gen_response >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s, response = %s", session, response)
+		end 
 		local header = core.encode(self.__package, header_tmp)
 		if response then
 			local content = core.encode(response, args)
@@ -210,11 +214,14 @@ function host:dispatch(...)
 			result = core.decode(proto.request, content)
 		end
 		if header_tmp.session then
-			return "REQUEST", proto.name, result, gen_response(self, proto.response, header_tmp.session), header.ud
+			return "REQUEST", proto.name, result, gen_response(self, proto.response, header_tmp.session), header.ud, header_tmp.session
 		else
 			return "REQUEST", proto.name, result, nil, header.ud
 		end
 	else
+		if not self.__session[header_tmp.session] then 
+			print("session not found >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s", header_tmp.session)
+		end 
 		-- response
 		local session = assert(header_tmp.session, "session not found")
 		local response = assert(self.__session[session], "Unknown session")

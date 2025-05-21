@@ -43,7 +43,6 @@ function start_rank_save_timer()
 end
 
 function CMD.update_rank(_rank_name, _data)
-    log.debug(string.format("Updating rank for player %s", _rank_name))
     -- 这里可以添加更新排名的逻辑
     local rank = ranks[_rank_name]
     if not rank then

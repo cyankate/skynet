@@ -57,5 +57,5 @@ _G.CMD = {
 
     after_hotfix = function(hotfix_name)
         --log.info("热更新后执行")
-    end
+    end,
 }

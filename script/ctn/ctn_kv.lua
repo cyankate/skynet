@@ -75,14 +75,8 @@ function ctn_kv:doload()
     local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
     local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
-    
-    if ret.badresult then
-        self:set_error("Failed to load data from database")
-        return false, ERROR_CODE.DB_ERROR
-    end
-    
-    self.inserted_ = true 
-    if next(ret) then 
+    if ret and ret[1] then 
+        self.inserted_ = true 
         local data = ret[1].data
         self:onload(data)
     end
@@ -96,7 +90,6 @@ function ctn_kv:dosave()
     if not data then
         return false, err_code
     end
-    
     local db = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
     local fields = {data = data}
@@ -109,16 +102,48 @@ function ctn_kv:dosave()
             self.inserted_ = true
             self:clear_dirty()
         else
-            error("Failed to insert data")
+            log.error("Failed to insert data player_id %s", self.prikey_)
         end
     else 
-        local ret = skynet.call(db, "lua", "update", self.tbl_, fields)
-        if not ret then
-            error("Failed to update data")
-        end
+        skynet.send(db, "lua", "update", self.tbl_, fields)
     end
     self:clear_dirty()
     return true 
+end
+
+function ctn_kv:set(_key, _value)
+    if not _key or not _value then
+        return false, ERROR_CODE.INVALID_DATA
+    end
+    if type(_value) ~= "table" and _value == self.data_[_key] then
+        return true
+    end
+    self.data_[_key] = _value
+    self:set_dirty()
+    return true
+end
+
+function ctn_kv:get(_key)
+    return self.data_[_key]
+end
+
+function ctn_kv:inc(_key, _value)
+    if not _key or not _value then
+        return false, ERROR_CODE.INVALID_DATA
+    end
+    if type(_value) ~= "number" then
+        return false, ERROR_CODE.INVALID_DATA
+    end
+    if not self.data_[_key] then
+        self.data_[_key] = 0
+    end
+    self.data_[_key] = self.data_[_key] + _value
+    self:set_dirty()
+    return true
+end
+
+function ctn_kv:get_all()
+    return self.data_
 end
 
 -- 批量添加数据

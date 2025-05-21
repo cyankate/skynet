@@ -241,6 +241,7 @@ function CMD.insert(_tbl, _data, _options)
     local values_str = table.concat(values, ",")
     local sql = string.format("INSERT INTO `%s` (%s) VALUES (%s)", _tbl, fields_str, values_str)
 
+    --log.info("dbS:insert %s", sql)
     -- 执行SQL
     local result, err = db:query(sql)
     release(db)
@@ -328,11 +329,10 @@ function CMD.update(_tbl, _data, _options)
     local where_str = table.concat(where_list, " AND ")
     local sql = string.format("UPDATE `%s` SET %s WHERE %s", _tbl, set_str, where_str)
 
-    --log.debug("dbS:update %s", sql)
+    --log.info("dbS:update %s", sql)
     local result, err = db:query(sql)
     release(db)
-
-    if result.badresult then
+    if result.affected_rows <= 0 then
         log.error("MySQL update failed %s, %s", sql, tableUtils.serialize_table(result))
         return nil
     end
@@ -399,12 +399,16 @@ end
 
 function CMD.query_player(player_id)
     local ret = CMD.select("player", { player_id = player_id })
-    return ret
+    if ret and ret[1] then
+        return ret[1]
+    end
+    return nil
 end
 
-function CMD.create_player(account_key, player_data)
+function CMD.create_player(player_id, player_data)
     local ret = CMD.insert("player", { 
-        account_key = account_key, 
+        player_id = player_id,
+        account_key = player_data.account_key, 
         player_name = player_data.player_name, 
         info = player_data.info 
     })
@@ -479,6 +483,66 @@ end
 
 function CMD.save_friend_data(player_id, data)
     local ret = CMD.update("friend", { player_id = player_id, data = data })
+    return ret
+end
+
+function CMD.get_max_channel_id()
+    local ret = CMD.select("private_channel", { }, { order_by = { channel_id = "DESC" }, limit = 1 })
+    if ret and ret[1] then
+        return ret[1].channel_id
+    end
+    return nil
+end
+
+function CMD.get_channel_data(channel_id)
+    local ret = CMD.select("channel", { channel_id = channel_id })
+    if ret and ret[1] then
+        return ret[1]
+    end
+    return nil
+end
+
+function CMD.create_channel_data(data)
+    local ret = CMD.insert("channel", data)
+    return ret
+end
+
+function CMD.save_channel_data(data)
+    local ret = CMD.update("channel", data)
+    return ret
+end 
+
+function CMD.get_player_private(player_id, to_player_id)
+    if player_id > to_player_id then 
+        player_id, to_player_id = to_player_id, player_id
+    end 
+    local ret = CMD.select("private_channel", { player1_id = player_id, player2_id = to_player_id })
+    if ret and ret[1] then
+        return ret[1]
+    end
+    return nil
+end 
+
+function CMD.create_private_channel(data)
+    local ret = CMD.insert("private_channel", data)
+    return ret
+end
+
+function CMD.get_player_private_channel(player_id)
+    local ret = CMD.select("player_private", { player_id = player_id })
+    if ret and ret[1] then
+        return ret[1]
+    end
+    return nil
+end
+
+function CMD.create_player_private_channel(data)
+    local ret = CMD.insert("player_private", data)
+    return ret
+end
+
+function CMD.update_player_private_channel(data)
+    local ret = CMD.update("player_private", data)
     return ret
 end
 

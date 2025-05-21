@@ -7,7 +7,7 @@ local friend_cache = class("friend_cache", base_cache)
 
 
 function friend_cache:ctor()
-    self.super.ctor(self)
+    self.super.ctor(self, "friend_cache")
 end
 
 function friend_cache:new_friend_data(player_id)
