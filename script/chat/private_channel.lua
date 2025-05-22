@@ -50,14 +50,7 @@ function private_channel:onjoin(player_id, player_name)
 end
 -- 广播消息（重写基类方法，私聊只发给对方）
 function private_channel:broadcast_message(msg)
-    -- 更新最后消息时间
-    self.last_message_time = os.time()
-    
-    
-    channel_mgr.cache:update_message(self.channel_id, msg)
-
-    protocol_handler.send_to_player(self.player1_id, "chat_message", msg)
-    protocol_handler.send_to_player(self.player2_id, "chat_message", msg)
+    channel_base.broadcast_message(self, msg)
 end
 
 -- 获取频道信息（重写基类方法，增加删除状态）

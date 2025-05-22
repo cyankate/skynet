@@ -26,6 +26,7 @@ skynet.start(function()
     local chat = skynet.newservice("chatS")
 
     local http = skynet.newservice("httpS")
+    --local http = skynet.newservice("simpleweb")
 
     local mail = skynet.newservice("mailS")
 

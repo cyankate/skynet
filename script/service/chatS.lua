@@ -16,15 +16,19 @@ function CMD.init()
     channel_mgr.init()
     
     -- 创建世界频道
-    local world_channel_id = channel_mgr.create_channel(world_channel, nil, "世界频道", CHANNEL_TYPE.PUBLIC)
-    log.info("World channel created with ID: %s", world_channel_id)
+    local world_channel_id = channel_mgr.create_channel(world_channel, 1, "世界频道", CHANNEL_TYPE.PUBLIC)
+    channel_mgr.cache:get(world_channel_id)
+
+    -- -- 创建系统频道
+    -- local system_channel_id = channel_mgr.create_channel(system_channel, 2, "系统频道", CHANNEL_TYPE.PUBLIC)
+    -- channel_mgr.cache:get(system_channel_id)
     
     -- 注册事件处理
     local event = skynet.localname(".event")
-    skynet.call(event, "lua", "subscribe", "player.login", skynet.self())
-    skynet.call(event, "lua", "subscribe", "player.logout", skynet.self())
-    skynet.call(event, "lua", "subscribe", "guild.create", skynet.self())
-    skynet.call(event, "lua", "subscribe", "guild.dismiss", skynet.self())
+    skynet.send(event, "lua", "subscribe", "player.login", skynet.self())
+    skynet.send(event, "lua", "subscribe", "player.logout", skynet.self())
+    skynet.send(event, "lua", "subscribe", "guild.create", skynet.self())
+    skynet.send(event, "lua", "subscribe", "guild.dismiss", skynet.self())
     
     return true
 end
@@ -124,14 +128,9 @@ local function main()
     skynet.register(".chat")
     
     log.info("Chat service started %s", skynet.self())
-
-    local function print_stats()    
-        skynet.timeout(1000, print_stats)
-        service_wrapper.print_stats()
-    end
-    skynet.timeout(1000, print_stats)
 end
 
 service_wrapper.create_service(main, {
     name = "chat",
+    --print_stats = true,
 })

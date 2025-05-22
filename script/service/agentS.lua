@@ -12,7 +12,7 @@ local logout_timers = {} -- account_key => timer_function
 
 -- 定时器函数
 local function start_timer()
-    local interval = 1 * 180 * 100 -- 3 分钟，单位是 0.01 秒
+    local interval = 180 * 100 -- 3 分钟，单位是 0.01 秒
     local function timer_loop()
         skynet.timeout(interval, timer_loop) -- 设置下一次定时器
         
@@ -309,7 +309,7 @@ function CMD.disconnect(account_key)
     end
     
     -- 3分钟 = 180秒 = 18000单位（skynet的timeout单位是0.01秒）
-    logout_timers[account_key] = common.set_timeout(10 * 100, function()
+    logout_timers[account_key] = common.set_timeout(180 * 100, function()
         log.debug(string.format("Player %s didn't reconnect within 3 minutes, removing from agent", account.player_id))
         
         -- 保存玩家数据
@@ -322,7 +322,6 @@ function CMD.disconnect(account_key)
         if loginS then
             skynet.send(loginS, "lua", "account_exit", account_key)
         end
-        log.error(" remove     account_key %s", account_key)
         -- 从账号表中移除
         accounts[account_key] = nil
         logout_timers[account_key] = nil

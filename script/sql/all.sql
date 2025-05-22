@@ -47,9 +47,7 @@ CREATE TABLE `guild` (
   `techs` text NOT NULL COMMENT '公会科技JSON格式',
   `treasury` text NOT NULL COMMENT '公会仓库JSON格式',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_name` (`name`),
-  KEY `idx_leader_id` (`leader_id`),
-  KEY `idx_create_time` (`create_time`)
+  UNIQUE KEY `uk_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公会表';
 
 -- 好友表

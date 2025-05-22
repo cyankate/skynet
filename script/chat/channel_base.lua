@@ -10,6 +10,7 @@ function channel_base:ctor(channel_id, channel_name, channel_type)
     self.channel_name = channel_name
     self.channel_type = channel_type
     self.members = {}  -- {player_id = {player_id, player_name, join_time}}
+    self.player_ids = {}
     self.create_time = os.time()
     self.last_message_time = os.time()
 end
@@ -35,6 +36,9 @@ function channel_base:join(player_id, player_name)
         player_name = player_name,
         join_time = os.time()
     }
+
+    table.insert(self.player_ids, player_id)
+
     self:onjoin(player_id, player_name)
     return true
 end
@@ -53,6 +57,13 @@ function channel_base:leave(player_id)
     local player_name = self.members[player_id].player_name
     self.members[player_id] = nil
     
+    for i, v in ipairs(self.player_ids) do
+        if v == player_id then
+            table.remove(self.player_ids, i)
+            break
+        end
+    end
+
     self:onleave(player_id, player_name)
     return true
 end
@@ -105,11 +116,9 @@ end
 function channel_base:broadcast_message(msg)
     -- 更新最后消息时间
     self.last_message_time = os.time()
-    
-    -- 发送给所有成员
-    for player_id, _ in pairs(self.members) do
-        protocol_handler.send_to_player(player_id, "chat_message", msg)
-    end
+    -- 更新缓存
+    channel_mgr.cache:update_message(self.channel_id, msg)
+    protocol_handler.send_to_players(self.player_ids, "chat_message", msg)
 end
 
 -- 获取频道成员列表

@@ -1,4 +1,3 @@
-
 local skynet = require "skynet"
 local socket = require "skynet.socket"
 local httpd = require "http.httpd"
@@ -8,6 +7,8 @@ local cjson = require "cjson"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local common = require "utils.common"
+local attack_protection = require "security.attack_protection"
+--local jwt = require "resty.jwt"  -- 添加 JWT 库
 require "skynet.manager"
 
 -- 配置管理
@@ -37,6 +38,43 @@ local config = {
         enabled = true,
         requests_per_second = 100,
         burst = 200
+    },
+    auth = {
+        enabled = true,
+        token_header = "X-Auth-Token",
+        token_required = true,
+        allowed_origins = {"*"},  -- 允许所有来源，可以设置为具体域名
+        token = {
+            secret = "your-secret-key",  -- 用于签名验证的密钥
+            algorithm = "HS256",         -- 签名算法
+            expire_time = 24 * 3600,     -- token 过期时间（秒）
+            refresh_time = 7 * 24 * 3600 -- 刷新 token 的有效期（秒）
+        },
+        users = {  -- 示例用户数据，实际应该从数据库获取
+            admin = {
+                password = "123456",
+                role = "admin",
+                id = "1"
+            },
+            user = {
+                password = "123456",
+                role = "user",
+                id = "2"
+            }
+        }
+    },
+    api = {
+        version = "1.0.0",
+        default_format = "json",
+        error_codes = {
+            SUCCESS = 0,
+            INVALID_PARAMS = 1001,
+            UNAUTHORIZED = 1002,
+            FORBIDDEN = 1003,
+            NOT_FOUND = 1004,
+            INTERNAL_ERROR = 1005,
+            RATE_LIMIT = 1006
+        }
     },
     health_check = {
         enabled = true,
@@ -223,13 +261,13 @@ local function gen_interface(protocol, fd)
             -- 检查证书文件是否存在
             local f = io.open(certfile, "r")
             if not f then
-                error(string.format("Certificate file not found: %s", certfile))
+                log.error(string.format("Certificate file not found: %s", certfile))
             end
             f:close()
             
             f = io.open(keyfile, "r")
             if not f then
-                error(string.format("Key file not found: %s", keyfile))
+                log.error(string.format("Key file not found: %s", keyfile))
             end
             f:close()
             
@@ -267,15 +305,14 @@ local function response(id, interface, ...)
     return ok, err
 end
 
--- 统一的错误响应
-local function error_response(fd, interface, code, message)
-    local headers = add_security_headers()
-    headers = add_cors_headers(headers)
-    response(fd, interface, code, cjson.encode({
-        error = true,
-        message = message or "Internal Server Error",
-        code = code
-    }), headers)
+-- 统一的响应格式
+local function create_response(code, data, message)
+    return {
+        code = code or 200,
+        message = message or "success",
+        data = data,
+        timestamp = os.time()
+    }
 end
 
 -- 统一的成功响应
@@ -283,17 +320,137 @@ local function success_response(fd, interface, data, headers)
     headers = headers or {}
     headers = add_security_headers(headers)
     headers = add_cors_headers(headers)
-    response(fd, interface, 200, cjson.encode({
-        error = false,
-        data = data
-    }), headers)
+    response(fd, interface, 200, cjson.encode(create_response(200, data)), headers)
+end
+
+-- 统一的错误响应
+local function error_response(fd, interface, code, message)
+    local headers = add_security_headers()
+    headers = add_cors_headers(headers)
+    response(fd, interface, code, cjson.encode(create_response(code, nil, message)), headers)
+end
+
+-- Token 验证相关函数
+local function sign_token(payload)
+    local ok, token = pcall(function()
+        return jwt:sign(config.auth.token.secret, {
+            header = {
+                typ = "JWT",
+                alg = config.auth.token.algorithm
+            },
+            payload = payload
+        })
+    end)
+    
+    if not ok then
+        return false, "Failed to sign token"
+    end
+    return true, token
+end
+
+local function verify_token(token)
+    if not token then
+        return false, "Missing token"
+    end
+    
+    local ok, jwt_obj = pcall(function()
+        return jwt:verify(config.auth.token.secret, token)
+    end)
+    
+    if not ok then
+        return false, "Invalid token format"
+    end
+    
+    if not jwt_obj["verified"] then
+        return false, "Invalid token signature"
+    end
+    
+    local payload = jwt_obj["payload"]
+    
+    -- 检查过期时间
+    if payload.exp and payload.exp < os.time() then
+        return false, "Token expired"
+    end
+    
+    return true, payload
+end
+
+-- 生成 token
+local function generate_token(user_id, data)
+    local now = os.time()
+    local payload = {
+        sub = user_id,           -- 用户ID
+        iat = now,              -- 签发时间
+        exp = now + config.auth.token.expire_time,  -- 过期时间
+        data = data or {}       -- 额外数据
+    }
+    
+    return sign_token(payload)
+end
+
+-- 刷新 token
+local function refresh_token(token)
+    local ok, decoded = verify_token(token)
+    if not ok then
+        return false, decoded
+    end
+    
+    -- 检查是否在刷新期内
+    if decoded.exp and decoded.exp + config.auth.token.refresh_time < os.time() then
+        return false, "Token cannot be refreshed"
+    end
+    
+    -- 生成新 token
+    return generate_token(decoded.sub, decoded.data)
+end
+
+-- 用户验证
+local function verify_user(username, password)
+    local user = config.auth.users[username]
+    if not user then
+        return false, "User not found"
+    end
+    
+    if user.password ~= password then
+        return false, "Invalid password"
+    end
+    
+    return true, {
+        id = user.id,
+        role = user.role,
+        username = username
+    }
+end
+
+-- 修改验证请求头函数
+local function validate_headers(headers)
+    if config.auth.enabled and config.auth.token_required then
+        local token = headers[config.auth.token_header:lower()]
+        if not token then
+            return false, "Missing authentication token"
+        end
+        
+        -- 验证 token
+        local ok, result = verify_token(token)
+        if not ok then
+            return false, result
+        end
+        
+        -- 将用户信息添加到请求上下文中
+        headers["x-user-id"] = result.sub
+        headers["x-user-data"] = cjson.encode(result.data)
+    end
+    return true
 end
 
 -- 验证请求参数
 local function validate_params(params, required)
+    if not params then
+        return false, "Missing parameters"
+    end
     for _, field in ipairs(required) do
         if not params[field] then
-            return false, "缺少必要参数: " .. field
+            return false, string.format("Missing required parameter: %s", field)
         end
     end
     return true
@@ -308,9 +465,18 @@ local routes = {
     OPTIONS = {}
 }
 
+-- 路径标准化函数
+local function normalize_path(path)
+    if path:match("/$") and path ~= "/" then
+        return path:gsub("/$", "")
+    end
+    return path
+end
+
 -- 注册路由
 local function register_route(method, path, handler)
-    routes[method][path] = handler
+    -- 注册标准化路径
+    routes[method][normalize_path(path)] = handler
 end
 
 -- 注册中间件
@@ -333,39 +499,135 @@ local function execute_middlewares(fd, method, url, headers, body, interface)
     return true
 end
 
+-- 添加 token 相关路由
+local function register_auth_routes()
+    -- 登录接口
+    register_route("POST", "/api/auth/login/", function(fd, method, url, headers, body, interface)
+        local data = cjson.decode(body)
+        -- 验证登录参数
+        local valid, err = validate_params(data, {"username", "password"})
+        if not valid then
+            error_response(fd, interface, 400, err)
+            return
+        end
+        
+        -- 验证用户名密码
+        local ok, user = verify_user(data.username, data.password)
+        if not ok then
+            error_response(fd, interface, 401, user)
+            return
+        end
+        
+        -- 生成 token
+        local ok, token = generate_token(user.id, {
+            username = user.username,
+            role = user.role
+        })
+        
+        if not ok then
+            error_response(fd, interface, 500, token)
+            return
+        end
+        
+        return {
+            token = token,
+            expires_in = config.auth.token.expire_time,
+            user = {
+                id = user.id,
+                username = user.username,
+                role = user.role
+            }
+        }
+    end)
+    
+    -- 刷新 token 接口
+    register_route("POST", "/api/auth/refresh/", function(fd, method, url, headers, body, interface)
+        local token = headers[config.auth.token_header:lower()]
+        if not token then
+            error_response(fd, interface, 401, "Missing token")
+            return
+        end
+        
+        local ok, new_token = refresh_token(token)
+        if not ok then
+            error_response(fd, interface, 401, new_token)
+            return
+        end
+        
+        return {
+            token = new_token,
+            expires_in = config.auth.token.expire_time
+        }
+    end)
+    
+    -- 获取当前用户信息接口
+    register_route("GET", "/api/auth/me/", function(fd, method, url, headers, body, interface)
+        local token = headers[config.auth.token_header:lower()]
+        if not token then
+            error_response(fd, interface, 401, "Missing token")
+            return
+        end
+        
+        local ok, payload = verify_token(token)
+        if not ok then
+            error_response(fd, interface, 401, payload)
+            return
+        end
+        
+        return {
+            user = payload.data
+        }
+    end)
+end
+
 -- 注册默认路由
 local function register_default_routes()
+    register_auth_routes()  -- 添加认证路由
     -- 健康检查
-    register_route("GET", "/health", function(fd, method, url, headers, body, interface)
+    register_route("GET", "/health/", function(fd, method, url, headers, body, interface)
         return check_health()
     end)
     
     -- 指标查询
-    register_route("GET", "/metrics", function(fd, method, url, headers, body, interface)
+    register_route("GET", "/metrics/", function(fd, method, url, headers, body, interface)
         return metrics
     end)
     
     -- 状态查询
-    register_route("GET", "/api/status", function(fd, method, url, headers, body, interface)
+    register_route("GET", "/api/status/", function(fd, method, url, headers, body, interface)
         return {
             status = "ok",
             timestamp = os.time(),
-            uptime = os.time() - start_time
+            uptime = os.time() - start_time,
+            version = config.api.version
         }
     end)
     
     -- 服务信息
-    register_route("GET", "/api/info", function(fd, method, url, headers, body, interface)
+    register_route("GET", "/api/info/", function(fd, method, url, headers, body, interface)
         return {
-            version = "1.0.0",
+            version = config.api.version,
             name = "HTTPS Service",
-            description = "A secure HTTPS service built with Skynet"
+            description = "A secure HTTPS service built with Skynet",
+            endpoints = {
+                health = "/health/",
+                metrics = "/metrics/",
+                status = "/api/status/",
+                info = "/api/info/",
+                echo = "/api/echo/"
+            }
         }
     end)
     
     -- Echo服务
-    register_route("POST", "/api/echo", function(fd, method, url, headers, body, interface)
+    register_route("POST", "/api/echo/", function(fd, method, url, headers, body, interface)
         local data = cjson.decode(body)
+        -- 验证必要参数
+        local valid, err = validate_params(data, {"message"})
+        if not valid then
+            error_response(fd, interface, 400, err)
+            return
+        end
         return {
             echo = data,
             timestamp = os.time()
@@ -382,12 +644,19 @@ local function register_default_middlewares()
             error_response(fd, interface, 400, err)
             return true
         end
+        
+        -- -- 验证请求头
+        -- valid, err = validate_headers(headers)
+        -- if not valid then
+        --     error_response(fd, interface, 401, err)
+        --     return true
+        -- end
     end)
     
     -- 速率限制中间件
     register_middleware(function(fd, method, url, headers, body, interface)
         local client_ip = headers["X-Real-IP"] or headers["X-Forwarded-For"] or "unknown"
-        if not check_rate_limit(client_ip) then
+        if not attack_protection.check_rate_limit(client_ip) then
             error_response(fd, interface, 429, "Too Many Requests")
             return true
         end
@@ -422,8 +691,11 @@ local function handle_request(fd, method, url, headers, body, interface)
     -- 解析URL
     local path, query = urllib.parse(url)
     
+    -- 标准化路径
+    local normalized_path = normalize_path(path)
+    
     -- 检查缓存
-    local cache_key = string.format("%s:%s:%s", method, path, query)
+    local cache_key = string.format("%s:%s:%s", method, normalized_path, query)
     if config.cache.enabled and cache[cache_key] then
         local cached_data = cache[cache_key]
         if os.time() - cached_data.timestamp < config.cache.ttl then
@@ -433,7 +705,7 @@ local function handle_request(fd, method, url, headers, body, interface)
     end
     
     -- 查找并执行路由处理函数
-    local handler = routes[method] and routes[method][path]
+    local handler = routes[method] and routes[method][normalized_path]
     if handler then
         local ok, result = pcall(handler, fd, method, url, headers, body, interface)
         if not ok then
@@ -463,7 +735,6 @@ local function start_http_server()
     -- 注册默认路由和中间件
     register_default_routes()
     register_default_middlewares()
-    
     local server = {
         host = config.server.host,
         port = config.server.port,
@@ -474,10 +745,10 @@ local function start_http_server()
     if config.tls.enabled then
         protocol = "https"
     end
-    local fd = socket.listen(server.host, server.port)
+ 
+    local fd = socket.listen("0.0.0.0", 8889)
     socket.start(fd, function(id, addr)
         socket.start(id)
-        
         -- 初始化接口
         local interface = gen_interface(protocol, id)
         if interface.init then
@@ -487,7 +758,7 @@ local function start_http_server()
         -- 处理请求
         local code, url, method, header, body = httpd.read_request(interface.read, config.server.max_request_size)
         if not code then
-            log_error(result, {fd = id})
+            log_error("Failed to read request", {fd = id})
             error_response(id, interface, 500, "Internal Server Error")
             return
         end

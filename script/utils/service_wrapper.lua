@@ -8,10 +8,11 @@ local function_stats = {
     calls = 0,           -- 总调用次数
     total_time = 0,      -- 总执行时间(ms)
     max_time = 0,        -- 最大执行时间(ms)
-    min_time = math.huge, -- 最小执行时间(ms)
+    min_time = 0,       -- 最小执行时间(ms)
     last_rps_time = 0,   -- 上次RPS计算时间
     last_rps_count = 0,  -- 上次RPS计数
-    current_rps = 0      -- 当前RPS
+    current_rps = 0,      -- 当前RPS
+    cost = {},
 }
 
 -- 重置统计
@@ -20,10 +21,11 @@ function M.reset_stats()
         calls = 0,
         total_time = 0,
         max_time = 0,
-        min_time = math.huge,
+        min_time = 0,
         last_rps_time = 0,
         last_rps_count = 0,
-        current_rps = 0
+        current_rps = 0,
+        cost = {},
     }
 end
 
@@ -46,6 +48,13 @@ function M.print_stats()
     log.info("==============================")
 end
 
+function M.append_cost(name)
+    table.insert(function_stats.cost[coroutine.running()], {
+        name = name,
+        time = skynet.now(),
+    })
+end
+
 -- 包装服务启动函数
 function M.wrap_service(startup_func, options)
     options = options or {}
@@ -54,6 +63,7 @@ function M.wrap_service(startup_func, options)
     return function()
         -- 创建一个标准的handler函数，用于处理所有lua消息请求
         local function message_handler(session, source, cmd, ...)
+            function_stats.cost[coroutine.running()] = {}
             local start_time = skynet.now()
             local f = _G.CMD[cmd]
             if f then
@@ -64,9 +74,13 @@ function M.wrap_service(startup_func, options)
                 -- 更新统计信息
                 function_stats.calls = function_stats.calls + 1
                 function_stats.total_time = function_stats.total_time + cost_time
+                local old_max_time = function_stats.max_time
                 function_stats.max_time = math.max(function_stats.max_time, cost_time)
                 function_stats.min_time = math.min(function_stats.min_time, cost_time)
-                
+                if cost_time > 500 then
+                    log.debug("max_time cmd:%s cost:%s ", cmd, cost_time)
+                    tableUtils.print_table(function_stats.cost[coroutine.running()])
+                end
                 -- 计算RPS
                 local current_time = skynet.now()
                 if current_time - function_stats.last_rps_time >= 1000 then
@@ -105,6 +119,14 @@ function M.wrap_service(startup_func, options)
                     end
                 end)
             end)
+        end
+
+        if options.print_stats then
+            local function print_stats()    
+                skynet.timeout(1000, print_stats)
+                service_wrapper.print_stats()
+            end
+            skynet.timeout(1000, print_stats)
         end
     end
 end

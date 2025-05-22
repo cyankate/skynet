@@ -32,7 +32,6 @@ function world_channel:can_kick(operator_id, target_id)
 end
 
 function world_channel:broadcast_message(msg)
-    channel_mgr.cache:update_message(self.channel_id, msg)
     channel_base.broadcast_message(self, msg)
 end
 

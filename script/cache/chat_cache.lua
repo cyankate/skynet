@@ -8,8 +8,8 @@ local chat_cache = class("chat_cache", base_cache)
 -- 缓存配置
 local CACHE_CONFIG = {
     max_size = 1000,    -- 最多缓存1000个频道
-    expire_time = 300,  -- 5分钟过期
-    check_interval = 60, -- 每分钟检查过期
+    expire_time = 1800,  -- 30分钟过期
+    check_interval = 180, -- 每3分钟检查过期
 }
 
 -- 初始化
@@ -18,14 +18,17 @@ function chat_cache:ctor()
 end
 
 function chat_cache:get_channel_messages(channel_id, count)
+    service_wrapper.append_cost("get_channel_messages 111")
     local obj = self:get(channel_id)
     if not obj then
         return nil, "Channel not found"
     end
+    service_wrapper.append_cost("get_channel_messages 222")
     local list = {}
     for i = #obj.messages, math.max(1, #obj.messages - count + 1), -1 do
         table.insert(list, obj.messages[i])
     end
+    service_wrapper.append_cost("get_channel_messages 333")
     return list
 end
 

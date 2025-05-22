@@ -7,12 +7,22 @@ local event_def = require "define.event_def"
 local service_wrapper = require "utils.service_wrapper"
 
 local ranks = {}
--- 定义保存间隔，单位为0.01秒，默认每10分钟保存一次（10分钟=600秒=60000单位）
-local SAVE_INTERVAL = 3000
+-- 定义保存间隔，单位为0.01秒，默认每3分钟保存一次（10分钟=600秒=60000单位）
+local SAVE_INTERVAL = 180 * 100
 
 function init_rank()
-    local rank = score_rank.new("score")
-    ranks["score"] = rank
+    local score_rank = score_rank.new("score")
+    ranks["score"] = score_rank
+
+    -- local level_rank = level_rank.new("level")
+    -- ranks["level"] = level_rank
+
+    -- local power_rank = power_rank.new("power")
+    -- ranks["power"] = power_rank
+
+    -- local guild_rank = guild_rank.new("guild")
+    -- ranks["guild"] = guild_rank
+    
     load_all_ranks()
 end 
 

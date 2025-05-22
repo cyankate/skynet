@@ -6,21 +6,21 @@ function M.print_table(_tbl)
     indent = indent or 0
     local prefix = string.rep("  ", indent) -- 根据层级生成缩进
     if type(_tbl) ~= "table" then
-        log.info(prefix .. tostring(_tbl)) -- 如果不是 table，直接打印值
+        log.debug(prefix .. tostring(_tbl)) -- 如果不是 table，直接打印值
         return
     end
 
-    log.info(prefix .. "{")
+    log.debug(prefix .. "{")
     for k, v in pairs(_tbl) do
         local key = tostring(k)
         if type(v) == "table" then
-            log.info(prefix .. "  " .. key .. " = ")
+            log.debug(prefix .. "  " .. key .. " = ")
             M.print_table(v, indent + 1) -- 递归打印子表
         else
-            log.info(prefix .. "  " .. key .. " = " .. tostring(v))
+            log.debug(prefix .. "  " .. key .. " = " .. tostring(v))
         end
     end
-    log.info(prefix .. "}")
+    log.debug(prefix .. "}")
 end 
 
 function M.ssplit(input, delimiter)

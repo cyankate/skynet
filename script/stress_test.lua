@@ -53,14 +53,14 @@ local config = {
     report_interval_ms = 5000,   -- 定期报告间隔(毫秒)
     test_duration = 0,          -- 测试持续时间（秒），0表示无限制
     account_prefix = "test_user_", -- 账号前缀
-    total_clients = 300,        -- 总客户端数
+    total_clients = 800,        -- 总客户端数
     protocol_configs = {        -- 不同协议的配置
         chat = {
             target_rps = 100,    -- 目标每秒请求数
             token_bucket = {
-                tokens = 100,     -- 初始令牌数，等于target_rps，避免启动时的突发
+                tokens = 200,     -- 初始令牌数，等于target_rps，避免启动时的突发
                 last_update = 0,  -- 上次更新时间
-                capacity = 200    -- 桶容量，允许2秒的突发请求
+                capacity = 400    -- 桶容量，允许2秒的突发请求
             },
             protocols = {
                 "send_private_message",
@@ -69,7 +69,7 @@ local config = {
             }
         },
         player = {
-            target_rps = 200,     -- 目标每秒请求数
+            target_rps = 50,     -- 目标每秒请求数
             token_bucket = {
                 tokens = 200,      -- 初始令牌数，等于target_rps
                 last_update = 0,  -- 上次更新时间

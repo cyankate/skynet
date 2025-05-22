@@ -32,19 +32,10 @@ end
 -- 创建频道
 function channel_mgr.create_channel(channel_class, channel_id, channel_name, channel_type, ...)
     if not channel_id then 
-        if channel_name == "世界频道" then
-            channel_id = 1
-        else
-            channel_id = channel_mgr.gen_channel_id()
-        end
+        channel_id = channel_mgr.gen_channel_id()
     end 
     local channel = channel_class.new(channel_id, channel_name, channel_type, ...)
     channel_mgr.channels[channel_id] = channel
-    
-    skynet.fork(function()
-        -- 初始化缓存
-        channel_mgr.cache:get(channel_id)
-    end)
     
     return channel_id
 end
@@ -242,32 +233,32 @@ end
 
 -- 获取频道历史消息
 function channel_mgr.get_channel_history(channel_id, count)
+    service_wrapper.append_cost("get_channel_history")
     count = count or 10
     return channel_mgr.cache:get_channel_messages(channel_id, count)
 end
 
 function channel_mgr.on_player_login(player_id)
     local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
-    for to_player_id, v in pairs(private_channel_cache.data) do
-        channel_mgr.create_private_channel(player_id, to_player_id)
-    end
+    -- for to_player_id, v in pairs(private_channel_cache.data) do
+    --     channel_mgr.create_private_channel(player_id, to_player_id)
+    -- end
 end 
 
 function channel_mgr.on_player_logout(player_id)
 
 end
 
-function channel_mgr.tick()
-    skynet.timeout(100 * 100, channel_mgr.tick)
-    channel_mgr.cache:tick()
-    channel_mgr.private_channel_cache:tick()
-end
-
 -- 初始化管理器
 function channel_mgr.init()
     channel_mgr.cache = chat_cache.new()   
     channel_mgr.private_channel_cache = channel_cache.new()
-    skynet.timeout(100 * 100, channel_mgr.tick)
+    local function tick()
+        skynet.timeout(180 * 100, tick)
+        channel_mgr.cache:tick()
+        channel_mgr.private_channel_cache:tick()
+    end
+    skynet.timeout(180 * 100, tick)
     local dbS = skynet.localname(".db")
     local max_channel_id = skynet.call(dbS, "lua", "get_max_channel_id")
     if max_channel_id then  

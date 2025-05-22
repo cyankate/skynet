@@ -10,7 +10,7 @@ local base_cache = class("base_cache")
 function base_cache:ctor(name, config)
     self.name = name
     self.config = config or {
-        max_size = 1000,           -- 最大缓存条目数
+        max_size = 3000,           -- 最大缓存条目数
         ttl = 3600,               -- 默认过期时间（秒）
         cleanup_interval = 300,   -- 清理间隔（秒）
         load_timeout = 5,         -- 加载超时时间（秒）
@@ -53,7 +53,7 @@ function base_cache:acquire_load(key)
             loading = true,
             timeout = common.set_timeout(self.config.load_timeout * 100, function()
                 self:handle_load_timeout(key)
-            end)
+            end),
         }
         return true
     end
