@@ -103,17 +103,37 @@ CREATE TABLE IF NOT EXISTS `payment_log` (
     KEY `idx_log_time` (`log_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付日志表'; 
 
-CREATE TABLE channel (
-    channel_id INT PRIMARY KEY,
-    channel_type TINYINT NOT NULL COMMENT '1:私聊 2:世界 3:公会 4:系统',
-    channel_key VARCHAR(32) NOT NULL COMMENT '私聊:player1_id_player2_id, 世界:global, 公会:guild_id',
-    data TEXT NOT NULL,
-    update_time INT NOT NULL DEFAULT 0 ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_channel_key (channel_key)
-);
+-- 频道表
+CREATE TABLE IF NOT EXISTS `channel` (
+    `channel_id` int NOT NULL,
+    `messages` text,
+    `update_time` int,
+    PRIMARY KEY (`channel_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; 
 
-CREATE TABLE channel (
-    channel_id INT PRIMARY KEY,
-    data TEXT NOT NULL,
-    update_time INT NOT NULL DEFAULT 0 ON UPDATE CURRENT_TIMESTAMP,
-);
+-- 私聊频道表, 记录玩家参与的私聊频道
+CREATE TABLE IF NOT EXISTS `player_private` (
+    `player_id` int NOT NULL,
+    `data` text NOT NULL,
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; 
+
+-- 私聊频道关系表, 记录参与频道的玩家关系
+CREATE TABLE IF NOT EXISTS `private_channel` (
+    `channel_id` bigint NOT NULL,
+    `player1_id` bigint NOT NULL,
+    `player2_id` bigint NOT NULL,
+    `last_message_time` int NOT NULL,
+    `create_time` int NOT NULL,
+    PRIMARY KEY (`channel_id`),
+    KEY `idx_players` (`player1_id`, `player2_id`),
+    KEY `idx_last_msg` (`last_message_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; 
+
+-- 离线玩家数据表
+CREATE TABLE IF NOT EXISTS `player_odb` (
+    `player_id` int unsigned NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '离线玩家数据',
+    `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线玩家数据表';

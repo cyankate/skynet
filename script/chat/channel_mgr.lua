@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local chat_cache = require "cache.chat_cache"
-local channel_cache = require "cache.channel_cache"
+local private_cache = require "cache.private_cache"
 local private_channel = require "chat.private_channel"
 local guild_channel = require "chat.guild_channel"
 local world_channel = require "chat.world_channel"
@@ -14,7 +14,7 @@ channel_mgr = {
     cache = nil,
     private_channel_cache = nil,
     gen_id = 1000,
-    player_cache = {},
+    player_cache = nil,
 }
 
 CHANNEL_TYPE = {
@@ -182,7 +182,6 @@ function channel_mgr.send_private_channel_message(player_id, to_player_id, conte
     if not channel_id then
         channel_id = channel_mgr.create_private_channel(player_id, to_player_id)
     end
-
     local channel = channel_mgr.channels[channel_id]
     if not channel then
         log.error("Channel not found %d", channel_id)
@@ -252,7 +251,7 @@ end
 -- 初始化管理器
 function channel_mgr.init()
     channel_mgr.cache = chat_cache.new()   
-    channel_mgr.private_channel_cache = channel_cache.new()
+    channel_mgr.private_channel_cache = private_cache.new()
     local function tick()
         skynet.timeout(180 * 100, tick)
         channel_mgr.cache:tick()

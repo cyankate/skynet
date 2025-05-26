@@ -158,7 +158,7 @@ function CommandHandler.process_command(cmd)
 	if cmd == "quit" then
 		NetworkManager.send_request("quit")
 	else
-		local cmd, args = cmd:match("([^ ]+) (.*)")
+		local cmd, args = cmd:match("([^ ]+)%s*(.*)")
 		if args then
 			args = CommandHandler.split(args, " ")
 			for i = 1, #args do
@@ -176,6 +176,16 @@ function CommandHandler.process_command(cmd)
 			NetworkManager.send_request("change_name", { name = args[1] })
 		elseif cmd == "add_item" then
 			NetworkManager.send_request("add_item", { item_id = args[1], count = args[2] })
+		elseif cmd == "add_friend" then
+			NetworkManager.send_request("add_friend", { target_id = args[1], message = args[2] })	
+		elseif cmd == "delete_friend" then
+			NetworkManager.send_request("delete_friend", { target_id = args[1] })
+		elseif cmd == "agree_apply" then
+			NetworkManager.send_request("agree_apply", { player_id = args[1] })
+		elseif cmd == "reject_apply" then
+			NetworkManager.send_request("reject_apply", { player_id = args[1] })
+		elseif cmd == "get_friend_list" then
+			NetworkManager.send_request("get_friend_list")
 		else 
 			ProtocolHandler.send_package(ClientState.fd, cmd)
 		end 

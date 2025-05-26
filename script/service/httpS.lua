@@ -50,18 +50,13 @@ local config = {
             expire_time = 24 * 3600,     -- token 过期时间（秒）
             refresh_time = 7 * 24 * 3600 -- 刷新 token 的有效期（秒）
         },
-        users = {  -- 示例用户数据，实际应该从数据库获取
-            admin = {
-                password = "123456",
-                role = "admin",
-                id = "1"
-            },
-            user = {
-                password = "123456",
-                role = "user",
-                id = "2"
+        third_party = {
+            wechat = {
+                appid = "your_appid",
+                secret = "your_secret",
+                code2session_url = "https://api.weixin.qq.com/sns/jscode2session"
             }
-        }
+        },
     },
     api = {
         version = "1.0.0",
@@ -404,24 +399,6 @@ local function refresh_token(token)
     return generate_token(decoded.sub, decoded.data)
 end
 
--- 用户验证
-local function verify_user(username, password)
-    local user = config.auth.users[username]
-    if not user then
-        return false, "User not found"
-    end
-    
-    if user.password ~= password then
-        return false, "Invalid password"
-    end
-    
-    return true, {
-        id = user.id,
-        role = user.role,
-        username = username
-    }
-end
-
 -- 修改验证请求头函数
 local function validate_headers(headers)
     if config.auth.enabled and config.auth.token_required then
@@ -499,29 +476,59 @@ local function execute_middlewares(fd, method, url, headers, body, interface)
     return true
 end
 
--- 添加 token 相关路由
+-- 第三方认证相关函数
+local function wechat_code2session(code)
+    local url = string.format("%s?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+        config.auth.third_party.wechat.code2session_url,
+        config.auth.third_party.wechat.appid,
+        config.auth.third_party.wechat.secret,
+        code
+    )
+    
+    -- 发送HTTP请求获取session
+    local http = require "http"
+    local ok, result = pcall(function()
+        return http.get(url)
+    end)
+    
+    if not ok then
+        return false, "Failed to get session"
+    end
+    
+    local session = cjson.decode(result)
+    if session.errcode and session.errcode ~= 0 then
+        return false, session.errmsg
+    end
+    
+    return true, {
+        openid = session.openid,
+        session_key = session.session_key
+    }
+end
+
+-- 修改登录接口
 local function register_auth_routes()
-    -- 登录接口
-    register_route("POST", "/api/auth/login/", function(fd, method, url, headers, body, interface)
+    -- 微信小程序登录
+    register_route("POST", "/api/auth/wechat/login/", function(fd, method, url, headers, body, interface)
         local data = cjson.decode(body)
         -- 验证登录参数
-        local valid, err = validate_params(data, {"username", "password"})
+        local valid, err = validate_params(data, {"code"})
         if not valid then
             error_response(fd, interface, 400, err)
             return
         end
         
-        -- 验证用户名密码
-        local ok, user = verify_user(data.username, data.password)
+        -- 获取微信session
+        local ok, session = wechat_code2session(data.code)
         if not ok then
-            error_response(fd, interface, 401, user)
+            error_response(fd, interface, 401, session)
             return
         end
         
-        -- 生成 token
-        local ok, token = generate_token(user.id, {
-            username = user.username,
-            role = user.role
+        -- 生成token
+        local ok, token = generate_token(session.openid, {
+            openid = session.openid,
+            type = "wechat"
         })
         
         if not ok then
@@ -532,36 +539,12 @@ local function register_auth_routes()
         return {
             token = token,
             expires_in = config.auth.token.expire_time,
-            user = {
-                id = user.id,
-                username = user.username,
-                role = user.role
-            }
+            openid = session.openid
         }
     end)
     
-    -- 刷新 token 接口
-    register_route("POST", "/api/auth/refresh/", function(fd, method, url, headers, body, interface)
-        local token = headers[config.auth.token_header:lower()]
-        if not token then
-            error_response(fd, interface, 401, "Missing token")
-            return
-        end
-        
-        local ok, new_token = refresh_token(token)
-        if not ok then
-            error_response(fd, interface, 401, new_token)
-            return
-        end
-        
-        return {
-            token = new_token,
-            expires_in = config.auth.token.expire_time
-        }
-    end)
-    
-    -- 获取当前用户信息接口
-    register_route("GET", "/api/auth/me/", function(fd, method, url, headers, body, interface)
+    -- 获取用户信息
+    register_route("GET", "/api/user/info/", function(fd, method, url, headers, body, interface)
         local token = headers[config.auth.token_header:lower()]
         if not token then
             error_response(fd, interface, 401, "Missing token")
@@ -574,9 +557,48 @@ local function register_auth_routes()
             return
         end
         
-        return {
-            user = payload.data
+        -- 从数据库获取用户信息
+        -- TODO: 实现数据库查询
+        local user_info = {
+            openid = payload.data.openid,
+            nickname = "用户" .. string.sub(payload.data.openid, 1, 6),
+            avatar = "default_avatar.png"
         }
+        
+        return user_info
+    end)
+    
+    -- 更新用户信息
+    register_route("POST", "/api/user/info/", function(fd, method, url, headers, body, interface)
+        local token = headers[config.auth.token_header:lower()]
+        if not token then
+            error_response(fd, interface, 401, "Missing token")
+            return
+        end
+        
+        local ok, payload = verify_token(token)
+        if not ok then
+            error_response(fd, interface, 401, payload)
+            return
+        end
+        
+        local data = cjson.decode(body)
+        -- 验证更新参数
+        local valid, err = validate_params(data, {"nickname", "avatar"})
+        if not valid then
+            error_response(fd, interface, 400, err)
+            return
+        end
+        
+        -- 更新用户信息
+        -- TODO: 实现数据库更新
+        local user_info = {
+            openid = payload.data.openid,
+            nickname = data.nickname,
+            avatar = data.avatar
+        }
+        
+        return user_info
     end)
 end
 
@@ -635,42 +657,19 @@ local function register_default_routes()
     end)
 end
 
--- 注册默认中间件
-local function register_default_middlewares()
-    -- 请求验证中间件
-    register_middleware(function(fd, method, url, headers, body, interface)
-        local valid, err = validate_request(method, url, headers)
-        if not valid then
-            error_response(fd, interface, 400, err)
-            return true
-        end
-        
-        -- -- 验证请求头
-        -- valid, err = validate_headers(headers)
-        -- if not valid then
-        --     error_response(fd, interface, 401, err)
-        --     return true
-        -- end
-    end)
+-- 检查数据访问权限
+local function check_data_access(user_id, data)
+    -- 如果数据没有所有者信息，则不允许访问
+    if not data.owner_id then
+        return false, "No access permission"
+    end
     
-    -- 速率限制中间件
-    register_middleware(function(fd, method, url, headers, body, interface)
-        local client_ip = headers["X-Real-IP"] or headers["X-Forwarded-For"] or "unknown"
-        if not attack_protection.check_rate_limit(client_ip) then
-            error_response(fd, interface, 429, "Too Many Requests")
-            return true
-        end
-    end)
+    -- 检查是否是数据所有者
+    if data.owner_id ~= user_id then
+        return false, "Access denied"
+    end
     
-    -- CORS中间件
-    register_middleware(function(fd, method, url, headers, body, interface)
-        if method == "OPTIONS" then
-            local headers = add_security_headers()
-            headers = add_cors_headers(headers)
-            response(fd, interface, 204, "", headers)
-            return true
-        end
-    end)
+    return true
 end
 
 -- 处理HTTP请求
@@ -694,11 +693,20 @@ local function handle_request(fd, method, url, headers, body, interface)
     -- 标准化路径
     local normalized_path = normalize_path(path)
     
+    -- 获取用户身份（从请求头中获取，不暴露在URL中）
+    local user_id = headers["x-user-id"] or "anonymous"
+    
     -- 检查缓存
     local cache_key = string.format("%s:%s:%s", method, normalized_path, query)
     if config.cache.enabled and cache[cache_key] then
         local cached_data = cache[cache_key]
         if os.time() - cached_data.timestamp < config.cache.ttl then
+            -- 检查数据访问权限
+            local has_access, err = check_data_access(user_id, cached_data.data)
+            if not has_access then
+                error_response(fd, interface, 403, err)
+                return
+            end
             success_response(fd, interface, cached_data.data)
             return
         end
@@ -714,6 +722,13 @@ local function handle_request(fd, method, url, headers, body, interface)
         end
         
         if result then
+            -- 检查数据访问权限
+            local has_access, err = check_data_access(user_id, result)
+            if not has_access then
+                error_response(fd, interface, 403, err)
+                return
+            end
+            
             -- 缓存结果
             if config.cache.enabled then
                 cache[cache_key] = {
@@ -728,6 +743,68 @@ local function handle_request(fd, method, url, headers, body, interface)
     else
         error_response(fd, interface, 404, "Not Found")
     end
+end
+
+-- 添加数据访问控制中间件
+local function register_data_access_middleware()
+    register_middleware(function(fd, method, url, headers, body, interface)
+        -- 获取用户身份
+        local user_id = headers["x-user-id"] or "anonymous"
+        
+        -- 解析URL
+        local path = urllib.parse(url)
+        
+        -- 检查是否是敏感路径
+        if path:match("^/api/data/") then
+            -- 验证用户权限
+            if user_id == "anonymous" then
+                error_response(fd, interface, 401, "Authentication required")
+                return true
+            end
+            
+            -- 可以添加更多的权限检查逻辑
+            -- 例如：检查用户角色、检查资源所有权等
+        end
+    end)
+end
+
+-- 在注册默认中间件时添加数据访问控制
+local function register_default_middlewares()
+    register_data_access_middleware()  -- 添加数据访问控制中间件
+    -- 请求验证中间件
+    register_middleware(function(fd, method, url, headers, body, interface)
+        local valid, err = validate_request(method, url, headers)
+        if not valid then
+            error_response(fd, interface, 400, err)
+            return true
+        end
+        
+        -- -- 验证请求头
+        -- valid, err = validate_headers(headers)
+        -- if not valid then
+        --     error_response(fd, interface, 401, err)
+        --     return true
+        -- end
+    end)
+    
+    -- 速率限制中间件 
+    register_middleware(function(fd, method, url, headers, body, interface)
+        local client_ip = headers["X-Real-IP"] or headers["X-Forwarded-For"] or "unknown"
+        if not attack_protection.check_rate_limit(client_ip) then
+            error_response(fd, interface, 429, "Too Many Requests")
+            return true
+        end
+    end)
+    
+    -- CORS中间件
+    register_middleware(function(fd, method, url, headers, body, interface)
+        if method == "OPTIONS" then
+            local headers = add_security_headers()
+            headers = add_cors_headers(headers)
+            response(fd, interface, 204, "", headers)
+            return true
+        end
+    end)
 end
 
 -- 启动HTTP服务

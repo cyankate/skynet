@@ -1,4 +1,3 @@
-
 local skynet = require "skynet"
 local mysql = require "skynet.db.mysql"
 local sprotoloader = require "sprotoloader"
@@ -543,6 +542,24 @@ end
 
 function CMD.update_player_private_channel(data)
     local ret = CMD.update("player_private", data)
+    return ret
+end
+
+function CMD.get_player_odb(player_id)
+    local ret = CMD.select("player_odb", { player_id = player_id })
+    if ret and ret[1] then
+        return ret[1]
+    end
+    return nil
+end
+
+function CMD.create_player_odb(player_id, data)
+    local ret = CMD.insert("player_odb", { player_id = player_id, data = data })
+    return ret
+end
+
+function CMD.update_player_odb(player_id, data)
+    local ret = CMD.update("player_odb", { player_id = player_id, data = data })
     return ret
 end
 

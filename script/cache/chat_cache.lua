@@ -18,17 +18,14 @@ function chat_cache:ctor()
 end
 
 function chat_cache:get_channel_messages(channel_id, count)
-    service_wrapper.append_cost("get_channel_messages 111")
     local obj = self:get(channel_id)
     if not obj then
         return nil, "Channel not found"
     end
-    service_wrapper.append_cost("get_channel_messages 222")
     local list = {}
     for i = #obj.messages, math.max(1, #obj.messages - count + 1), -1 do
         table.insert(list, obj.messages[i])
     end
-    service_wrapper.append_cost("get_channel_messages 333")
     return list
 end
 
@@ -38,6 +35,9 @@ function chat_cache:update_message(channel_id, message)
     if not obj then
         return false, "Channel not found"
     end
+    if not obj.messages then 
+        tableUtils.print_table(obj)
+    end 
     -- 添加新消息
     table.insert(obj.messages, message)
     
@@ -55,30 +55,35 @@ function chat_cache:new_item(channel_id)
     return obj
 end
 
-function chat_cache:load_item(key)
-    local data = skynet.call(".db", "lua", "get_channel_data", key)
-    local obj = self:new_item(key)
+function chat_cache:load_item(channel_id)
+    local data = skynet.call(".db", "lua", "get_channel_data", channel_id)
+    local obj = self:new_item(channel_id)
+    if channel_id == 166228 then 
+        log.error("load_item %s %s", channel_id, data)
+    end 
     if data then
         obj:onload(data)
     else 
-        self.news[key] = 1
+        self.new_keys[channel_id] = 1
     end
     return obj
 end
 
-function chat_cache:save(key, obj)
+function chat_cache:save(channel_id, obj)
     local data = obj:onsave()
-    if self.news[key] then
+    if self.new_keys[channel_id] then
         local dbS = skynet.localname(".db")
         local ret = skynet.call(dbS, "lua", "create_channel_data", data)
         if ret then
-            self.news[key] = nil 
+            self.new_keys[channel_id] = nil 
+            return true 
         end
+        return false 
     else 
         local dbS = skynet.localname(".db")
         skynet.send(dbS, "lua", "save_channel_data", data)
+        return true
     end 
-    return true
 end 
 
 return chat_cache 

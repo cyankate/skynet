@@ -10,7 +10,7 @@ local base_cache = class("base_cache")
 function base_cache:ctor(name, config)
     self.name = name
     self.config = config or {
-        max_size = 3000,           -- 最大缓存条目数
+        max_size = 1000,           -- 最大缓存条目数
         ttl = 3600,               -- 默认过期时间（秒）
         cleanup_interval = 300,   -- 清理间隔（秒）
         load_timeout = 5,         -- 加载超时时间（秒）
@@ -21,7 +21,7 @@ function base_cache:ctor(name, config)
     self.cleanup_running = false -- 清理是否正在运行
     self.loading = {}            -- 正在加载的数据 {key = {waiting = {}, loading = true, timeout = timeout}}
     self.dirty_keys = {}         -- 需要保存的key
-    self.news = {}               -- 需要插入的key
+    self.new_keys = {}           -- 需要插入的key
     -- 统计信息
     self.hit_count = 0           -- 缓存命中次数
     self.miss_count = 0          -- 缓存未命中次数
@@ -116,7 +116,7 @@ function base_cache:get(key)
         local is_first_loader = self:acquire_load(key)
         if is_first_loader then
             -- 第一个加载者
-            result = self:load_item(key)
+            result = self:get_from_redis(key)
             if result then
                 self:set(key, result)
             else 
@@ -133,6 +133,33 @@ function base_cache:get(key)
     
     return result
 end
+
+function base_cache:get_from_redis(key)
+    local redis = skynet.localname(".redis")
+    if redis then
+        local redis_key = self.name .. ":" .. key
+        local data = skynet.call(redis, "lua", "get", redis_key)
+        if data then
+            log.debug("get_from_redis success for key: " .. redis_key)
+            local obj = self:new_item(key)
+            obj:onload(tableUtils.deserialize_table(data))
+            return obj
+        end
+    else 
+        log.error("redis is not running")
+    end 
+    return self:load_item(key)
+end
+
+function base_cache:set_to_redis(key, obj)
+    local redis = skynet.localname(".redis")
+    if not redis then
+        log.error("redis is not running")
+        return 
+    end 
+    local redis_key = self.name .. ":" .. key
+    skynet.call(redis, "lua", "set", redis_key, tableUtils.serialize_table(obj:onsave()))
+end 
 
 function base_cache:load_item(key)
     return nil
@@ -291,7 +318,7 @@ function base_cache:mark_dirty(key)
 end
 
 function base_cache:is_dirty(key)
-    return self.dirty_keys[key] or self.news[key]
+    return self.dirty_keys[key] or self.new_keys[key]
 end
 
 function base_cache:save_all()
@@ -346,9 +373,16 @@ end
 
 -- 删除缓存项
 function base_cache:remove(key)
+    local item = self.cache[key]
+    if item then
+        self:set_to_redis(key, item.data)
+    end
     self.cache[key] = nil
     self.access_time[key] = nil
     self.size = self.size - 1
+    if self:is_dirty(key) then
+        self:save_item(key, item)
+    end
 end
 
 -- 清空缓存

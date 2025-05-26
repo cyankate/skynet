@@ -70,10 +70,7 @@ send_private_message 8 {
 
 get_channel_list 9 {
 	request {
-}	
-	response {
-		channels 0 : *channel_info
-	}
+	}	
 }
 
 .chat_message {
@@ -106,6 +103,180 @@ add_score 14 {
 	}
 }
 
+.friend_info {
+	player_id 0 : integer
+	name 1 : string
+}
+
+.apply_info {
+	player_id 0 : integer
+	name 1 : string
+	apply_time 2 : integer
+	message 3 : string
+}
+
+add_friend 10001 {
+	request {
+		target_id 0 : integer
+		message 1 : string
+	}
+}
+
+delete_friend 10002 {
+	request {
+		target_id 0 : integer
+	}
+}
+
+agree_apply 10003 {
+	request {
+		player_id 0 : integer
+	}
+}
+
+reject_apply 10004 {
+	request {
+		player_id 0 : integer
+	}
+}
+
+get_friend_list 10005 {
+	request {
+	}
+}
+
+get_apply_list 10006 {
+	request {
+	}
+}
+
+add_blacklist 10007 {
+	request {
+		target_id 0 : integer
+	}
+}
+
+remove_blacklist 10008 {
+	request {
+		target_id 0 : integer
+	}
+}
+
+get_black_list 10009 {
+	request {
+	}
+}
+
+# 斗地主协议 (300-349)
+landlord_create_room 300 {
+	request {
+	}
+}
+
+landlord_join_room 301 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+landlord_leave_room 302 {
+	request {
+	}
+}
+
+landlord_ready 303 {
+	request {
+	}
+}
+
+landlord_play_cards 304 {
+	request {
+		cards 0 : *string
+	}
+}
+
+landlord_quick_match 305 {
+	request {
+	}
+}
+
+landlord_cancel_match 306 {
+	request {
+	}
+}
+
+# 麻将协议 (350-399)
+mahjong_create_room 350 {
+	request {
+		mode 0 : integer      # 游戏模式
+		base_score 1 : integer  # 底分
+	}
+}
+
+mahjong_join_room 351 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+mahjong_leave_room 352 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+mahjong_ready 353 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+mahjong_play_tile 354 {
+	request {
+		room_id 0 : integer
+		tile_type 1 : integer
+		tile_value 2 : integer
+	}
+}
+
+mahjong_chi_tile 355 {
+	request {
+		room_id 0 : integer
+		tiles 1 : *integer 
+	}
+}
+
+mahjong_peng_tile 356 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+mahjong_gang_tile 357 {
+	request {
+		room_id 0 : integer
+		tile_type 1 : integer
+		tile_value 2 : integer
+	}
+}
+
+mahjong_hu_tile 358 {
+	request {
+		room_id 0 : integer
+	}
+}
+
+mahjong_quick_match 359 {
+	request {
+		mode 0 : integer      # 游戏模式
+		base_score 1 : integer  # 底分
+	}
+}
+
+mahjong_cancel_match 360 {
+	request {
+	}
+}
 ]]
 
 proto.s2c = sprotoparser.parse [[
@@ -115,12 +286,6 @@ proto.s2c = sprotoparser.parse [[
 }
 
 heartbeat 1 {}
-
-detail 2 {
-	response {
-		name 0 : string
-	}
-}
 
 error 3 {
 	request {
@@ -206,6 +371,282 @@ login_failed 11 {
 	}
 }
 
+.friend_info {
+	player_id 0 : integer
+	name 1 : string
+}
+
+.apply_info {
+	player_id 0 : integer
+	name 1 : string
+	apply_time 2 : integer
+	message 3 : string
+}
+
+add_friend_response 201 {
+	request {
+		result 0 : integer
+		message 1 : string
+	}
+}
+
+delete_friend_response 202 {
+	request {
+		result 0 : integer
+		message 1 : string
+	}
+}
+
+agree_apply_response 203 {
+	request {
+		result 0 : integer
+		message 1 : string
+		friend_info 2 : friend_info
+	}
+}
+
+reject_apply_response 204 {
+	request {
+		result 0 : integer
+		message 1 : string
+	}
+}
+
+get_friend_list_response 205 {
+	request {
+		result 0 : integer
+		friend_list 1 : *friend_info
+	}
+}
+
+get_apply_list_response 206 {
+	request {
+		result 0 : integer
+		apply_list 1 : *apply_info
+	}
+}
+
+add_blacklist_response 207 {
+	request {
+		result 0 : integer
+		message 1 : string
+	}
+}
+
+remove_blacklist_response 208 {
+	request {
+		result 0 : integer
+		message 1 : string
+	}
+}
+
+.black_list_info {
+	player_id 0 : integer
+	name 1 : string
+	time 2 : integer
+}
+
+get_black_list_response 209 {
+	request {
+		result 0 : integer
+		black_list 1 : *black_list_info
+	}
+}
+
+friend_apply_notify 211 {
+	request {
+		player_id 0 : integer
+		message 1 : string
+	}
+}
+
+friend_agree_notify 212 {
+	request {
+		friend_info 0 : friend_info
+	}
+}
+
+friend_delete_notify 213 {
+	request {
+		player_id 0 : integer
+	}
+}
+
+# 房间信息结构
+.room_info {
+    room_id 0 : integer
+    creator_id 1 : integer
+    game_type 2 : integer  # 1:斗地主 2:麻将
+    player_count 3 : integer
+    status 4 : integer     # 0:等待开始 1:游戏中
+    players 5 : *player_info
+}
+
+.player_info {
+    player_id 0 : integer
+    ready 1 : boolean
+    seat 2 : integer
+    cards_count 3 : integer
+}
+
+# 斗地主协议
+landlord_game_start_notify 307 {
+    request {
+        room_id 0 : integer
+        players 1 : *player_info
+        cards 2 : *string      # 自己的手牌
+        landlord_id 3 : integer  # 地主ID
+        bottom_cards 4 : *string  # 地主牌
+        current_player 5 : integer # 当前出牌玩家
+    }
+}
+
+landlord_play_cards_notify 308 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        cards 2 : *string
+        next_player_id 3 : integer
+    }
+}
+
+landlord_game_over_notify 309 {
+    request {
+        room_id 0 : integer
+        winner_id 1 : integer
+        players 2 : *player_info
+        score 3 : integer
+    }
+}
+
+# 麻将协议
+mahjong_game_start_notify 361 {
+    request {
+        room_id 0 : integer
+        players 1 : *player_info
+    }
+}
+
+mahjong_draw_tile_notify 362 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        tile_type 2 : integer
+        tile_value 3 : integer
+        remaining_count 4 : integer
+    }
+}
+
+mahjong_play_tile_notify 363 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        tile_type 2 : integer
+        tile_value 3 : integer
+        next_player_id 4 : integer
+    }
+}
+
+mahjong_chi_tile_notify 364 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        tiles 2 : *integer
+        next_player_id 3 : integer
+    }
+}
+
+mahjong_peng_tile_notify 365 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        tile_type 2 : integer
+        tile_value 3 : integer
+        next_player_id 4 : integer
+    }
+}
+
+mahjong_gang_tile_notify 366 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        tile_type 2 : integer
+        tile_value 3 : integer
+        next_player_id 4 : integer
+    }
+}
+
+mahjong_hu_tile_notify 367 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        win_type 2 : integer 
+        score 3 : integer
+    }
+}
+
+mahjong_game_over_notify 368 {
+    request {
+        room_id 0 : integer
+        winner_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+# 斗地主协议
+landlord_join_notify 320 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+landlord_leave_notify 321 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+landlord_ready_notify 322 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+landlord_player_offline_notify 315 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+landlord_player_reconnect_notify 316 {
+    request {
+        room_id 0 : integer
+        player_id 1 : integer
+        players 2 : *player_info
+    }
+}
+
+landlord_game_state_notify 317 {
+    request {
+        room_id 0 : integer
+        status 1 : integer
+        players 2 : *player_info
+        cards 3 : *string          # 自己的手牌
+        landlord_id 4 : integer    # 地主ID
+        bottom_cards 5 : *string   # 地主牌
+        current_player 6 : integer # 当前出牌玩家
+        last_cards 7 : *string     # 上一次出的牌
+        last_player 8 : integer    # 上一次出牌的玩家
+    }
+}
 ]]
 
 return proto

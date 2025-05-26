@@ -1,5 +1,6 @@
 local skynet = require "skynet"
 local log = require "log"
+local tableUtils = require "utils.tableUtils"
 require "skynet.manager"
 
 skynet.start(function()
@@ -10,6 +11,8 @@ skynet.start(function()
     skynet.newservice("export_table_schema")
 
     local db = skynet.newservice("dbS")
+
+    local redis = skynet.newservice("redisS")
 
     local debug_console = skynet.newservice("debug_console")
     
@@ -35,6 +38,8 @@ skynet.start(function()
     local payment = skynet.newservice("paymentS")
 
     local gate = skynet.newservice("gateS")
+
+    local match = skynet.newservice("matchS")
 
     skynet.call(gate, "lua", "open", {
         address = "0.0.0.0",

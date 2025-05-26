@@ -3,6 +3,7 @@ local log = require "log"
 require "skynet.manager"
 local service_wrapper = require "utils.service_wrapper"
 local protocol_handler = require "protocol_handler"
+local rate_limiter = require "chat.rate_limiter"
 
 -- 导入频道相关模块
 local channel_mgr = require "chat.channel_mgr"
@@ -10,8 +11,13 @@ local world_channel = require "chat.world_channel"
 local guild_channel = require "chat.guild_channel"
 local private_channel = require "chat.private_channel"
 
+local limiters = nil
+
 -- 初始化服务
 function CMD.init()
+    -- 初始化限流器
+    limiters = rate_limiter.create_limiters()
+    
     -- 初始化频道管理器
     channel_mgr.init()
     
@@ -40,14 +46,12 @@ function CMD.on_event(event_name, event_data)
         local player_id = event_data.player_id
         local player_name = event_data.player_name
         channel_mgr.join_channel(1, player_id, player_name)  -- 世界频道ID为1
-        channel_mgr.player_cache[player_id] = {player_name = player_name}
         -- 加载玩家的私聊频道
         channel_mgr.on_player_login(player_id)
     elseif event_name == "player.logout" then
         -- 玩家登出时离开所有频道并清理私聊频道
         local player_id = event_data.player_id
         channel_mgr.on_player_logout(player_id)
-        channel_mgr.player_cache[player_id] = nil
     elseif event_name == "guild.create" then
         -- 创建公会频道
         local guild_id = event_data.guild_id
@@ -84,7 +88,18 @@ end
 
 -- 发送频道消息
 function CMD.send_channel_message(channel_id, player_id, content)
-    channel_mgr.send_channel_message(channel_id, player_id, content)
+    -- 全局限流检查
+    if not limiters.global.channel:try_acquire() then
+        return false, "Global rate limit exceeded for channel messages"
+    end
+    
+    -- -- 玩家级别限流检查
+    -- local player_limiters = limiters.player:get_player_limiters(player_id)
+    -- if not player_limiters.channel:try_acquire() then
+    --     return false, "Player rate limit exceeded for channel messages"
+    -- end
+    
+    return channel_mgr.send_channel_message(channel_id, player_id, content)
 end
 
 function CMD.create_private_channel(player_id, to_player_id)
@@ -93,16 +108,49 @@ end
 
 -- 发送私聊消息
 function CMD.send_private_message(player_id, to_player_id, content)
-    channel_mgr.send_private_channel_message(player_id, to_player_id, content)
+    -- 全局限流检查
+    if not limiters.global.private:try_acquire() then
+        return false, "Global rate limit exceeded for private messages"
+    end
+    
+    -- -- 发送者限流检查
+    -- local sender_limiters = limiters.player:get_player_limiters(player_id)
+    -- if not sender_limiters.private:try_acquire() then
+    --     return false, "Sender rate limit exceeded for private messages"
+    -- end
+    
+    return channel_mgr.send_private_channel_message(player_id, to_player_id, content)
 end
 
 -- 获取频道历史消息
-function CMD.get_channel_history(channel_id, count)
+function CMD.get_channel_history(channel_id, count, player_id)
+    -- 全局限流检查
+    if not limiters.global.history:try_acquire() then
+        return nil, "Global rate limit exceeded for history queries"
+    end
+    
+    -- -- 玩家级别限流检查
+    -- local player_limiters = limiters.player:get_player_limiters(player_id)
+    -- if not player_limiters.history:try_acquire() then
+    --     return nil, "Player rate limit exceeded for history queries"
+    -- end
+    
     return channel_mgr.get_channel_history(channel_id, count)
 end
 
 -- 获取私聊历史消息
 function CMD.get_private_history(player_id, other_player_id)
+    -- 全局限流检查
+    if not limiters.global.history:try_acquire() then
+        return nil, "Global rate limit exceeded for history queries"
+    end
+    
+    -- -- 玩家级别限流检查
+    -- local player_limiters = limiters.player:get_player_limiters(player_id)
+    -- if not player_limiters.history:try_acquire() then
+    --     return nil, "Player rate limit exceeded for history queries"
+    -- end
+    
     -- 查找私聊频道
     for channel_id, channel in pairs(channel_mgr.channels) do
         if channel.channel_type == "private" then
@@ -132,5 +180,5 @@ end
 
 service_wrapper.create_service(main, {
     name = "chat",
-    --print_stats = true,
+    print_stats = true,
 })
