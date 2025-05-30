@@ -12,7 +12,7 @@ end
 
 function cache_item:onload(_data)
     
-end 
+end
 
 function cache_item:onremove()
 

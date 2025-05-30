@@ -16,6 +16,20 @@ CREATE TABLE `mail` (
   KEY `idx_expire_time` (`expire_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮件表';
 
+-- 全局邮件表
+CREATE TABLE `global_mail` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '邮件ID',
+  `mail_type` tinyint NOT NULL COMMENT '邮件类型:5=全局邮件',
+  `title` varchar(50) NOT NULL COMMENT '邮件标题',
+  `content` varchar(1000) NOT NULL COMMENT '邮件内容',
+  `attachments` text COMMENT '附件JSON格式',
+  `create_time` int NOT NULL COMMENT '创建时间',
+  `expire_time` int NOT NULL COMMENT '过期时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_create_time` (`create_time`),
+  KEY `idx_expire_time` (`expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全局邮件表';
+
 -- 账号表
 CREATE TABLE IF NOT EXISTS `account` (
   `account_key` varchar(20) NOT NULL COMMENT '账号标识',
@@ -42,10 +56,6 @@ CREATE TABLE `guild` (
   `create_time` int NOT NULL COMMENT '创建时间',
   `members` text NOT NULL COMMENT '成员列表JSON格式',
   `applications` text NOT NULL COMMENT '申请列表JSON格式',
-  `join_setting` text NOT NULL COMMENT '加入设置JSON格式',
-  `buildings` text NOT NULL COMMENT '公会建筑JSON格式',
-  `techs` text NOT NULL COMMENT '公会科技JSON格式',
-  `treasury` text NOT NULL COMMENT '公会仓库JSON格式',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公会表';

@@ -1,4 +1,3 @@
-
 local skynet = require "skynet"
 local log = require "log"
 require "skynet.manager"
@@ -11,6 +10,7 @@ local MAIL_TYPE = {
     PLAYER = 2,    -- 玩家邮件
     GUILD = 3,     -- 公会邮件
     SYSTEM_REWARD = 4,  -- 系统奖励邮件
+    GLOBAL = 5,    -- 全局邮件
 }
 
 -- 邮件状态
@@ -31,6 +31,8 @@ local config = {
 }
 
 local mail_mgr = nil
+local global_mails = {}      -- 全局邮件列表 {mail_id = mail_data}
+local received_records = {}  -- 接收记录 {player_id = {mail_id = true}}
 
 -- 邮件结构
 local function create_mail(sender_id, receiver_id, mail_type, title, content, attachments)
@@ -205,22 +207,145 @@ function CMD.delete_mail(player_id, mail_id)
     return true
 end
 
--- 清理过期邮件
-function CMD.clean_expired_mails()
+-- 加载全局邮件数据
+local function load_global_mails()
+    local mails = skynet.call(".DB", "lua", "get_global_mails")
+    if mails then
+        for _, mail in ipairs(mails) do
+            global_mails[mail.id] = mail
+        end
+    end
+    
+    -- 加载接收记录
+    local records = skynet.call(".DB", "lua", "get_global_mail_records")
+    if records then
+        for _, record in ipairs(records) do
+            received_records[record.player_id] = received_records[record.player_id] or {}
+            received_records[record.player_id][record.mail_id] = true
+        end
+    end
+    
+    log.info("Loaded %d global mails", table.nums(global_mails))
+end
+
+-- 检查玩家是否已接收邮件
+local function has_received_global_mail(player_id, mail_id)
+    return received_records[player_id] and received_records[player_id][mail_id]
+end
+
+-- 标记玩家已接收邮件
+local function mark_global_mail_received(player_id, mail_id)
+    received_records[player_id] = received_records[player_id] or {}
+    received_records[player_id][mail_id] = true
+    -- 保存到数据库
+    skynet.call(".DB", "lua", "mark_global_mail_received", player_id, mail_id)
+end
+
+-- 发送全局邮件给指定玩家
+local function send_global_mail_to_player(player_id, mail)
+    if has_received_global_mail(player_id, mail.id) then
+        return false, "已经接收过该邮件"
+    end
+    
+    local ok, err = CMD.send_mail(
+        mail.sender_id,
+        player_id,
+        mail.mail_type,
+        mail.title,
+        mail.content,
+        mail.attachments
+    )
+    
+    if ok then
+        mark_global_mail_received(player_id, mail.id)
+    end
+    return ok, err
+end
+
+-- 发送全局邮件
+function CMD.send_global_mail(title, content, attachments, expire_days)
+    -- 创建全局邮件
+    local mail = create_mail(
+        0,  -- sender_id为0表示系统发送
+        0,  -- receiver_id为0表示全局邮件
+        MAIL_TYPE.GLOBAL,
+        title,
+        content,
+        attachments
+    )
+    
+    -- 设置过期时间
+    mail.expire_time = os.time() + (expire_days or config.system_mail_expire_days) * 86400
+    
+    -- 保存到数据库
+    local ok = skynet.call(".DB", "lua", "save_global_mail", mail)
+    if not ok then
+        return false, "保存全局邮件失败"
+    end
+    
+    -- 添加到内存
+    global_mails[mail.id] = mail
+    
+    -- 给在线玩家发送
+    local onlineS = skynet.localname(".online")
+    local online_players = skynet.call(onlineS, "lua", "get_all_online")
+    for player_id, _ in pairs(online_players) do
+        send_global_mail_to_player(player_id, mail)
+    end
+    
+    return true, mail.id
+end
+
+-- 检查玩家未接收的全局邮件
+local function check_player_global_mails(player_id)
+    local count = 0
+    for mail_id, mail in pairs(global_mails) do
+        if not has_received_global_mail(player_id, mail_id) then
+            local ok, _ = send_global_mail_to_player(player_id, mail)
+            if ok then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
+-- 清理过期的全局邮件
+local function clean_expired_global_mails()
     local now = os.time()
-    -- 添加清理逻辑
+    local expired = {}
+    for mail_id, mail in pairs(global_mails) do
+        if mail.expire_time and mail.expire_time < now then
+            table.insert(expired, mail_id)
+        end
+    end
+    
+    if #expired > 0 then
+        skynet.call(".DB", "lua", "delete_global_mails", expired)
+        for _, mail_id in ipairs(expired) do
+            global_mails[mail_id] = nil
+        end
+        log.info("Cleaned %d expired global mails", #expired)
+    end
 end
 
 -- 事件处理
 function CMD.on_event(event, data)
     if event == "player.login" then
-        -- 处理玩家登录事件
+        -- 检查玩家未接收的全局邮件
+        local count = check_player_global_mails(data.player_id)
+        if count > 0 then
+            log.info("Player %d received %d global mails on login", data.player_id, count)
+        end
     end
 end
 
 -- 主服务函数
 local function main()
     mail_mgr = mail_cache.new()
+    
+    -- 加载全局邮件数据
+    -- load_global_mails()
 
     -- 注册事件处理
     local event = skynet.localname(".event")
@@ -231,14 +356,6 @@ local function main()
     skynet.register(".mail")
     
     log.info("Mail service initialized")
-
-    -- 启动定时清理过期邮件
-    skynet.fork(function()
-        while true do
-            CMD.clean_expired_mails()
-            skynet.sleep(3600 * 100)  -- 每小时清理一次
-        end
-    end)
 end
 
 service_wrapper.create_service(main, {

@@ -1,3 +1,5 @@
+local new_socket = require "socket.core"
+
 local BaseTest = {}
 BaseTest.__index = BaseTest
 
@@ -12,7 +14,7 @@ function BaseTest.new(client, config, client_count)
     self.token_bucket = {
         tokens = 1,  -- 初始令牌为1
         last_update = 0,
-        capacity = 2,  -- 最大突发2个令牌
+        capacity = 1,  -- 最大突发2个令牌
         target_rps = config.target_rps,  -- 保存总体目标RPS
         last_request = 0  -- 上次请求时间
     }
@@ -21,7 +23,7 @@ function BaseTest.new(client, config, client_count)
 end
 
 function BaseTest:update_token_bucket()
-    local now = os.clock()
+    local now = new_socket.gettime()
     local time_passed = now - self.token_bucket.last_update
     
     -- 令牌生成改用固定速率
@@ -46,7 +48,7 @@ end
 function BaseTest:consume_token()
     if self:update_token_bucket() then
         self.token_bucket.tokens = self.token_bucket.tokens - 1
-        self.token_bucket.last_request = os.clock()
+        self.token_bucket.last_request = new_socket.gettime()
         return true
     end
     return false

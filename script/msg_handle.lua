@@ -246,7 +246,7 @@ function on_add_blacklist(_player_id, _msg)
         return false, "Friend service not available"
     end
     
-    skynet.send(friendS, "lua", "add_to_blacklist", _player_id, _msg.target_id)
+    skynet.send(friendS, "lua", "add_blacklist", _player_id, _msg.target_id)
     return true
 end
 
@@ -262,7 +262,7 @@ function on_remove_blacklist(_player_id, _msg)
         return false, "Friend service not available"
     end
     
-    skynet.send(friendS, "lua", "remove_from_blacklist", _player_id, _msg.target_id)
+    skynet.send(friendS, "lua", "remove_blacklist", _player_id, _msg.target_id)
     return true
 end
 
@@ -484,6 +484,176 @@ function on_landlord_cancel_match(_player_id, _msg)
     return skynet.send(matchS, "lua", "cancel_match", _player_id)
 end
 
+-- 处理创建公会请求
+function on_create_guild(_player_id, _msg)
+    if not _msg.name or not _msg.notice then
+        log.error("Invalid create guild format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "create_guild", _player_id, _msg.name, _msg.notice)
+    return true
+end
+
+-- 处理解散公会请求
+function on_disband_guild(_player_id, _msg)
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "disband_guild", _player_id)
+    return true
+end
+
+-- 处理加入公会请求
+function on_join_guild(_player_id, _msg)
+    if not _msg.guild_id then
+        log.error("Invalid join guild format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "join_guild", _player_id, _msg.guild_id, _msg.message)
+    return true
+end
+
+-- 处理退出公会请求
+function on_quit_guild(_player_id, _msg)
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "quit_guild", _player_id)
+    return true
+end
+
+-- 处理踢出成员请求
+function on_kick_member(_player_id, _msg)
+    if not _msg.target_id then
+        log.error("Invalid kick member format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "kick_member", _player_id, _msg.target_id)
+    return true
+end
+
+-- 处理任命职位请求
+function on_appoint_position(_player_id, _msg)
+    if not _msg.target_id or not _msg.position then
+        log.error("Invalid appoint position format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "appoint_position", _player_id, _msg.target_id, _msg.position)
+    return true
+end
+
+-- 处理修改公告请求
+function on_modify_notice(_player_id, _msg)
+    if not _msg.notice then
+        log.error("Invalid modify notice format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "modify_notice", _player_id, _msg.notice)
+    return true
+end
+
+-- 处理修改加入设置请求
+function on_modify_join_setting(_player_id, _msg)
+    if _msg.need_approval == nil or not _msg.min_level or not _msg.min_power then
+        log.error("Invalid modify join setting format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "modify_join_setting", _player_id, _msg)
+    return
+end
+
+-- 处理申请处理请求
+function on_handle_application(_player_id, _msg)
+    if not _msg.target_id or _msg.accept == nil then
+        log.error("Invalid handle application format")
+        return false, "Invalid message format"
+    end
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "handle_application", _player_id, _msg.target_id, _msg.accept)
+    return true
+end
+
+-- 处理获取公会信息请求
+function on_get_guild_info(_player_id, _msg)
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "get_guild_info", _player_id)
+    return true
+end
+
+-- 处理获取公会列表请求
+function on_get_guild_list(_player_id, _msg)
+    local page = _msg.page or 1
+    local page_size = _msg.page_size or 10
+    
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "get_guild_list", page, page_size)
+    return true
+end
+
+-- 处理获取申请列表请求
+function on_get_application_list(_player_id, _msg)
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "Guild service not available"
+    end
+    
+    skynet.send(guildS, "lua", "get_application_list", _player_id)
+    return true
+end
+
 local handle = {
     ["add_item"] = on_add_item,
     ["change_name"] = on_change_name,
@@ -523,6 +693,19 @@ local handle = {
     ["landlord_play_cards"] = on_landlord_play_cards,
     ["landlord_quick_match"] = on_landlord_quick_match,
     ["landlord_cancel_match"] = on_landlord_cancel_match,
+    -- 公会相关消息处理
+    ["create_guild"] = on_create_guild,
+    ["disband_guild"] = on_disband_guild,
+    ["join_guild"] = on_join_guild,
+    ["quit_guild"] = on_quit_guild,
+    ["kick_member"] = on_kick_member,
+    ["appoint_position"] = on_appoint_position,
+    ["modify_notice"] = on_modify_notice,
+    ["modify_join_setting"] = on_modify_join_setting,
+    ["handle_application"] = on_handle_application,
+    ["get_guild_info"] = on_get_guild_info,
+    ["get_guild_list"] = on_get_guild_list,
+    ["get_application_list"] = on_get_application_list,
 }
 
 return handle

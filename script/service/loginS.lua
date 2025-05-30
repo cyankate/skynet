@@ -11,7 +11,7 @@ local service_wrapper = require "utils.service_wrapper"
 -- agent池管理
 local agent_pool = {}           -- 存储所有agent服务实例
 local agent_to_accounts = {}    -- 每个agent负责的账号 {agent_handle = {account_key1, account_key2, ...}}
-local INIT_AGENT_COUNT = 1      -- 初始创建的agent数量
+local INIT_AGENT_COUNT = 3      -- 初始创建的agent数量
 local CLIENT = {}
 
 -- 获取安全服务实例
@@ -428,9 +428,6 @@ skynet.register_protocol {
 
 -- 主服务函数
 local function main()
-    -- 注册服务名
-    skynet.register(".login")
-    
     -- 初始化agent池
     init_agent_pool()
     

@@ -9,7 +9,9 @@ local socket = require "client.socket"
 local Client = require "stress_client"
 local ChatTest = require "chat_test"
 local PlayerTest = require "player_test"
+local FriendTest = require "friend_test"  -- 添加好友测试模块
 local Stats = require "stats"
+local new_socket = require "socket.core"
 
 -- 日志级别
 local LOG_LEVEL = {
@@ -39,18 +41,22 @@ end
 local config = {
     host = "127.0.0.1",
     port = 8888,
-    report_interval_ms = 1000,   -- 定期报告间隔(毫秒)
+    report_interval_ms = 10,   -- 定期报告间隔(秒)
     test_duration = 0,          -- 测试持续时间（秒），0表示无限制
     account_prefix = "test_user_", -- 账号前缀
-    total_clients = 300,       -- 总客户端数量
-    dynamic_schedule = false,   -- 是否启用动态调度
+    total_clients = 50,         -- 总客户端数量
+    dynamic_schedule = false,    -- 是否启用动态调度
     schedule_interval = 10,     -- 调度间隔（秒）
+    connect_interval_ms = 30,   -- 建立连接的间隔(毫秒)
     test_configs = {           -- 不同测试类型的配置
         chat = {
             target_rps = 200    -- 目标每秒请求数
         },
         player = {
             target_rps = 100    -- 目标每秒请求数
+        },
+        friend = {             -- 添加好友测试配置
+            target_rps = 50     -- 目标每秒请求数
         }
     }
 }
@@ -61,6 +67,8 @@ local function create_test_instance(client, test_type, client_count)
         return ChatTest.new(client, config.test_configs.chat, client_count)
     elseif test_type == "player" then
         return PlayerTest.new(client, config.test_configs.player, client_count)
+    elseif test_type == "friend" then
+        return FriendTest.new(client, config.test_configs.friend, client_count)
     end
     return nil
 end
@@ -74,7 +82,7 @@ function Scheduler.new(config)
     self.config = config
     self.clients = {}  -- 所有客户端
     self.tests = {}    -- 所有测试实例
-    self.test_types = {"chat", "player"}  -- 支持的测试类型
+    self.test_types = {"chat", "player", "friend"}  -- 添加friend测试类型
     
     -- 计算总RPS和每个测试类型的权重
     local total_rps = 0
@@ -97,14 +105,38 @@ function Scheduler.new(config)
 end
 
 function Scheduler:create_clients()
-    -- 创建所有客户端
+    -- 创建所有客户端但不立即连接
     for i = 1, self.config.total_clients do
         local client = Client.new(i, self.config)
+        self.clients[i] = client
+        log(LOG_LEVEL.DEBUG, "Client %d created", i)
+    end
+end
+
+function Scheduler:init_connections()
+    local connected = 0
+    local logged_in = 0
+    
+    for i = 1, self.config.total_clients do
+        local client = self.clients[i]
         if client:connect() then
-            self.clients[i] = client
-            log(LOG_LEVEL.DEBUG, "Client %d created", i)
+            connected = connected + 1
+            if client:try_login() then
+                logged_in = logged_in + 1
+            end
+            
+            if i % 100 == 0 then
+                log(LOG_LEVEL.INFO, "Progress: Connected %d, Logged in %d", connected, logged_in)
+            end
+            
+            socket.usleep(self.config.connect_interval_ms * 1000)
         end
     end
+    
+    log(LOG_LEVEL.INFO, "Connection completed: Connected %d/%d, Logged in %d/%d", 
+        connected, self.config.total_clients, logged_in, self.config.total_clients)
+    
+    return connected, logged_in
 end
 
 function Scheduler:assign_fixed()
@@ -186,6 +218,9 @@ local function parse_args()
         elseif arg_value == "--player-rps" and i < #args then
             config.test_configs.player.target_rps = tonumber(args[i+1]) or config.test_configs.player.target_rps
             i = i + 2
+        elseif arg_value == "--friend-rps" and i < #args then
+            config.test_configs.friend.target_rps = tonumber(args[i+1]) or config.test_configs.friend.target_rps
+            i = i + 2
         elseif arg_value == "--duration" and i < #args then
             config.test_duration = tonumber(args[i+1]) or config.test_duration
             i = i + 2
@@ -211,20 +246,28 @@ local function main()
     log(LOG_LEVEL.INFO, "Starting stress test with configuration:")
     log(LOG_LEVEL.INFO, "Server: %s:%d", config.host, config.port)
     log(LOG_LEVEL.INFO, "Total clients: %d", config.total_clients)
-    log(LOG_LEVEL.INFO, "Dynamic schedule: %s", config.dynamic_schedule and "enabled" or "disabled")
+    log(LOG_LEVEL.INFO, "Connect interval: %dms", config.connect_interval_ms)
     
     local stats = Stats.new()
     stats:register_test_type("chat", config.test_configs.chat)
     stats:register_test_type("player", config.test_configs.player)
+    stats:register_test_type("friend", config.test_configs.friend)
     
-    -- 创建调度器
+    -- 创建调度器并初始化连接
     local scheduler = Scheduler.new(config)
     scheduler:create_clients()
-    scheduler:assign_fixed()
+    local connected, logged_in = scheduler:init_connections()
     
-    local last_schedule = os.clock()
-    local last_report = os.clock()
-    local start = os.clock()
+    if connected == 0 then
+        log(LOG_LEVEL.ERROR, "No clients connected, stopping test")
+        return
+    end
+    
+    scheduler:assign_fixed()
+    local now = new_socket.gettime()
+    local last_schedule = now
+    local last_report = now
+    local start = now
     
     -- 主循环
     while true do
@@ -254,7 +297,7 @@ local function main()
         
         -- 动态调度
         if config.dynamic_schedule then
-            local now = os.clock()
+            local now = new_socket.gettime()
             if now - last_schedule >= config.schedule_interval then
                 scheduler:reassign_random()
                 last_schedule = now
@@ -262,8 +305,8 @@ local function main()
         end
         
         -- 定期报告
-        local now = os.clock()
-        if now - last_report >= config.report_interval_ms / 1000 then
+        local now = new_socket.gettime()
+        if now - last_report >= config.report_interval_ms then
             stats:print_report()
             last_report = now
         end
@@ -282,7 +325,7 @@ local function main()
         client:disconnect()
     end
     
-    stats.end_time = os.clock()
+    stats.end_time = new_socket.gettime()
     stats:print_report()
     stats:save_results(config)
 end

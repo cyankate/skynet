@@ -23,7 +23,7 @@ local config = {
         max_request_size = 1024 * 1024  -- 1MB
     },
     tls = {
-        enabled = true,
+        enabled = false,
         cert = "../../cert/server.crt",
         key = "../../cert/server.key",
         ca = "../../cert/ca.crt",
@@ -302,12 +302,18 @@ end
 
 -- 统一的响应格式
 local function create_response(code, data, message)
-    return {
-        code = code or 200,
-        message = message or "success",
-        data = data,
-        timestamp = os.time()
-    }
+    -- return {
+    --     code = code or 200,
+    --     message = message or "success",
+    --     data = data,
+    --     timestamp = os.time()
+    -- }
+    data = data or {}
+    if message then
+        data.message = message
+    end
+    data.code = code or 200
+    return data 
 end
 
 -- 统一的成功响应
@@ -509,7 +515,7 @@ end
 -- 修改登录接口
 local function register_auth_routes()
     -- 微信小程序登录
-    register_route("POST", "/api/auth/wechat/login/", function(fd, method, url, headers, body, interface)
+    register_route("POST", "/api/auth/wechat/login", function(fd, method, url, headers, body, interface)
         local data = cjson.decode(body)
         -- 验证登录参数
         local valid, err = validate_params(data, {"code"})
@@ -544,7 +550,7 @@ local function register_auth_routes()
     end)
     
     -- 获取用户信息
-    register_route("GET", "/api/user/info/", function(fd, method, url, headers, body, interface)
+    register_route("GET", "/api/user/info", function(fd, method, url, headers, body, interface)
         local token = headers[config.auth.token_header:lower()]
         if not token then
             error_response(fd, interface, 401, "Missing token")
@@ -569,7 +575,7 @@ local function register_auth_routes()
     end)
     
     -- 更新用户信息
-    register_route("POST", "/api/user/info/", function(fd, method, url, headers, body, interface)
+    register_route("POST", "/api/user/info", function(fd, method, url, headers, body, interface)
         local token = headers[config.auth.token_header:lower()]
         if not token then
             error_response(fd, interface, 401, "Missing token")
@@ -599,6 +605,28 @@ local function register_auth_routes()
         }
         
         return user_info
+    end)
+
+    register_route("POST", "/api/people/heartbeat", function(fd, method, url, headers, body, interface)
+        local token = headers[config.auth.token_header:lower()]
+        tableUtils.print_table(headers)
+        local data = urllib.parse_query(body)
+        tableUtils.print_table(data)
+        
+        return {}
+    end)
+
+    register_route("GET", "/api/people/init", function(fd, method, url, headers, body, interface)
+
+    end)
+
+    register_route("GET", "/api/people/ip_info", function(fd, method, url, headers, body, interface)
+        log.info("ip_info", {body = body})
+        return {
+            province = "广东省",
+            city = "广州市",
+            is_strict = false,
+        }
     end)
 end
 
@@ -678,14 +706,14 @@ local function handle_request(fd, method, url, headers, body, interface)
     log_request(method, url, headers, body)
     
     -- 执行中间件
-    local ok, result = execute_middlewares(fd, method, url, headers, body, interface)
-    if not ok then
-        error_response(fd, interface, 500, result)
-        return
-    end
-    if result then
-        return
-    end
+    -- local ok, result = execute_middlewares(fd, method, url, headers, body, interface)
+    -- if not ok then
+    --     error_response(fd, interface, 500, result)
+    --     return
+    -- end
+    -- if result then
+    --     return
+    -- end
     
     -- 解析URL
     local path, query = urllib.parse(url)
@@ -697,21 +725,20 @@ local function handle_request(fd, method, url, headers, body, interface)
     local user_id = headers["x-user-id"] or "anonymous"
     
     -- 检查缓存
-    local cache_key = string.format("%s:%s:%s", method, normalized_path, query)
-    if config.cache.enabled and cache[cache_key] then
-        local cached_data = cache[cache_key]
-        if os.time() - cached_data.timestamp < config.cache.ttl then
-            -- 检查数据访问权限
-            local has_access, err = check_data_access(user_id, cached_data.data)
-            if not has_access then
-                error_response(fd, interface, 403, err)
-                return
-            end
-            success_response(fd, interface, cached_data.data)
-            return
-        end
-    end
-    
+    -- local cache_key = string.format("%s:%s:%s", method, normalized_path, query)
+    -- if config.cache.enabled and cache[cache_key] then
+    --     local cached_data = cache[cache_key]
+    --     if os.time() - cached_data.timestamp < config.cache.ttl then
+    --         -- 检查数据访问权限
+    --         -- local has_access, err = check_data_access(user_id, cached_data.data)
+    --         -- if not has_access then
+    --         --     error_response(fd, interface, 403, err)
+    --         --     return
+    --         -- end
+    --         success_response(fd, interface, cached_data.data)
+    --         return
+    --     end
+    -- end
     -- 查找并执行路由处理函数
     local handler = routes[method] and routes[method][normalized_path]
     if handler then
@@ -723,19 +750,19 @@ local function handle_request(fd, method, url, headers, body, interface)
         
         if result then
             -- 检查数据访问权限
-            local has_access, err = check_data_access(user_id, result)
-            if not has_access then
-                error_response(fd, interface, 403, err)
-                return
-            end
+            -- local has_access, err = check_data_access(user_id, result)
+            -- if not has_access then
+            --     error_response(fd, interface, 403, err)
+            --     return
+            -- end
             
             -- 缓存结果
-            if config.cache.enabled then
-                cache[cache_key] = {
-                    data = result,
-                    timestamp = os.time()
-                }
-            end
+            -- if config.cache.enabled then
+            --     cache[cache_key] = {
+            --         data = result,
+            --         timestamp = os.time()
+            --     }
+            -- end
             
             -- 返回成功响应
             success_response(fd, interface, result)

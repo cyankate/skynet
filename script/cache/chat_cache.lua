@@ -35,14 +35,11 @@ function chat_cache:update_message(channel_id, message)
     if not obj then
         return false, "Channel not found"
     end
-    if not obj.messages then 
-        tableUtils.print_table(obj)
-    end 
     -- 添加新消息
     table.insert(obj.messages, message)
     
     -- 只保留最近50条消息
-    while #obj.messages > 10 do
+    while #obj.messages > 20 do
         table.remove(obj.messages, 1)
     end
 
@@ -55,35 +52,25 @@ function chat_cache:new_item(channel_id)
     return obj
 end
 
-function chat_cache:load_item(channel_id)
-    local data = skynet.call(".db", "lua", "get_channel_data", channel_id)
-    local obj = self:new_item(channel_id)
-    if channel_id == 166228 then 
-        log.error("load_item %s %s", channel_id, data)
-    end 
-    if data then
-        obj:onload(data)
-    else 
-        self.new_keys[channel_id] = 1
-    end
-    return obj
+function chat_cache:db_load(channel_id)
+    local dbS = skynet.localname(".db")
+    local data = skynet.call(dbS, "lua", "get_channel_data", channel_id)
+    return data
 end
 
-function chat_cache:save(channel_id, obj)
+function chat_cache:db_create(channel_id, obj)
+    local dbS = skynet.localname(".db")
     local data = obj:onsave()
-    if self.new_keys[channel_id] then
-        local dbS = skynet.localname(".db")
-        local ret = skynet.call(dbS, "lua", "create_channel_data", data)
-        if ret then
-            self.new_keys[channel_id] = nil 
-            return true 
-        end
-        return false 
-    else 
-        local dbS = skynet.localname(".db")
-        skynet.send(dbS, "lua", "save_channel_data", data)
-        return true
-    end 
-end 
+    local ret = skynet.call(dbS, "lua", "create_channel_data", data)
+    return ret
+end
+
+
+function chat_cache:db_update(channel_id, obj)
+    local dbS = skynet.localname(".db")
+    local data = obj:onsave()
+    local ret = skynet.call(dbS, "lua", "save_channel_data", data)
+    return ret
+end
 
 return chat_cache 

@@ -180,5 +180,8 @@ end
 
 service_wrapper.create_service(main, {
     name = "chat",
-    print_stats = true,
+    custom_stats = function()
+        tableUtils.print_table(channel_mgr.cache:get_stats())
+        tableUtils.print_table(channel_mgr.private_channel_cache:get_stats())
+    end
 })

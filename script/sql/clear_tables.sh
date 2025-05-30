@@ -32,3 +32,7 @@ done
 rm -f $CONFIG_FILE
 
 echo "所有表清理完成!" 
+
+echo "正在清除redis缓存..."
+redis-cli FLUSHALL
+echo "redis缓存清理完成"

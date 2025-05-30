@@ -15,7 +15,7 @@ local function send_to_player(player_id, name, data)
         log.error("Gate service not found")
         return false
     end
-    return skynet.call(gate, "lua", "send_to_player", player_id, name, data)
+    skynet.send(gate, "lua", "send_to_player", player_id, name, data)
 end
 
 -- 添加好友

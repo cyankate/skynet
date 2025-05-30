@@ -33,12 +33,12 @@ function RateLimiter:update()
     
     -- 更新统计信息
     if now - self.stats.last_reset >= self.window_size then
-        log.info("Rate limiter stats in last %d seconds: total=%d, allowed=%d, rejected=%d, current_tokens=%.2f", 
-            self.window_size,
-            self.stats.total_requests,
-            self.stats.allowed_requests,
-            self.stats.rejected_requests,
-            self.tokens)
+        -- log.info("Rate limiter stats in last %d seconds: total=%d, allowed=%d, rejected=%d, current_tokens=%.2f", 
+        --     self.window_size,
+        --     self.stats.total_requests,
+        --     self.stats.allowed_requests,
+        --     self.stats.rejected_requests,
+        --     self.tokens)
         
         -- 重置统计
         self.stats.total_requests = 0

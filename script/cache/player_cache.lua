@@ -23,34 +23,25 @@ function player_cache:new_item(player_id)
     return obj
 end
 
--- 加载缓存项
-function player_cache:load_item(player_id)
-    local data = skynet.call(".db", "lua", "get_player_odb", player_id)
-    local obj = self:new_item(player_id)
-    if data then
-        obj:onload(data)
-    else 
-        self.new_keys[player_id] = 1
-    end
-    return obj
+function player_cache:db_load(player_id)
+    local dbS = skynet.localname(".db")
+    local data = skynet.call(dbS, "lua", "get_player_odb", player_id)
+    return data
 end
 
--- 保存缓存项
-function player_cache:save(player_id, obj)
+
+function player_cache:db_create(player_id, obj)
+    local dbS = skynet.localname(".db")
     local data = obj:onsave()
-    if self.new_keys[player_id] then
-        local dbS = skynet.localname(".db")
-        local ret = skynet.call(dbS, "lua", "create_player_odb", player_id, data)
-        if ret then
-            self.new_keys[player_id] = nil
-            return true
-        end
-        return false
-    else
-        local dbS = skynet.localname(".db")
-        skynet.send(dbS, "lua", "update_player_odb", player_id, data)
-        return true
-    end
+    local ret = skynet.call(dbS, "lua", "create_player_odb", player_id, data)
+    return ret
+end
+
+function player_cache:db_update(player_id, obj)
+    local dbS = skynet.localname(".db")
+    local data = obj:onsave()
+    local ret = skynet.call(dbS, "lua", "update_player_odb", player_id, data)
+    return ret
 end
 
 -- 更新玩家信息

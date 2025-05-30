@@ -1,4 +1,5 @@
 local json = require "cjson"
+local new_socket = require "socket.core"
 
 local Stats = {}
 Stats.__index = Stats
@@ -6,7 +7,7 @@ Stats.__index = Stats
 function Stats.new()
     local self = setmetatable({}, Stats)
     self.total_requests = 0
-    self.start_time = os.clock()
+    self.start_time = new_socket.gettime()
     self.end_time = 0
     self.test_types = {}  -- 不同测试类型的统计
     return self
@@ -17,7 +18,7 @@ function Stats:register_test_type(test_type, config)
         config = config,
         requests_sent = 0,
         current_rps = 0,
-        last_rps_time = os.clock(),
+        last_rps_time = new_socket.gettime(),
         last_rps_count = 0,
         request_types = {}  -- 记录每种请求类型的数量
     }
@@ -33,7 +34,7 @@ function Stats:record_request(test_type, request_name)
         test_stats.request_types[request_name] = (test_stats.request_types[request_name] or 0) + 1
         
         -- 更新当前RPS
-        local now = os.clock()
+        local now = new_socket.gettime()
         local time_passed = now - test_stats.last_rps_time
         if time_passed >= 1.0 then
             test_stats.current_rps = (test_stats.requests_sent - test_stats.last_rps_count) / time_passed
@@ -44,7 +45,7 @@ function Stats:record_request(test_type, request_name)
 end
 
 function Stats:print_report()
-    local duration = os.clock() - self.start_time
+    local duration = new_socket.gettime() - self.start_time
     
     print("\n=== Performance Report ===")
     print(string.format("Duration: %.3f seconds", duration))

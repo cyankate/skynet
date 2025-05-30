@@ -102,8 +102,16 @@ function CMD.get(key)
     return do_command("get", key)
 end
 
+function CMD.mget(...)
+    return do_command("mget", ...)
+end
+
 function CMD.set(key, value)
     return do_command("set", key, value)
+end
+
+function CMD.mset(...)
+    return do_command("mset", ...)
 end
 
 function CMD.setex(key, seconds, value)

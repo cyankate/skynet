@@ -47,7 +47,7 @@ function channel_mgr.create_private_channel(player_id, to_player_id)
         return channel_id
     end
     local dbS = skynet.localname(".db")
-    local channel_data = skynet.call(dbS, "lua", "get_player_private", player_id, to_player_id)
+    local channel_data = skynet.call(dbS, "lua", "get_private_channel", player_id, to_player_id)
     channel_id = channel_mgr.private_channels[channel_key]
     if channel_id then
         return channel_id
@@ -190,15 +190,13 @@ function channel_mgr.send_private_channel_message(player_id, to_player_id, conte
     channel_mgr.join_channel(channel_id, player_id, player_name)
     channel_mgr.join_channel(channel_id, to_player_id, to_player_name)
 
-    skynet.fork(function()
-        local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
-        private_channel_cache.data[to_player_id] = {id = channel_id}
-        channel_mgr.private_channel_cache:mark_dirty(player_id)
+    local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
+    private_channel_cache.data[to_player_id] = {id = channel_id}
+    channel_mgr.private_channel_cache:mark_dirty(player_id)
 
-        local private_channel_cache = channel_mgr.private_channel_cache:get(to_player_id)
-        private_channel_cache.data[player_id] = {id = channel_id}
-        channel_mgr.private_channel_cache:mark_dirty(to_player_id)
-    end)
+    local private_channel_cache = channel_mgr.private_channel_cache:get(to_player_id)
+    private_channel_cache.data[player_id] = {id = channel_id}
+    channel_mgr.private_channel_cache:mark_dirty(to_player_id)
     
     return channel_mgr.send_channel_message(channel_id, player_id, content)
 end 
@@ -253,11 +251,11 @@ function channel_mgr.init()
     channel_mgr.cache = chat_cache.new()   
     channel_mgr.private_channel_cache = private_cache.new()
     local function tick()
-        skynet.timeout(180 * 100, tick)
+        skynet.timeout(60 * 100, tick)
         channel_mgr.cache:tick()
         channel_mgr.private_channel_cache:tick()
     end
-    skynet.timeout(180 * 100, tick)
+    skynet.timeout(60 * 100, tick)
     local dbS = skynet.localname(".db")
     local max_channel_id = skynet.call(dbS, "lua", "get_max_channel_id")
     if max_channel_id then  

@@ -84,4 +84,7 @@ end
 
 service_wrapper.create_service(main, {
     name = "friend",
+    custom_stats = function()
+        friend_mgr.cache:get_stats()
+    end
 })

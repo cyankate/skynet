@@ -7,7 +7,6 @@ local table_schema = require "sql.table_schema"
 require "skynet.manager"
 local IDGenerator = require "utils.id_generator"
 local service_wrapper = require "utils.service_wrapper"
-local load_lock = require "cache.load_lock"
 
 local pool = {}
 local POOL_SIZE = 10
@@ -86,11 +85,24 @@ function CMD.select(_tbl, _cond, _options)
             end
             
             local field_type = table_schema[_tbl].fields[k].type
-            -- 根据字段类型处理值
+            -- 处理IN查询
+            if type(v) == "table" and #v > 0 then
+                local values = {}
+                for _, item in ipairs(v) do
+                    if field_type:find("varchar") or field_type == "text" then
+                        table.insert(values, mysql.quote_sql_str(tostring(item)))
+                    else
+                        table.insert(values, tostring(item))
+                    end
+                end
+                table.insert(cond_list, string.format("`%s` IN (%s)", k, table.concat(values, ",")))
+            -- 处理普通条件
+            else
             if field_type:find("varchar") or field_type == "text" then
                 table.insert(cond_list, string.format("`%s`=%s", k, mysql.quote_sql_str(tostring(v))))
             else
                 table.insert(cond_list, string.format("`%s`=%s", k, tostring(v)))
+                end
             end
             
             ::continue::
@@ -512,7 +524,7 @@ function CMD.save_channel_data(data)
     return ret
 end 
 
-function CMD.get_player_private(player_id, to_player_id)
+function CMD.get_private_channel(player_id, to_player_id)
     if player_id > to_player_id then 
         player_id, to_player_id = to_player_id, player_id
     end 

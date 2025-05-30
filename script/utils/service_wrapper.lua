@@ -98,7 +98,11 @@ function M.wrap_service(startup_func, options)
         
         -- 设置统一的消息处理函数
         skynet.dispatch("lua", message_handler)
-        
+
+        -- skynet.info_func(function()
+        --     log.info("service:%s, info:%s", options.name, options.info)
+        -- end)
+
         -- 设置服务名
         if options.name then
             skynet.name("." .. options.name, skynet.self())
@@ -128,6 +132,14 @@ function M.wrap_service(startup_func, options)
             end
             skynet.timeout(1000, print_stats)
         end
+
+        if options.custom_stats then 
+            local function print_stats()    
+                skynet.timeout(1000, print_stats)
+                options.custom_stats()
+            end
+            skynet.timeout(1000, print_stats)
+        end 
     end
 end
 

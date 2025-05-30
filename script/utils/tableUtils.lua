@@ -306,4 +306,93 @@ function M.remove_element(array, element)
     return false
 end
 
+-- 从有序列表中随机选择N个不重复的元素
+-- @param list 输入的有序列表
+-- @param n 需要选择的元素个数
+-- @return 包含n个随机选择元素的新列表，如果n大于列表长度则返回原列表的拷贝
+function M.random_n_from_list(list, n)
+    if not list or #list == 0 then
+        return {}
+    end
+    
+    -- 如果n大于或等于列表长度，返回整个列表的拷贝
+    if n >= #list then
+        local result = {}
+        for i = 1, #list do
+            result[i] = list[i]
+        end
+        return result
+    end
+    
+    -- 使用改进的Fisher-Yates算法选择前n个元素
+    local result = {}
+    local used_indices = {}
+    local list_size = #list
+    
+    for i = 1, n do
+        -- 生成一个未使用的随机索引
+        local rand_idx
+        repeat
+            rand_idx = math.random(1, list_size)
+        until not used_indices[rand_idx]
+        
+        -- 标记该索引已使用
+        used_indices[rand_idx] = true
+        -- 添加到结果列表
+        result[i] = list[rand_idx]
+    end
+    
+    return result
+end
+
+-- 从有序列表中随机选择N个不重复的元素（优化版本，适用于N接近列表长度的情况）
+-- @param list 输入的有序列表
+-- @param n 需要选择的元素个数
+-- @return 包含n个随机选择元素的新列表，如果n大于列表长度则返回原列表的拷贝
+function M.random_n_from_list_ex(list, n)
+    if not list or #list == 0 then
+        return {}
+    end
+    
+    -- 如果n大于或等于列表长度，返回整个列表的拷贝
+    local list_size = #list
+    if n >= list_size then
+        local result = {}
+        for i = 1, list_size do
+            result[i] = list[i]
+        end
+        return result
+    end
+    
+    -- 如果n小于列表长度的一半，使用基础版本
+    if n < list_size / 2 then
+        return M.random_n_from_list(list, n)
+    end
+    
+    -- 否则使用排除法（适用于需要选择大部分元素的情况）
+    local exclude_count = list_size - n
+    local excluded = {}
+    
+    -- 随机选择要排除的索引
+    for i = 1, exclude_count do
+        local rand_idx
+        repeat
+            rand_idx = math.random(1, list_size)
+        until not excluded[rand_idx]
+        excluded[rand_idx] = true
+    end
+    
+    -- 构建结果列表
+    local result = {}
+    local curr_idx = 1
+    for i = 1, list_size do
+        if not excluded[i] then
+            result[curr_idx] = list[i]
+            curr_idx = curr_idx + 1
+        end
+    end
+    
+    return result
+end
+
 return M
