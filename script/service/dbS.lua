@@ -7,6 +7,7 @@ local table_schema = require "sql.table_schema"
 require "skynet.manager"
 local IDGenerator = require "utils.id_generator"
 local service_wrapper = require "utils.service_wrapper"
+local load_lock = require "cache.load_lock"
 
 local pool = {}
 local POOL_SIZE = 10
