@@ -8,8 +8,6 @@ skynet.start(function()
     
     skynet.uniqueservice("protoloader")
 
-    skynet.newservice("export_table_schema")
-
     local db = skynet.newservice("dbS")
 
     local redis = skynet.newservice("redisS")

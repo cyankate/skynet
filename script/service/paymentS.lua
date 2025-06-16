@@ -176,7 +176,7 @@ function CMD.create_order(player_id, account_id, product_id, channel, device_id,
     end
     
     -- 生成支付令牌
-    local token = payment_security.generate_token({
+    local ret_token = payment_security.generate_token({
         order_id = order_id,
         player_id = player_id,
         product_id = product_id,
@@ -187,7 +187,7 @@ function CMD.create_order(player_id, account_id, product_id, channel, device_id,
         code = 0,
         order_id = order_id,
         pay_params = pay_params,
-        token = token
+        token = ret_token
     }
 end
 
@@ -196,6 +196,18 @@ function CMD.handle_notify(channel, notify_data)
     -- 参数检查
     if not channel or not notify_data then
         return {code = 1, message = "参数不完整"}
+    end
+    
+    -- 如果有token字段，校验token
+    if notify_data.token then
+        local ok, token_data = payment_security.verify_token(notify_data.token)
+        if not ok then
+            return {code = 6, message = "支付令牌无效: " .. (token_data or "")}
+        end
+        -- 可选：比对token内容与订单号、金额等一致
+        if notify_data.out_trade_no and token_data.order_id and notify_data.out_trade_no ~= token_data.order_id then
+            return {code = 7, message = "支付令牌内容与通知订单号不一致"}
+        end
     end
     
     -- 验证通知签名

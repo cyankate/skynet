@@ -762,9 +762,181 @@ function CMD.create_private_channel(data)
     return ret
 end
 
+-- 表结构导出相关逻辑
+local function get_table_schema(db, table_name)
+    local sql = string.format("SHOW FULL COLUMNS FROM %s", table_name)
+    local result = db:query(sql)
+    return result
+end
+
+local function get_primary_keys(db, table_name)
+    local sql = string.format("SHOW KEYS FROM %s WHERE Key_name = 'PRIMARY'", table_name)
+    local result = db:query(sql)
+    local primary_keys = {}
+    if result then
+        for _, row in ipairs(result) do
+            table.insert(primary_keys, row.Column_name)
+        end
+    end
+    return primary_keys
+end
+
+local function get_indexes(db, table_name)
+    local sql = string.format("SHOW INDEX FROM %s", table_name)
+    local result = db:query(sql)
+    local indexes = {}
+    if result then
+        for _, row in ipairs(result) do
+            if row.Key_name ~= "PRIMARY" then
+                if not indexes[row.Key_name] then
+                    indexes[row.Key_name] = {
+                        name = row.Key_name,
+                        unique = row.Non_unique == 0,
+                        columns = {}
+                    }
+                end
+                table.insert(indexes[row.Key_name].columns, row.Column_name)
+            end
+        end
+    end
+    return indexes
+end
+
+local function generate_table_config(table_name, schema, primary_keys, indexes)
+    local config = {
+        table_name = table_name,
+        fields = {},
+        primary_keys = primary_keys,
+        indexes = indexes,
+        non_primary_fields = {},
+        schema_order = {},
+    }
+    for _, field in ipairs(schema) do
+        local field_name = field.Field
+        local field_type = field.Type
+        local is_null = field.Null == "YES"
+        local is_key = field.Key == "PRI"
+        local is_auto_increment = field.Extra == "auto_increment"
+        local field_info = {
+            type = field_type,
+            is_required = not is_null,
+            is_primary = is_key,
+            is_auto_increment = is_auto_increment,
+            default = field.Default,
+            comment = field.Comment
+        }
+        config.fields[field_name] = field_info
+        table.insert(config.schema_order, field_name)
+        if not is_key then
+            config.non_primary_fields[field_name] = true
+        end
+    end
+    return config
+end
+
+local function export_to_file(all_configs)
+    local file = io.open("script/sql/table_schema.lua", "w")
+    if not file then return false end
+    file:write("-- 自动生成的表结构配置\n")
+    file:write("local config = {\n")
+    -- 表名排序
+    local table_names = {}
+    for table_name in pairs(all_configs) do table.insert(table_names, table_name) end
+    table.sort(table_names)
+    for _, table_name in ipairs(table_names) do
+        local config = all_configs[table_name]
+        file:write(string.format("    [\"%s\"] = {\n", table_name))
+        file:write(string.format("        table_name = \"%s\",\n", config.table_name))
+        -- 字段顺序严格按schema顺序
+        file:write("        fields = {\n")
+        for _, field_name in ipairs(config.schema_order) do
+            local field_info = config.fields[field_name]
+            file:write(string.format("            [\"%s\"] = {\n", field_name))
+            file:write(string.format("                type = \"%s\",\n", field_info.type))
+            file:write(string.format("                is_required = %s,\n", tostring(field_info.is_required)))
+            file:write(string.format("                is_primary = %s,\n", tostring(field_info.is_primary)))
+            file:write(string.format("                is_auto_increment = %s,\n", tostring(field_info.is_auto_increment)))
+            file:write(string.format("                default = %q,\n", tostring(field_info.default)))
+            file:write(string.format("                comment = %q,\n", tostring(field_info.comment)))
+            file:write("            },\n")
+        end
+        file:write("        },\n")
+        -- 主键顺序保持原顺序
+        file:write("        primary_keys = {\n")
+        for _, key in ipairs(config.primary_keys) do
+            file:write(string.format("            \"%s\",\n", key))
+        end
+        file:write("        },\n")
+        -- 索引按名字典序
+        file:write("        indexes = {\n")
+        local index_names = {}
+        for index_name in pairs(config.indexes) do table.insert(index_names, index_name) end
+        table.sort(index_names)
+        for _, index_name in ipairs(index_names) do
+            local index_info = config.indexes[index_name]
+            file:write(string.format("            [\"%s\"] = {\n", index_name))
+            file:write(string.format("                unique = %s,\n", tostring(index_info.unique)))
+            file:write("                columns = {\n")
+            for _, column in ipairs(index_info.columns) do
+                file:write(string.format("                    \"%s\",\n", column))
+            end
+            file:write("                },\n")
+            file:write("            },\n")
+        end
+        file:write("        },\n")
+        -- 非主键字段map按key排序
+        file:write("        non_primary_fields = {\n")
+        local npf_names = {}
+        for field in pairs(config.non_primary_fields) do table.insert(npf_names, field) end
+        table.sort(npf_names)
+        for _, field in ipairs(npf_names) do
+            file:write(string.format("            [\"%s\"] = true,\n", field))
+        end
+        file:write("        },\n")
+        file:write("    },\n")
+    end
+    file:write("}\n")
+    file:write("return config\n")
+    file:close()
+    return true
+end
+
+local function export_table_schema(table_name)
+    local db = get_connection(0)
+    if not db then return false end
+    local schema = get_table_schema(db, table_name)
+    local primary_keys = get_primary_keys(db, table_name)
+    local indexes = get_indexes(db, table_name)
+    local config = generate_table_config(table_name, schema, primary_keys, indexes)
+    local all_configs = { [table_name] = config }
+    return export_to_file(all_configs)
+end
+
+local function export_all_table_schema()
+    local db = get_connection(0)
+    if not db then return false end
+    local sql = string.format("SHOW TABLES FROM %s", DB_CONNECTION.database)
+    local result = db:query(sql)
+    if not result then return false end
+    local tables = {}
+    for _, row in ipairs(result) do
+        local table_name = row["Tables_in_" .. DB_CONNECTION.database]
+        table.insert(tables, table_name)
+    end
+    local all_configs = {}
+    for _, table_name in ipairs(tables) do
+        local schema = get_table_schema(db, table_name)
+        local primary_keys = get_primary_keys(db, table_name)
+        local indexes = get_indexes(db, table_name)
+        all_configs[table_name] = generate_table_config(table_name, schema, primary_keys, indexes)
+    end
+    return export_to_file(all_configs)
+end
+
 service_wrapper.create_service(function()
     skynet.name(".db", skynet.self())
     connect()
+    export_all_table_schema()
     if not id_generator then
         id_generator = IDGenerator.new()
     end

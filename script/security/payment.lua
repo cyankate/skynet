@@ -230,9 +230,6 @@ function payment.verify_notify(channel, notify_data)
         return encrypt.rsa_verify(encrypt.url_encode(notify_data), sign, channel_config.alipay_public_key)
     elseif channel == "wechat" then
         -- 微信通知验证
-        local sign = notify_data.sign
-        notify_data.sign = nil
-        
         return encrypt.verify_payment_sign(notify_data, channel_config.key, "md5")
     elseif channel == "appstore" then
         -- App Store通知验证

@@ -51,6 +51,7 @@ function guild_mgr.init()
     guild_mgr.save_timer_ = skynet.timeout(guild_mgr.save_interval_ * 100, function()
         guild_mgr.save_dirty_guilds()
     end)
+    log.info("guild_mgr init, guild_count: %d, gen_id: %d", tableUtils.table_size(guild_mgr.guilds_), guild_mgr.gen_id_)
 end
 
 -- 创建公会
@@ -278,7 +279,7 @@ end
 
 -- 保存需要保存的公会
 function guild_mgr.save_dirty_guilds()
-    for guild_id, guild in pairs(guild_mgr.guilds_) do
+    for _, guild in pairs(guild_mgr.guilds_) do
         if guild:is_dirty() then
             guild_mgr.save_guild(guild)
         end
@@ -306,10 +307,12 @@ function guild_mgr.delete_guild(_guild_id)
     if not guild then
         return
     end
-    local dbS = skynet.localname(".db")
-    skynet.call(dbS, "lua", "update", "guild", {id = _guild_id, is_deleted = 1})
     guild_mgr.guilds_[_guild_id] = nil
     guild_mgr.guild_names_[guild.name_] = nil
+    local dbS = skynet.localname(".db")
+    guild.is_deleted_ = 1
+    local data = guild:onsave()
+    skynet.call(dbS, "lua", "update", "guild", data)
 end
 -- 获取公会信息
 function guild_mgr.get_guild_info(_guild_id)
