@@ -39,11 +39,7 @@ end
 
 -- 主服务函数
 local function main()
-    
-    -- 注册服务名
-    skynet.register(".event")
-    
-    log.info("Event service started")
+
 end
 
 service_wrapper.create_service(main, {

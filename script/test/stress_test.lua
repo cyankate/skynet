@@ -10,6 +10,7 @@ local Client = require "stress_client"
 local ChatTest = require "chat_test"
 local PlayerTest = require "player_test"
 local FriendTest = require "friend_test"  -- 添加好友测试模块
+local MailTest = require "mail_test"  -- 添加邮件测试模块
 local Stats = require "stats"
 local new_socket = require "socket.core"
 
@@ -44,18 +45,21 @@ local config = {
     report_interval_ms = 10,   -- 定期报告间隔(秒)
     test_duration = 0,          -- 测试持续时间（秒），0表示无限制
     account_prefix = "test_user_", -- 账号前缀
-    total_clients = 50,         -- 总客户端数量
+    total_clients = 500,         -- 总客户端数量
     dynamic_schedule = false,    -- 是否启用动态调度
     schedule_interval = 10,     -- 调度间隔（秒）
     connect_interval_ms = 30,   -- 建立连接的间隔(毫秒)
     test_configs = {           -- 不同测试类型的配置
         chat = {
-            target_rps = 200    -- 目标每秒请求数
-        },
-        player = {
             target_rps = 100    -- 目标每秒请求数
         },
+        player = {
+            target_rps = 50    -- 目标每秒请求数
+        },
         friend = {             -- 添加好友测试配置
+            target_rps = 50     -- 目标每秒请求数
+        },
+        mail = {              -- 添加邮件测试配置
             target_rps = 50     -- 目标每秒请求数
         }
     }
@@ -69,6 +73,8 @@ local function create_test_instance(client, test_type, client_count)
         return PlayerTest.new(client, config.test_configs.player, client_count)
     elseif test_type == "friend" then
         return FriendTest.new(client, config.test_configs.friend, client_count)
+    elseif test_type == "mail" then
+        return MailTest.new(client, config.test_configs.mail, client_count)
     end
     return nil
 end
@@ -82,7 +88,7 @@ function Scheduler.new(config)
     self.config = config
     self.clients = {}  -- 所有客户端
     self.tests = {}    -- 所有测试实例
-    self.test_types = {"chat", "player", "friend"}  -- 添加friend测试类型
+    self.test_types = {"chat", "player", "friend", "mail"}  -- 添加mail测试类型
     
     -- 计算总RPS和每个测试类型的权重
     local total_rps = 0
@@ -221,6 +227,9 @@ local function parse_args()
         elseif arg_value == "--friend-rps" and i < #args then
             config.test_configs.friend.target_rps = tonumber(args[i+1]) or config.test_configs.friend.target_rps
             i = i + 2
+        elseif arg_value == "--mail-rps" and i < #args then
+            config.test_configs.mail.target_rps = tonumber(args[i+1]) or config.test_configs.mail.target_rps
+            i = i + 2
         elseif arg_value == "--duration" and i < #args then
             config.test_duration = tonumber(args[i+1]) or config.test_duration
             i = i + 2
@@ -252,6 +261,7 @@ local function main()
     stats:register_test_type("chat", config.test_configs.chat)
     stats:register_test_type("player", config.test_configs.player)
     stats:register_test_type("friend", config.test_configs.friend)
+    stats:register_test_type("mail", config.test_configs.mail)
     
     -- 创建调度器并初始化连接
     local scheduler = Scheduler.new(config)

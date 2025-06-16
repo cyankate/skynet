@@ -190,14 +190,13 @@ function channel_mgr.send_private_channel_message(player_id, to_player_id, conte
     channel_mgr.join_channel(channel_id, player_id, player_name)
     channel_mgr.join_channel(channel_id, to_player_id, to_player_name)
 
-    local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
-    private_channel_cache.data[to_player_id] = {id = channel_id}
-    channel_mgr.private_channel_cache:mark_dirty(player_id)
+    local pids = {player_id, to_player_id}
+    local caches = channel_mgr.private_channel_cache:batch_get(pids)
+    for player_id, cache in pairs(caches) do
+        cache.data[channel:get_other_player_id(player_id)] = {id = channel_id}
+        channel_mgr.private_channel_cache:mark_dirty(player_id)
+    end
 
-    local private_channel_cache = channel_mgr.private_channel_cache:get(to_player_id)
-    private_channel_cache.data[player_id] = {id = channel_id}
-    channel_mgr.private_channel_cache:mark_dirty(to_player_id)
-    
     return channel_mgr.send_channel_message(channel_id, player_id, content)
 end 
 
@@ -237,9 +236,7 @@ end
 
 function channel_mgr.on_player_login(player_id)
     local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
-    -- for to_player_id, v in pairs(private_channel_cache.data) do
-    --     channel_mgr.create_private_channel(player_id, to_player_id)
-    -- end
+
 end 
 
 function channel_mgr.on_player_logout(player_id)

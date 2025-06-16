@@ -14,33 +14,12 @@ local CACHE_CONFIG = {
 
 -- 初始化
 function private_cache:ctor()
-    base_cache.ctor(self, "private_cache")
+    base_cache.ctor(self, "private_cache", "player_private")
 end
 
 function private_cache:new_item(player_id)
     local obj = private_cache_item.new(player_id)
     return obj
-end
-
-function private_cache:db_load(player_id)
-    local dbS = skynet.localname(".db")
-    local data = skynet.call(dbS, "lua", "get_player_private_channel", player_id)
-    return data
-end
-
-function private_cache:db_create(player_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "create_player_private_channel", data)
-    return ret
-end
-
-
-function private_cache:db_update(player_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "update_player_private_channel", data)
-    return ret
 end
 
 return private_cache 

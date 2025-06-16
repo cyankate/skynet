@@ -1,277 +1,83 @@
 -- 自动生成的表结构配置
 local config = {
-    ["private_channel"] = {
-        table_name = "private_channel",
+    ["guild"] = {
+        table_name = "guild",
         fields = {
-            ["last_message_time"] = {
-                type = "int",
+            ["is_deleted"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "是否已删除:0=未删除,1=已删除",
+            },
+            ["applications"] = {
+                type = "text",
                 is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "申请列表JSON格式",
             },
-            ["channel_id"] = {
+            ["id"] = {
                 type = "bigint",
                 is_required = true,
                 is_primary = true,
-                is_auto_increment = false,
+                is_auto_increment = true,
                 default = "nil",
-                comment = "",
+                comment = "公会ID",
             },
-            ["player2_id"] = {
-                type = "bigint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["create_time"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["player1_id"] = {
-                type = "bigint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "channel_id",
-        },
-        indexes = {
-            ["idx_players"] = {
-                unique = true,
-                columns = {
-                    "player1_id",
-                    "player2_id",
-                },
-            },
-            ["idx_last_msg"] = {
-                unique = false,
-                columns = {
-                    "last_message_time",
-                },
-            },
-        },
-        non_primary_fields = {
-            ["last_message_time"] = true,
-            ["player1_id"] = true,
-            ["create_time"] = true,
-            ["player2_id"] = true,
-        },
-    },
-    ["player_odb"] = {
-        table_name = "player_odb",
-        fields = {
-            ["player_id"] = {
-                type = "int unsigned",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "玩家ID",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "离线玩家数据",
-            },
-            ["update_time"] = {
-                type = "timestamp",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "更新时间",
-            },
-        },
-        primary_keys = {
-            "player_id",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-            ["update_time"] = true,
-        },
-    },
-    ["player"] = {
-        table_name = "player",
-        fields = {
-            ["account_key"] = {
-                type = "varchar(20)",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["info"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["player_name"] = {
-                type = "varchar(20)",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["player_id"] = {
-                type = "int unsigned",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "玩家ID",
-            },
-            ["create_time"] = {
-                type = "timestamp",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "",
-            },
-            ["update_time"] = {
-                type = "timestamp",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "player_id",
-        },
-        indexes = {
-            ["fk_account_key"] = {
-                unique = false,
-                columns = {
-                    "account_key",
-                },
-            },
-        },
-        non_primary_fields = {
-            ["account_key"] = true,
-            ["player_name"] = true,
-            ["info"] = true,
-            ["create_time"] = true,
-            ["update_time"] = true,
-        },
-    },
-    ["bag"] = {
-        table_name = "bag",
-        fields = {
-            ["player_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["idx"] = {
+            ["name"] = {
                 type = "varchar(32)",
                 is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "子索引",
-            },
-        },
-        primary_keys = {
-            "player_id",
-            "idx",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-        },
-    },
-    ["player_private"] = {
-        table_name = "player_private",
-        fields = {
-            ["data"] = {
-                type = "text",
-                is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "公会名称",
             },
-            ["player_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "player_id",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-        },
-    },
-    ["base"] = {
-        table_name = "base",
-        fields = {
             ["data"] = {
                 type = "text",
                 is_required = false,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "公会数据",
             },
-            ["player_id"] = {
+            ["create_time"] = {
                 type = "int",
                 is_required = true,
-                is_primary = true,
+                is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "创建时间",
+            },
+            ["members"] = {
+                type = "text",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "成员列表JSON格式",
             },
         },
         primary_keys = {
-            "player_id",
+            "id",
         },
         indexes = {
+            ["uk_name"] = {
+                unique = true,
+                columns = {
+                    "name",
+                },
+            },
         },
         non_primary_fields = {
+            ["create_time"] = true,
+            ["is_deleted"] = true,
+            ["name"] = true,
             ["data"] = true,
+            ["members"] = true,
+            ["applications"] = true,
         },
     },
     ["friend"] = {
@@ -303,16 +109,448 @@ local config = {
             ["data"] = true,
         },
     },
-    ["account"] = {
-        table_name = "account",
+    ["channel"] = {
+        table_name = "channel",
         fields = {
-            ["last_login_ip"] = {
-                type = "varchar(16)",
+            ["channel_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["messages"] = {
+                type = "text",
                 is_required = false,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "最后登录IP",
+                comment = "",
+            },
+            ["update_time"] = {
+                type = "int",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "channel_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["messages"] = true,
+            ["update_time"] = true,
+        },
+    },
+    ["base"] = {
+        table_name = "base",
+        fields = {
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
+    ["private_channel"] = {
+        table_name = "private_channel",
+        fields = {
+            ["player2_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["create_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["player1_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["last_message_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["channel_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "channel_id",
+        },
+        indexes = {
+            ["idx_players"] = {
+                unique = true,
+                columns = {
+                    "player1_id",
+                    "player2_id",
+                },
+            },
+            ["idx_last_msg"] = {
+                unique = false,
+                columns = {
+                    "last_message_time",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["create_time"] = true,
+            ["player2_id"] = true,
+            ["last_message_time"] = true,
+            ["player1_id"] = true,
+        },
+    },
+    ["mail"] = {
+        table_name = "mail",
+        fields = {
+            ["status"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "邮件状态:0=未读,1=已读",
+            },
+            ["expire_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "过期时间",
+            },
+            ["sender_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "发送者ID,0表示系统邮件",
+            },
+            ["id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "自增ID",
+            },
+            ["mail_id"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件ID",
+            },
+            ["mail_type"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件类型:1=系统邮件,2=玩家邮件,3=公会邮件,4=系统奖励邮件,5=全局邮件",
+            },
+            ["items"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "附件JSON格式",
+            },
+            ["title"] = {
+                type = "varchar(50)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件标题",
+            },
+            ["receiver_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "接收者ID",
+            },
+            ["create_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "创建时间",
+            },
+            ["is_deleted"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "是否已删除:0=未删除,1=已删除",
+            },
+            ["content"] = {
+                type = "varchar(1000)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件内容",
+            },
+            ["items_status"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "附件是否已领取:0=未领取,1=已领取",
+            },
+        },
+        primary_keys = {
+            "id",
+        },
+        indexes = {
+            ["idx_expire_time"] = {
+                unique = false,
+                columns = {
+                    "expire_time",
+                },
+            },
+            ["idx_receiver_id"] = {
+                unique = false,
+                columns = {
+                    "receiver_id",
+                },
+            },
+            ["idx_mail_id"] = {
+                unique = true,
+                columns = {
+                    "mail_id",
+                },
+            },
+            ["idx_create_time"] = {
+                unique = false,
+                columns = {
+                    "create_time",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["status"] = true,
+            ["expire_time"] = true,
+            ["sender_id"] = true,
+            ["mail_id"] = true,
+            ["mail_type"] = true,
+            ["items"] = true,
+            ["title"] = true,
+            ["receiver_id"] = true,
+            ["create_time"] = true,
+            ["is_deleted"] = true,
+            ["items_status"] = true,
+            ["content"] = true,
+        },
+    },
+    ["ranking"] = {
+        table_name = "ranking",
+        fields = {
+            ["name"] = {
+                type = "varchar(32)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "排行榜名称",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "排行榜数据",
+            },
+        },
+        primary_keys = {
+            "name",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
+    ["global_mail"] = {
+        table_name = "global_mail",
+        fields = {
+            ["title"] = {
+                type = "varchar(50)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件标题",
+            },
+            ["expire_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "过期时间",
+            },
+            ["create_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "创建时间",
+            },
+            ["mail_id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "邮件ID",
+            },
+            ["mail_type"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件类型:5=全局邮件",
+            },
+            ["content"] = {
+                type = "varchar(1000)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "邮件内容",
+            },
+            ["items"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "附件JSON格式",
+            },
+        },
+        primary_keys = {
+            "mail_id",
+        },
+        indexes = {
+            ["idx_expire_time"] = {
+                unique = false,
+                columns = {
+                    "expire_time",
+                },
+            },
+            ["idx_create_time"] = {
+                unique = false,
+                columns = {
+                    "create_time",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["title"] = true,
+            ["expire_time"] = true,
+            ["create_time"] = true,
+            ["mail_type"] = true,
+            ["content"] = true,
+            ["items"] = true,
+        },
+    },
+    ["player_private"] = {
+        table_name = "player_private",
+        fields = {
+            ["data"] = {
+                type = "text",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
+    ["account"] = {
+        table_name = "account",
+        fields = {
+            ["last_login_time"] = {
+                type = "datetime",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "最后登录时间",
             },
             ["register_time"] = {
                 type = "datetime",
@@ -322,13 +560,13 @@ local config = {
                 default = "nil",
                 comment = "注册时间",
             },
-            ["device_id"] = {
-                type = "varchar(32)",
+            ["last_login_ip"] = {
+                type = "varchar(16)",
                 is_required = false,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "设备ID",
+                comment = "最后登录IP",
             },
             ["register_ip"] = {
                 type = "varchar(16)",
@@ -338,6 +576,14 @@ local config = {
                 default = "nil",
                 comment = "注册IP",
             },
+            ["device_id"] = {
+                type = "varchar(32)",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "设备ID",
+            },
             ["account_key"] = {
                 type = "varchar(20)",
                 is_required = true,
@@ -345,14 +591,6 @@ local config = {
                 is_auto_increment = false,
                 default = "nil",
                 comment = "",
-            },
-            ["last_login_time"] = {
-                type = "datetime",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "最后登录时间",
             },
             ["players"] = {
                 type = "text",
@@ -389,183 +627,17 @@ local config = {
             },
         },
         non_primary_fields = {
+            ["last_login_time"] = true,
             ["last_login_ip"] = true,
-            ["device_id"] = true,
             ["register_time"] = true,
             ["register_ip"] = true,
-            ["last_login_time"] = true,
-            ["players"] = true,
             ["account_id"] = true,
+            ["players"] = true,
+            ["device_id"] = true,
         },
     },
-    ["channel"] = {
-        table_name = "channel",
-        fields = {
-            ["update_time"] = {
-                type = "int",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["channel_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["messages"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "channel_id",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["update_time"] = true,
-            ["messages"] = true,
-        },
-    },
-    ["mail"] = {
-        table_name = "mail",
-        fields = {
-            ["expire_time"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "过期时间",
-            },
-            ["attachments"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "附件JSON格式",
-            },
-            ["mail_type"] = {
-                type = "tinyint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "邮件类型:1=系统邮件,2=玩家邮件,3=公会邮件,4=系统奖励邮件",
-            },
-            ["receiver_id"] = {
-                type = "bigint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "接收者ID",
-            },
-            ["id"] = {
-                type = "bigint",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = true,
-                default = "nil",
-                comment = "邮件ID",
-            },
-            ["status"] = {
-                type = "tinyint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "0",
-                comment = "邮件状态:0=未读,1=已读,2=已删除",
-            },
-            ["sender_id"] = {
-                type = "bigint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "0",
-                comment = "发送者ID,0表示系统邮件",
-            },
-            ["attachments_claimed"] = {
-                type = "tinyint",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "0",
-                comment = "附件是否已领取:0=未领取,1=已领取",
-            },
-            ["create_time"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "创建时间",
-            },
-            ["title"] = {
-                type = "varchar(50)",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "邮件标题",
-            },
-            ["content"] = {
-                type = "varchar(1000)",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "邮件内容",
-            },
-        },
-        primary_keys = {
-            "id",
-        },
-        indexes = {
-            ["idx_receiver_id"] = {
-                unique = false,
-                columns = {
-                    "receiver_id",
-                },
-            },
-            ["idx_create_time"] = {
-                unique = false,
-                columns = {
-                    "create_time",
-                },
-            },
-            ["idx_expire_time"] = {
-                unique = false,
-                columns = {
-                    "expire_time",
-                },
-            },
-        },
-        non_primary_fields = {
-            ["expire_time"] = true,
-            ["attachments"] = true,
-            ["mail_type"] = true,
-            ["receiver_id"] = true,
-            ["status"] = true,
-            ["sender_id"] = true,
-            ["attachments_claimed"] = true,
-            ["create_time"] = true,
-            ["title"] = true,
-            ["content"] = true,
-        },
-    },
-    ["ranking"] = {
-        table_name = "ranking",
+    ["player_odb"] = {
+        table_name = "player_odb",
         fields = {
             ["data"] = {
                 type = "text",
@@ -573,19 +645,137 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "排行榜数据",
+                comment = "离线玩家数据",
             },
-            ["name"] = {
+            ["update_time"] = {
+                type = "timestamp",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "更新时间",
+            },
+            ["player_id"] = {
+                type = "int unsigned",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["update_time"] = true,
+            ["data"] = true,
+        },
+    },
+    ["player"] = {
+        table_name = "player",
+        fields = {
+            ["player_name"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["update_time"] = {
+                type = "timestamp",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "",
+            },
+            ["create_time"] = {
+                type = "timestamp",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "",
+            },
+            ["info"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["account_key"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["player_id"] = {
+                type = "int unsigned",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+            ["fk_account_key"] = {
+                unique = false,
+                columns = {
+                    "account_key",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["player_name"] = true,
+            ["update_time"] = true,
+            ["create_time"] = true,
+            ["info"] = true,
+            ["account_key"] = true,
+        },
+    },
+    ["bag"] = {
+        table_name = "bag",
+        fields = {
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["idx"] = {
                 type = "varchar(32)",
                 is_required = true,
                 is_primary = true,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "排行榜名称",
+                comment = "子索引",
+            },
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
             },
         },
         primary_keys = {
-            "name",
+            "player_id",
+            "idx",
         },
         indexes = {
         },

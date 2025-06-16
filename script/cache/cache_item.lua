@@ -2,9 +2,13 @@ local skynet = require "skynet"
 
 local cache_item = class("cache_item")
 
-function cache_item:ctor()
-
+function cache_item:ctor(_key)
+    self.key = _key
 end
+
+function cache_item:get_key()
+    return self.key
+end 
 
 function cache_item:onsave()
     return {}

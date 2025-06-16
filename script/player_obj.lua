@@ -2,7 +2,6 @@
 local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
-local mail_cache = require "cache.mail_cache"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -12,7 +11,6 @@ function Player:ctor(_player_id, _player_data)
     self.ctns_ = {} -- 存储容器对象
     self.ctn_loading_ = {} -- 正在加载的容器
     self.loaded_ = false 
-    self.mail_cache_ = nil
 end
 
 function Player:on_loaded()
@@ -20,8 +18,6 @@ function Player:on_loaded()
     log.info(string.format("Player %s on_loaded successfully", self.player_id_))
     -- 例如通知其他服务，或者进行一些初始化操作
     self.loaded_ = true 
-
-    self.mail_cache_ = mail_cache.new()
 
     local rankS = skynet.localname(".rank")
     skynet.send(rankS, "lua", "update_rank", "score", {

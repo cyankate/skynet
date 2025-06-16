@@ -3,7 +3,7 @@ local cache_item = require "cache.cache_item"
 local private_cache_item = class("private_cache_item", cache_item)
 
 function private_cache_item:ctor(player_id)
-    cache_item.ctor(self)
+    cache_item.ctor(self, player_id)
     self.player_id = player_id
     self.data = {}
 end

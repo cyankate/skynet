@@ -159,6 +159,9 @@ function on_player_loaded(player_id)
     local loginS = skynet.localname(".login")
     skynet.send(loginS, "lua", "account_loaded", player.account_key_)
     
+    local registerS = skynet.localname(".register")
+    skynet.send(registerS, "lua", "register", player_id, skynet.self())
+    
     -- 触发登录事件
     handle_login(player)
     -- 下发玩家数据
@@ -326,6 +329,9 @@ function CMD.disconnect(account_key)
         accounts[account_key] = nil
         logout_timers[account_key] = nil
         user_mgr.del_player_obj(account.player_id)
+
+        local registerS = skynet.localname(".register")
+        skynet.send(registerS, "lua", "unregister", account.player_id)
     end)
     
     log.debug(string.format("Set exit timer for player %s, will be removed in 3 minutes if not reconnected", account.player_id))

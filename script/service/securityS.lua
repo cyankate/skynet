@@ -182,13 +182,8 @@ function CMD.update_config(config)
 end
 
 local function main()
-    log.info("Security service started")
-    
     -- 初始化配置
     init_config()
-    
-    -- 注册服务
-    skynet.register(".security")
 end 
 
 service_wrapper.create_service(main, {

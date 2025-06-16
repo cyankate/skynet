@@ -99,17 +99,13 @@ function M.wrap_service(startup_func, options)
         -- 设置统一的消息处理函数
         skynet.dispatch("lua", message_handler)
 
-        -- skynet.info_func(function()
-        --     log.info("service:%s, info:%s", options.name, options.info)
-        -- end)
-
+        -- 调用原始启动函数
+        startup_func()
         -- 设置服务名
         if options.name then
             skynet.name("." .. options.name, skynet.self())
+            log.info("service:%s started", options.name)
         end
-
-        -- 调用原始启动函数
-        startup_func()
         -- 尝试注册到热更新服务
         if options.register_hotfix ~= false and options.name then -- 默认启用
             skynet.timeout(100, function() -- 稍微延迟，确保服务完全初始化

@@ -171,17 +171,8 @@ end
 local function main()
     -- 初始化聊天服务
     CMD.init()
-    
-    -- 注册服务名
-    skynet.register(".chat")
-    
-    log.info("Chat service started %s", skynet.self())
 end
 
 service_wrapper.create_service(main, {
     name = "chat",
-    custom_stats = function()
-        tableUtils.print_table(channel_mgr.cache:get_stats())
-        tableUtils.print_table(channel_mgr.private_channel_cache:get_stats())
-    end
 })

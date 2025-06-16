@@ -4,7 +4,7 @@ local cache_item = require "cache.cache_item"
 local player_cache_item = class("player_cache_item", cache_item)
 
 function player_cache_item:ctor(player_id)
-    cache_item.ctor(self)
+    cache_item.ctor(self, player_id)
     self.player_id = player_id
     self.name = ""           -- 玩家名称
     self.level = 1           -- 玩家等级

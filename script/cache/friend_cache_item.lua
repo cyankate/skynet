@@ -4,7 +4,7 @@ local cache_item = require "cache.cache_item"
 local friend_cache_item = class("friend_cache_item", cache_item)
 
 function friend_cache_item:ctor(player_id)
-    cache_item.ctor(self)
+    cache_item.ctor(self, player_id)
     self.player_id = player_id
     self.friend_map = {}  -- 好友列表
     self.apply_map = {}   -- 好友申请列表
@@ -13,22 +13,25 @@ function friend_cache_item:ctor(player_id)
 end
 
 function friend_cache_item:onsave()
-    local data = {
-        player_id = self.player_id,
+    local ret = {}
+    ret.player_id = self.player_id
+    ret.data = {
         friend_map = self.friend_map,
         apply_map = self.apply_map,
         black_list = self.black_list,
         friend_info = self.friend_info
     }
-    return data
+    return ret
 end
 
-function friend_cache_item:onload(data)
-    self.player_id = data.player_id
-    self.friend_map = data.friend_map or {}
-    self.apply_map = data.apply_map or {}
-    self.black_list = data.black_list or {}
-    self.friend_info = data.friend_info or {}
+function friend_cache_item:onload(ret)
+    self.player_id = ret.player_id
+    if ret.data then
+        self.friend_map = ret.data.friend_map or {}
+        self.apply_map = ret.data.apply_map or {}
+        self.black_list = ret.data.black_list or {}
+        self.friend_info = ret.data.friend_info or {}
+    end
 end
 
 -- 添加好友

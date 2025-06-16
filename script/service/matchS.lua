@@ -111,11 +111,8 @@ end
 
 local function main()
     CMD.init()
-    skynet.register(".match")
-    log.info("match service started %s", skynet.self())
 end
 
 service_wrapper.create_service(main, {
     name = "match",
-    register_hotfix = false,
 })

@@ -654,6 +654,55 @@ function on_get_application_list(_player_id, _msg)
     return true
 end
 
+-- 邮件相关消息处理
+function on_get_mail_list(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "get_mail_list", _player_id, _msg.page, _msg.page_size)
+end
+
+function on_get_mail_detail(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "get_mail_detail", _player_id, _msg.mail_id)
+end
+
+function on_claim_items(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "claim_items", _player_id, _msg.mail_id)
+end
+
+function on_delete_mail(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "delete_mail", _player_id, _msg.mail_id)
+end
+
+function on_send_player_mail(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "send_player_mail", _player_id, _msg.receiver_id, _msg.title, _msg.content, _msg.items)
+end
+
+function on_mark_mail_read(_player_id, _msg)
+    local mailS = skynet.localname(".mail")
+    if not mailS then
+        return false, "Mail service not available"
+    end
+    return skynet.call(mailS, "lua", "mark_mail_read", _player_id, _msg.mail_id)
+end
+
 local handle = {
     ["add_item"] = on_add_item,
     ["change_name"] = on_change_name,
@@ -706,6 +755,12 @@ local handle = {
     ["get_guild_info"] = on_get_guild_info,
     ["get_guild_list"] = on_get_guild_list,
     ["get_application_list"] = on_get_application_list,
+    ["get_mail_list"] = on_get_mail_list,
+    ["get_mail_detail"] = on_get_mail_detail,
+    ["claim_items"] = on_claim_items,
+    ["delete_mail"] = on_delete_mail,
+    ["send_player_mail"] = on_send_player_mail,
+    ["mark_mail_read"] = on_mark_mail_read,
 }
 
 return handle

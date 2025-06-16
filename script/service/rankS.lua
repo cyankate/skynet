@@ -286,10 +286,6 @@ function CMD.shutdown()
 end
 
 local function main()
-    log.info("Rank module started")
-
-    skynet.register(".rank")
-
     local eventS = skynet.localname(".event")
     -- 监听玩家登录事件
     skynet.call(eventS, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())

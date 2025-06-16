@@ -914,8 +914,6 @@ local function start_http_server()
             end
         end
     }
-
-    skynet.register(".http")
 end
 
 -- 启动服务

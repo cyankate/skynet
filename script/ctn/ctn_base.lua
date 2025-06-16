@@ -13,7 +13,7 @@ local CONTAINER_STATE = {
 }
 
 function ctn_base:ctor(_owner, _name)
-    self.owner_ = _owner -- 容器所属的玩家对象
+    self.owner_ = _owner -- 容器所属的玩家id
     self.name_ = _name or "noname" -- 容器名称
     self.data_ = {}     -- 容器内的数据
     self.state_ = CONTAINER_STATE.UNLOADED -- 容器状态

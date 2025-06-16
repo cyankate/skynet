@@ -412,13 +412,8 @@ function CMD.manual_deliver(order_id, admin_id)
 end
 
 local function main()
-    log.info("Payment service started")
-    
     -- 初始化
     init()
-    
-    -- 注册服务
-    skynet.register(".payment")
 end
 
 service_wrapper.create_service(main, {

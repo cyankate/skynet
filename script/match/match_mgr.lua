@@ -19,7 +19,6 @@ match_mgr.next_room_id = 1  -- 下一个房间ID
 
 -- 初始化
 function match_mgr.init()
-    log.info("match manager init")
     -- 清空所有状态
     match_mgr.rooms = {}
     match_mgr.player_rooms = {}

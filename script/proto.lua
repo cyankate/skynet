@@ -277,6 +277,52 @@ mahjong_cancel_match 360 {
 	request {
 	}
 }
+
+
+get_mail_list 380 {
+	request {
+		page 0 : integer
+		page_size 1 : integer
+	}
+}
+
+get_mail_detail 381 {
+	request {
+		mail_id 0 : string
+	}
+}
+
+claim_items 382 {
+	request {
+		mail_id 0 : string
+	}
+}
+
+delete_mail 383 {
+	request {
+		mail_id 0 : string
+	}
+}
+
+.item_info {
+    item_id 0 : integer
+    count 1 : integer
+}
+
+send_player_mail 384 {
+	request {
+		receiver_id 0 : integer
+		title 1 : string
+		content 2 : string
+		items 3 : *item_info  
+	}
+}
+
+mark_mail_read 385 {
+	request {
+		mail_id 0 : string
+	}
+}
 ]]
 
 proto.s2c = sprotoparser.parse [[
@@ -645,6 +691,82 @@ landlord_game_state_notify 317 {
         current_player 6 : integer # 当前出牌玩家
         last_cards 7 : *string     # 上一次出的牌
         last_player 8 : integer    # 上一次出牌的玩家
+    }
+}
+
+.mail_info {
+    mail_id 0 : string
+    title 1 : string
+    content 2 : string
+    sender_id 3 : integer
+    mail_type 4 : integer      # 邮件类型:1=系统邮件,2=玩家邮件,3=公会邮件,4=系统奖励邮件,5=全局邮件
+    create_time 5 : integer
+    expire_time 6 : integer
+    status 7 : integer         # 邮件状态:0=未读,1=已读
+    items_status 8 : integer   # 附件状态:0=未领取,1=已领取
+    items 9 : *item_info      # 附件
+}
+
+.item_info {
+    item_id 0 : integer
+    count 1 : integer
+}
+
+mail_list_response 330 {
+    request {
+        result 0 : integer
+        mails 1 : *mail_info
+        unread_count 2 : integer
+        has_more 3 : boolean
+        total_count 4 : integer
+    }
+}
+
+mail_detail_response 331 {
+    request {
+        result 0 : integer
+        mail 1 : mail_info
+    }
+}
+
+claim_items_response 332 {
+    request {
+        result 0 : integer
+        message 1 : string
+    }
+}
+
+delete_mail_response 333 {
+    request {
+        result 0 : integer
+        message 1 : string
+    }
+}
+
+send_mail_response 334 {
+    request {
+        result 0 : integer
+        message 1 : string
+        mail_id 2 : string
+    }
+}
+
+mark_mail_read_response 335 {
+    request {
+        result 0 : integer
+        message 1 : string
+    }
+}
+
+new_mail_notify 336 {
+    request {
+        mail 0 : mail_info
+    }
+}
+
+mail_expired_notify 337 {
+    request {
+        mail_ids 0 : *string
     }
 }
 ]]

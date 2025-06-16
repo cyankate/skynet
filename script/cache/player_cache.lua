@@ -14,34 +14,13 @@ local CACHE_CONFIG = {
 }
 
 function player_cache:ctor()
-    self.super.ctor(self, "player_cache")
+    self.super.ctor(self, "player_cache", "player_odb")
 end
 
 -- 创建新的缓存项
 function player_cache:new_item(player_id)
     local obj = player_cache_item.new(player_id)
     return obj
-end
-
-function player_cache:db_load(player_id)
-    local dbS = skynet.localname(".db")
-    local data = skynet.call(dbS, "lua", "get_player_odb", player_id)
-    return data
-end
-
-
-function player_cache:db_create(player_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "create_player_odb", player_id, data)
-    return ret
-end
-
-function player_cache:db_update(player_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "update_player_odb", player_id, data)
-    return ret
 end
 
 -- 更新玩家信息

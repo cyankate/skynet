@@ -324,13 +324,8 @@ end
 
 -- 服务主函数
 local function main()
-    log.info("Hotfix service started")
-    
     -- 初始化模块列表
     init_modules()
-    
-    -- 注册服务
-    skynet.name(".hotfix", skynet.self())
 end
 
 service_wrapper.create_service(main, {

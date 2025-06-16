@@ -344,7 +344,7 @@ function rank_base:save()
             end
         else
             local ret = skynet.call(dbc, "lua", "insert", "ranking", values)
-            if ret and ret.insert_id then
+            if ret then
                 self.inserted_ = true
             else
                 log.error(string.format("[rank_base] Failed to insert rank data for rank: %s", self.name_))

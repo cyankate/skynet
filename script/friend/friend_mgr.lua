@@ -211,17 +211,12 @@ end
 
 -- 玩家登录处理
 function friend_mgr.on_player_login(player_id)
-    -- 加载玩家好友数据
-    friend_mgr.cache:get(player_id)
+
 end
 
 -- 玩家登出处理
 function friend_mgr.on_player_logout(player_id)
-    -- 保存玩家好友数据
-    local data = friend_mgr.cache:get(player_id)
-    if data then
-        friend_mgr.cache:save(player_id, data)
-    end
+
 end
 
 -- 初始化管理器

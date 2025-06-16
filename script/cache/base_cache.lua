@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local log = require "log"
 local class = require "utils.class"
 local common = require "utils.common"
+local table_schema = require "sql.table_schema"
 
 -- 基础缓存管理类
 local base_cache = class("base_cache")
@@ -13,10 +14,11 @@ local DB_OPTS = {
 }
 
 -- 构造函数
-function base_cache:ctor(name, config)
+function base_cache:ctor(name, tbl_name, config)
     self.name = name
-    self.config = config or {
-        max_size = 500,           -- 最大缓存条目数
+    self.tbl_name = tbl_name
+    self.config = {
+        max_size = 1000,           -- 最大缓存条目数
         load_timeout = 10,         -- 加载超时时间（秒）
         stats_window = 60,       -- 访问统计窗口（秒）
         min_decay_rate = 0.01,    -- 最小衰减速率
@@ -44,6 +46,9 @@ function base_cache:ctor(name, config)
             },
         }
     }
+    for k, v in pairs(config or {}) do
+        self.config[k] = v
+    end
     self.cache = {}              -- 缓存数据 {key = {obj = xxx, score = xxx, create_time = xxx}}
     self.size = 0                -- 当前缓存大小
     self.cleanup_running = false -- 清理是否正在运行
@@ -259,7 +264,7 @@ function base_cache:get(key)
             if result then
                 self:set(key, result)
             else 
-                log.error("[%s] load_item failed for key: %s", self.name, key)  
+                log.error("[%s] get_from_redis failed for key: %s", self.name, key)  
             end
             self:release_load(key)
         else
@@ -288,7 +293,7 @@ function base_cache:get_from_redis(key)
     else 
         log.error("[%s] redis is not running", self.name)
     end 
-    return self:load_item(key)
+    return self:load_item({key})[key]
 end
 
 function base_cache:set_to_redis(key, obj)
@@ -306,19 +311,24 @@ function base_cache:new_item(key)
     return nil
 end
 
-function base_cache:load_item(key)
-    local data = self:db_load(key)
-    local obj = self:new_item(key)
-    if not obj then 
-        log.error("[%s] new_item failed for key: %s", self.name, key)
-        return 
+function base_cache:load_item(keys)
+    local datas = self:batch_load(keys)
+    local results = {}
+    for _, key in pairs(keys) do
+        local data = datas[key]
+        local obj = self:new_item(key)
+        if not obj then 
+            log.error("[%s] new_item failed for key: %s", self.name, key)
+            return 
+        end 
+        if data then
+            obj:onload(data)
+        else
+            self.insert_keys[key] = true
+        end
+        results[key] = obj
     end 
-    if data then
-        obj:onload(data)
-    else
-        self.insert_keys[key] = true
-    end
-    return obj
+    return results
 end
 
 -- 设置缓存项
@@ -338,7 +348,7 @@ function base_cache:get_from_cache(keys)
     
     for _, key in ipairs(keys) do
         if type(key) ~= "string" and type(key) ~= "number" then
-            log.error(string.format("[%s] invalid key type in batch_get: %s", self.name, type(key)))
+            log.error(string.format("[%s] invalid key type in get_from_cache: %s", self.name, type(key)))
             goto continue
         end
         
@@ -443,11 +453,9 @@ function base_cache:batch_load_from_db(keys)
     local results = {}
     local loaded = {}
     
+    local objs = self:load_item(keys)
     for _, key in ipairs(keys) do
-        local obj = self:load_item(key)
-        if obj then
-            loaded[key] = obj
-        end
+        loaded[key] = objs[key]
     end
     
     -- 批量设置到缓存
@@ -507,9 +515,6 @@ function base_cache:batch_get(keys)
         for k, v in pairs(redis_results) do
             results[k] = v
         end
-        if tableUtils.table_size(redis_results) ~= #loading_keys then
-            log.error("batch_get, load redis fail")
-        end 
         
         -- 3.2 对Redis未命中的key从DB加载
         if #unloaded_keys > 0 then
@@ -517,7 +522,7 @@ function base_cache:batch_get(keys)
             -- 合并DB的结果
             for k, v in pairs(db_results) do
                 results[k] = v
-            end
+            end 
             if tableUtils.table_size(db_results) ~= #unloaded_keys then
                 log.error("batch_get, load db fail")
             end
@@ -532,6 +537,9 @@ function base_cache:batch_get(keys)
     -- 4. 最后等待其他正在加载的key
     if #waiting_keys > 0 then
         results = self:wait_for_loading(waiting_keys, results)
+    end
+    if tableUtils.table_size(results) ~= #keys then
+        log.error("batch_get, load fail")
     end
     return results
 end
@@ -581,57 +589,103 @@ function base_cache:is_dirty(key)
 end
 
 function base_cache:save_all()
+    local objs = {}
     for key, item in pairs(self.cache) do
-        if type(key) ~= "number" and type(key) ~= "string" then
-           log.error(string.format("[%s] save_all key is not a number or string: %s", self.name, key))
-        end
         if self:is_dirty(key) then
-            self:save_item(key, item)
+            objs[key] = item.obj
+        end
+    end
+    local batch_size = 20
+    local total_count = tableUtils.table_size(objs)
+    local count = 0
+    for _, obj in pairs(objs) do
+        count = count + 1
+        if count % batch_size == 0 or count == total_count then
+            self:batch_save(objs)
+            objs = {}
         end
     end
 end
 
-function base_cache:save_item(key, item)
-    local obj = item.obj
-    self:save(key, obj)
-end
-
-function base_cache:save(key, obj)
-    local ret 
-    local num = self.dirty_keys[key]
-    if self.insert_keys[key] then
-        if self.db_inserting[key] then  
+function base_cache:batch_save(objs)
+    local insert_objs = {}
+    local update_objs = {}
+    for key, obj in pairs(objs) do
+        if self.insert_keys[key] then
+            if not self.db_inserting[key] then
+                table.insert(insert_objs, obj)
+            end 
+        elseif self.dirty_keys[key] then
+            table.insert(update_objs, obj)
+        end
+    end
+    if #insert_objs > 0 then
+        local ret = self:batch_insert(insert_objs)
+        if not ret then
+            log.error(string.format("[%s] batch_save insert failed", self.name))
             return false
         end
-        self.db_inserting[key] = true 
-        ret = self:db_create(key, obj)
-        if ret then
-            self.db_inserting[key] = nil
-            self.insert_keys[key] = nil
+        for _, obj in ipairs(insert_objs) do
+            self.insert_keys[obj:get_key()] = nil
+            self.db_inserting[obj:get_key()] = nil
         end
-        return ret
-    elseif self.dirty_keys[key] then
-        ret = self:db_update(key, obj)
     end
-    if ret and num == self.dirty_keys[key] then
-        self.dirty_keys[key] = nil
+    if #update_objs > 0 then
+        local ret = self:batch_update(update_objs)
+        if not ret then
+            log.error(string.format("[%s] batch_save update failed", self.name))
+            return false
+        end
+        for _, obj in ipairs(update_objs) do
+            self.dirty_keys[obj:get_key()] = nil
+        end
     end
     return true
 end
 
 --override
-function base_cache:db_load(key)
-    return nil
+function base_cache:batch_load(keys)
+    local dbS = skynet.localname(".db")
+    local struct = table_schema[self.tbl_name]
+    local primary_key = struct.primary_keys[1]
+    local ret = skynet.call(dbS, "lua", "select", self.tbl_name, {
+        [primary_key] = keys,
+    })
+    local rows = {}
+    for _, v in pairs(ret) do 
+        rows[v[primary_key]] = v
+    end 
+    local datas = {}
+    for _, key in ipairs(keys) do
+        if rows[key] then
+            datas[key] = rows[key]
+        end
+    end
+    return datas
 end
 
 --override
-function base_cache:db_update(key, obj)
-
+function base_cache:batch_update(objs)
+    local dbS = skynet.localname(".db")
+    local data_list = {}
+    for _, obj in pairs(objs) do
+        local data = obj:onsave()
+        table.insert(data_list, data)
+    end
+    local ret = skynet.call(dbS, "lua", "batch_update", self.tbl_name, data_list)
+    return ret
 end
 
 --override
-function base_cache:db_create(key, obj)
-    
+function base_cache:batch_insert(objs)
+    local dbS = skynet.localname(".db")
+    local data_list = {}
+    for _, obj in pairs(objs) do
+        local data = obj:onsave()
+        table.insert(data_list, data)
+    end
+    local ret = skynet.call(dbS, "lua", "batch_insert", self.tbl_name, data_list)
+    return ret
 end
 
 function base_cache:tick()
@@ -665,8 +719,19 @@ function base_cache:cleanup()
     end
     
     -- 执行删除
+    local batch_size = 20
+    local count = 0
+    local save_objs = {}
     for _, key in ipairs(to_delete) do
-        self:remove(key)
+        local item = self.cache[key]
+        self.cache[key] = nil
+        self.size = self.size - 1
+        count = count + 1
+        save_objs[key] = item.obj
+        if count % batch_size == 0 or count == #to_delete then
+            self:batch_save(save_objs)
+            save_objs = {}
+        end
     end
     
     self.cleanup_running = false
@@ -680,9 +745,6 @@ function base_cache:remove(key)
     end
     self.cache[key] = nil
     self.size = self.size - 1
-    if self:is_dirty(key) then
-        self:save_item(key, item)
-    end
 end
 
 -- 清空缓存

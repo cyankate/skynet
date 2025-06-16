@@ -14,7 +14,7 @@ local CACHE_CONFIG = {
 
 -- 初始化
 function chat_cache:ctor()
-    base_cache.ctor(self, "chat_cache")
+    base_cache.ctor(self, "chat_cache", "channel")
 end
 
 function chat_cache:get_channel_messages(channel_id, count)
@@ -50,27 +50,6 @@ end
 function chat_cache:new_item(channel_id)
     local obj = chat_cache_item.new(channel_id)
     return obj
-end
-
-function chat_cache:db_load(channel_id)
-    local dbS = skynet.localname(".db")
-    local data = skynet.call(dbS, "lua", "get_channel_data", channel_id)
-    return data
-end
-
-function chat_cache:db_create(channel_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "create_channel_data", data)
-    return ret
-end
-
-
-function chat_cache:db_update(channel_id, obj)
-    local dbS = skynet.localname(".db")
-    local data = obj:onsave()
-    local ret = skynet.call(dbS, "lua", "save_channel_data", data)
-    return ret
 end
 
 return chat_cache 

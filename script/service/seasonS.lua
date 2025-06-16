@@ -144,19 +144,13 @@ function season.get_current_stage()
     return current_stage
 end
 
--- 启动服务
-skynet.start(function()
+local function main()
     -- 初始化赛季
     init_season()
-    
-    skynet.dispatch("lua", function(session, source, cmd, ...)
-        local f = season[cmd]
-        if f then
-            skynet.ret(skynet.pack(f(...)))
-        else
-            log.error("Unknown command:", cmd)
-        end
-    end)
-end)
+end
+
+service_wrapper.create_service(main, {
+    name = "season",
+})
 
 return season

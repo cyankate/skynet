@@ -75,11 +75,6 @@ end
 local function main()
     -- 初始化好友服务
     CMD.init()
-    
-    -- 注册服务名
-    skynet.register(".friend")
-    
-    log.info("Friend service started %s", skynet.self())
 end
 
 service_wrapper.create_service(main, {
