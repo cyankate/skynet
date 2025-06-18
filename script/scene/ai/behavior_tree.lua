@@ -172,12 +172,12 @@ end
 return {
     Status = BTStatus,
     Node = BTNode,
-    Composite = BTComposite,
-    Sequence = BTSequence,
-    Selector = BTSelector,
-    Parallel = BTParallel,
-    Decorator = BTDecorator,
-    Repeat = BTRepeat,
-    Condition = BTCondition,
-    Action = BTAction
+    Composite = BTComposite,    -- 复合节点
+    Sequence = BTSequence,      -- 顺序节点
+    Selector = BTSelector,      -- 选择节点
+    Parallel = BTParallel,      -- 并行节点
+    Decorator = BTDecorator,    -- 装饰节点
+    Repeat = BTRepeat,          -- 重复节点
+    Condition = BTCondition,    -- 条件节点
+    Action = BTAction           -- 动作节点
 } 

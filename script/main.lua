@@ -38,6 +38,8 @@ skynet.start(function()
 
     local match = skynet.newservice("matchS")
 
+    local scene = skynet.newservice("sceneS")
+
     skynet.call(gate, "lua", "open", {
         address = "0.0.0.0",
         port = 8888,

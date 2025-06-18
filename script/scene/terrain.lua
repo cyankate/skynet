@@ -3,6 +3,23 @@ local log = require "log"
 
 local Terrain = class("Terrain")
 
+-- 地形类型常量
+Terrain.TERRAIN_TYPE = {
+    PLAIN = 1,        -- 平地
+    WATER = 2,        -- 水域
+    MOUNTAIN = 3,     -- 山地
+    OBSTACLE = 4,     -- 障碍物/不可通行
+    SAFE_ZONE = 5,    -- 安全区
+    TRANSPORT = 6,    -- 传送点
+}
+
+-- 文件顶部或模块内定义
+local blocked_types = {
+    [Terrain.TERRAIN_TYPE.OBSTACLE] = true,
+    [Terrain.TERRAIN_TYPE.WATER] = true,
+    [Terrain.TERRAIN_TYPE.MOUNTAIN] = true,
+}
+
 function Terrain:ctor(width, height, grid_size)
     self.width = width
     self.height = height
@@ -20,7 +37,8 @@ function Terrain:ctor(width, height, grid_size)
             self.grid[row][col] = {
                 walkable = true,  -- 是否可行走
                 height = 0,       -- 地形高度
-                type = 1,         -- 地形类型(1:平地 2:水域 3:山地等)
+                type = Terrain.TERRAIN_TYPE.PLAIN,  -- 默认平地
+                props = {},       -- 额外属性
             }
         end
     end
@@ -38,6 +56,28 @@ function Terrain:set_area(start_x, start_y, end_x, end_y, props)
             local cell = self.grid[row][col]
             for k, v in pairs(props) do
                 cell[k] = v
+            end
+        end
+    end
+end
+
+-- 批量加载地形数据
+function Terrain:load_terrain_data(terrain_data)
+    -- terrain_data: { {x=, y=, type=, props={}}, ... }
+    for _, data in ipairs(terrain_data) do
+        local row = math.ceil((data.y or 0) / self.grid_size)
+        local col = math.ceil((data.x or 0) / self.grid_size)
+        if row >= 1 and row <= self.rows and col >= 1 and col <= self.cols then
+            local cell = self.grid[row][col]
+            if data.type then
+                cell.type = data.type
+                cell.walkable = not blocked_types[data.type]
+            end
+            if data.height then
+                cell.height = data.height
+            end
+            if data.props then
+                cell.props = data.props
             end
         end
     end
@@ -86,16 +126,19 @@ function Terrain:get_height(x, y)
     return self.grid[row][col].height
 end
 
--- 获取地形类型
-function Terrain:get_type(x, y)
+-- 获取地形类型（推荐新接口）
+function Terrain:get_terrain_type(x, y)
     local row = math.ceil(y / self.grid_size)
     local col = math.ceil(x / self.grid_size)
-    
     if row < 1 or row > self.rows or col < 1 or col > self.cols then
-        return 1  -- 默认为平地
+        return Terrain.TERRAIN_TYPE.PLAIN
     end
-    
     return self.grid[row][col].type
+end
+
+-- 兼容旧接口
+function Terrain:get_type(x, y)
+    return self:get_terrain_type(x, y)
 end
 
 -- 序列化地形数据
@@ -113,7 +156,8 @@ function Terrain:serialize()
             data.grid[row][col] = {
                 walkable = self.grid[row][col].walkable,
                 height = self.grid[row][col].height,
-                type = self.grid[row][col].type
+                type = self.grid[row][col].type,
+                props = self.grid[row][col].props,
             }
         end
     end
@@ -137,7 +181,8 @@ function Terrain:deserialize(data)
             self.grid[row][col] = {
                 walkable = data.grid[row][col].walkable,
                 height = data.grid[row][col].height,
-                type = data.grid[row][col].type
+                type = data.grid[row][col].type,
+                props = data.grid[row][col].props,
             }
         end
     end

@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local service_wrapper = require "service_wrapper"
+local service_wrapper = require "utils.service_wrapper"
 local scene_mgr = require "scene.scene_mgr"
 local log = require "log"
 
@@ -101,41 +101,13 @@ function CMD.broadcast_scene(scene_id, message, exclude_entity_id)
     return true, count
 end
 
-local function init()
+local function main()
     -- 初始化场景管理器
     scene_mgr.init()
-    
-    -- 可以在这里预创建一些固定场景
-    CMD.create_scene(1, {
-        width = 1000,
-        height = 1000,
-        grid_size = 50,
-        name = "新手村",
-        terrain_data = {
-            -- 障碍物
-            {x = 100, y = 100, type = Terrain.TERRAIN_TYPE.OBSTACLE},
-            -- 水域
-            {x = 300, y = 300, type = Terrain.TERRAIN_TYPE.WATER},
-            -- 安全区
-            {x = 50, y = 50, type = Terrain.TERRAIN_TYPE.SAFE_ZONE},
-            -- 传送点
-            {
-                x = 800, y = 800,
-                type = Terrain.TERRAIN_TYPE.TRANSPORT,
-                props = {
-                    target_scene = 2,
-                    target_x = 50,
-                    target_y = 50,
-                    name = "到主城"
-                }
-            }
-        }
-    })
     
     log.info("Scene service initialized")
 end
 
-service_wrapper.create_service(init, {
-    name = ".scene",
-    cmd = CMD,
+service_wrapper.create_service(main, {
+    name = "scene",
 })
