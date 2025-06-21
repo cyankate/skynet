@@ -3,7 +3,6 @@ local class = require "utils.class"
 local log = require "log"
 local GridAOI = require "scene.grid_aoi"
 local Terrain = require "scene.terrain"
-local NavMesh = require "scene.pathfinding.navmesh"
 
 local Scene = class("Scene")
 
@@ -26,13 +25,64 @@ function Scene:ctor(scene_id, config)
         config.grid_size or 50
     )
     
-    -- 初始化导航网格
-    self.navmesh = NavMesh.new(self.terrain)
+    self.navmesh_id = nil
     
     -- 加载地形数据
     if config.terrain_data then
         self.terrain:load_terrain_data(config.terrain_data)
     end
+    
+    -- 初始化路径查找系统
+    self:init_pathfinding()
+end
+
+-- 初始化路径查找系统
+function Scene:init_pathfinding()
+    -- 创建导航网格
+    local heightmap = self:create_heightmap_from_terrain()
+    local pathfinding = skynet.localname("pathfindingS")
+    self.navmesh_id = skynet.call(pathfinding, "lua", "create_navmesh_from_heightmap", heightmap, {
+        cell_size = self.config.grid_size or 50,
+        cell_height = 10,
+        walkable_slope_angle = 45
+    })
+    
+    if self.navmesh_id then
+        log.info("场景%d导航网格创建成功，ID: %d", self.scene_id, self.navmesh_id)
+    else
+        log.error("场景%d导航网格创建失败", self.scene_id)
+    end
+end
+
+-- 从地形数据创建高度图
+function Scene:create_heightmap_from_terrain()
+    local heightmap = {
+        width = self.terrain.width,
+        height = self.terrain.height,
+        data = {}
+    }
+    
+    -- 生成高度图数据
+    for y = 0, heightmap.height - 1 do
+        heightmap.data[y] = {}
+        for x = 0, heightmap.width - 1 do
+            local terrain_type = self.terrain:get_terrain_type(x, y)
+            -- 将地形类型转换为高度值
+            local height = 0
+            if terrain_type == 4 then  -- 障碍物
+                height = 100  -- 高障碍物
+            elseif terrain_type == 3 then  -- 山地
+                height = 50   -- 中等高度
+            elseif terrain_type == 2 then  -- 水域
+                height = -10  -- 低洼地
+            else  -- 平地
+                height = 0
+            end
+            heightmap.data[y][x] = height
+        end
+    end
+    
+    return heightmap
 end
 
 -- 添加实体
@@ -165,8 +215,28 @@ end
 
 -- 寻路接口
 function Scene:find_path(start_x, start_y, end_x, end_y)
-    -- 使用导航网格寻路
-    return self.navmesh:find_path(start_x, start_y, end_x, end_y)
+    if not self.navmesh_id then
+        return nil, "导航网格未初始化"
+    end
+    
+    -- 使用路径查找服务寻路
+    local path, error = skynet.call(self.pathfinding_service, "lua", "find_path", 
+        self.navmesh_id, 
+        {start_x, 0, start_y},  -- 3D坐标格式
+        {end_x, 0, end_y},      -- 3D坐标格式
+        {max_path_length = 256}
+    )
+    
+    if path then
+        -- 转换为2D路径格式
+        local path_2d = {}
+        for i, point in ipairs(path) do
+            table.insert(path_2d, {x = point[1], y = point[3]})  -- 取x和z坐标
+        end
+        return path_2d
+    else
+        return nil, error
+    end
 end
 
 -- 检查位置是否有效

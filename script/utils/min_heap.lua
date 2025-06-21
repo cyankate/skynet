@@ -66,8 +66,8 @@ function MinHeap:update_key(id, new_score)
     local pos = self.item_positions[id]
     if not pos then return end
     
-    local old_score = self.items[pos].f_score
-    self.items[pos].f_score = new_score
+    local old_score = self.items[pos].f
+    self.items[pos].f = new_score
     
     if new_score < old_score then
         self:sift_up(pos)

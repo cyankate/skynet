@@ -6,7 +6,12 @@ CSERVICE_PATH ?= cservice
 SKYNET_BUILD_PATH ?= .
 
 CFLAGS = -g -O2 -Wall -I$(LUA_INC) $(MYCFLAGS)
+CXXFLAGS = -O2 -fPIC -std=c++11
 # CFLAGS += -DUSE_PTHREAD_LOCK
+
+# RecastNavigation
+RECAST_INC ?= lualib-src/recast
+RECAST_LIB ?= lualib-src/lib
 
 # lua
 
@@ -28,9 +33,9 @@ TLS_INC=
 JEMALLOC_STATICLIB := 3rd/jemalloc/lib/libjemalloc_pic.a
 JEMALLOC_INC := 3rd/jemalloc/include/jemalloc
 
-all : jemalloc
+all : jemalloc recast
 	
-.PHONY : jemalloc update3rd
+.PHONY : jemalloc recast update3rd
 
 MALLOC_STATICLIB := $(JEMALLOC_STATICLIB)
 
@@ -45,6 +50,13 @@ $(JEMALLOC_STATICLIB) : 3rd/jemalloc/Makefile
 
 jemalloc : $(MALLOC_STATICLIB)
 
+# RecastNavigation
+recast :
+	@if [ ! -d "$(RECAST_INC)" ]; then \
+		echo "RecastNavigation not found, please run: bash script/tools/build_recast.sh"; \
+		exit 1; \
+	fi
+
 update3rd :
 	rm -rf 3rd/jemalloc && git submodule update --init
 
@@ -53,7 +65,8 @@ update3rd :
 CSERVICE = snlua logger gate harbor
 LUA_CLIB = skynet \
   client \
-  bson md5 sproto lpeg $(TLS_MODULE)
+  bson md5 sproto lpeg $(TLS_MODULE) \
+  recast cjson socket mime
 
 LUA_CLIB_SKYNET = \
   lua-skynet.c lua-seri.c \
@@ -117,6 +130,18 @@ $(LUA_CLIB_PATH)/ltls.so : lualib-src/ltls.c | $(LUA_CLIB_PATH)
 
 $(LUA_CLIB_PATH)/lpeg.so : 3rd/lpeg/lpcap.c 3rd/lpeg/lpcode.c 3rd/lpeg/lpprint.c 3rd/lpeg/lptree.c 3rd/lpeg/lpvm.c 3rd/lpeg/lpcset.c | $(LUA_CLIB_PATH)
 	$(CC) $(CFLAGS) $(SHARED) -I3rd/lpeg $^ -o $@ 
+
+$(LUA_CLIB_PATH)/recast.so : lualib-src/lrecast.c | $(LUA_CLIB_PATH)
+	$(CXX) $(CXXFLAGS) -g3 -O0 $(SHARED) -I$(RECAST_INC) -L$(RECAST_LIB) -I3rd/lua $^ -o $@ -lRecast -lDetour -lDetourTileCache $(LUA_LIB) -lstdc++
+
+$(LUA_CLIB_PATH)/cjson.so : 3rd/lua-cjson/lua_cjson.c 3rd/lua-cjson/strbuf.c 3rd/lua-cjson/fpconv.c | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) -I3rd/lua-cjson $^ -o $@
+
+$(LUA_CLIB_PATH)/socket.so : 3rd/luasocket/src/luasocket.c 3rd/luasocket/src/auxiliar.c 3rd/luasocket/src/buffer.c 3rd/luasocket/src/compat.c 3rd/luasocket/src/except.c 3rd/luasocket/src/inet.c 3rd/luasocket/src/io.c 3rd/luasocket/src/options.c 3rd/luasocket/src/select.c 3rd/luasocket/src/tcp.c 3rd/luasocket/src/timeout.c 3rd/luasocket/src/udp.c 3rd/luasocket/src/usocket.c | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) -I3rd/luasocket/src $^ -o $@
+
+$(LUA_CLIB_PATH)/mime.so : 3rd/luasocket/src/mime.c | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) -I3rd/luasocket/src $^ -o $@
 
 clean :
 	rm -f $(SKYNET_BUILD_PATH)/skynet $(CSERVICE_PATH)/*.so $(LUA_CLIB_PATH)/*.so && \

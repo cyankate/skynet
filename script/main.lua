@@ -38,7 +38,14 @@ skynet.start(function()
 
     local match = skynet.newservice("matchS")
 
+    local pathfinding = skynet.newservice("pathfindingS")
+
     local scene = skynet.newservice("sceneS")
+
+    --local simple_2d_navmesh_test = skynet.newservice("simple_2d_navmesh_test")
+    --local pathfinding_test = skynet.newservice("pathfinding_test")
+    local recast_test = skynet.newservice("recast_test")
+
 
     skynet.call(gate, "lua", "open", {
         address = "0.0.0.0",
