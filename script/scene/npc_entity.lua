@@ -1,32 +1,95 @@
 local skynet = require "skynet"
 local Entity = require "scene.entity"
+local BehaviorRegistry = require "scene.npc_behaviors.behavior_registry"
 local class = require "utils.class"
 local log = require "log"
 
+-- NPC实体类型
 local NPCEntity = class("NPCEntity", Entity)
 
--- NPC类型
-local NPC_TYPE = {
-    QUEST = 1,     -- 任务NPC
-    SHOP = 2,      -- 商店NPC
-    STORAGE = 3,   -- 仓库NPC
-    TRANSPORT = 4, -- 传送NPC
-}
 
-function NPCEntity:ctor(id, npc_data)
-    NPCEntity.super.ctor(self, id, Entity.ENTITY_TYPE.NPC)
+function NPCEntity:ctor(id, config)
+    NPCEntity.super.ctor(self, id, Entity.ENTITY_TYPE.NPC, config)
     
-    -- NPC属性
-    self.name = npc_data.name
-    self.npc_type = npc_data.npc_type
-    self.interact_range = npc_data.interact_range or 50
-    self.dialog = npc_data.dialog or {}
-    self.quests = npc_data.quests or {}
-    self.shop_items = npc_data.shop_items or {}
-    self.transport_points = npc_data.transport_points or {}
+    self.name = config.name or "NPC"
+    self.interact_range = config.interact_range or 2.0
+    self.behaviors = {}  -- 功能行为列表
     
-    -- 设置NPC视野范围
-    self.view_range = 100
+    -- 初始化功能行为
+    self:init_behaviors(config.behaviors or {})
+end
+
+-- 初始化功能行为
+function NPCEntity:init_behaviors(behavior_configs)
+    for behavior_name, config in pairs(behavior_configs) do
+        self:add_behavior(behavior_name, config)
+    end
+end
+
+-- 添加功能行为
+function NPCEntity:add_behavior(behavior_name, config)
+    local behavior = BehaviorRegistry.create_behavior(behavior_name, self, config)
+    if behavior then
+        self.behaviors[behavior_name] = behavior
+        log.info("NPC %s 添加行为: %s", self.name, behavior_name)
+        return true
+    else
+        log.warning("NPC %s 添加行为失败: %s", self.name, behavior_name)
+        return false
+    end
+end
+
+-- 移除功能行为
+function NPCEntity:remove_behavior(behavior_name)
+    local behavior = self.behaviors[behavior_name]
+    if behavior then
+        -- 销毁行为
+        if behavior.destroy then
+            behavior:destroy()
+        end
+        self.behaviors[behavior_name] = nil
+        log.info("NPC %s 移除行为: %s", self.name, behavior_name)
+        return true
+    end
+    return false
+end
+
+-- 获取功能行为
+function NPCEntity:get_behavior(behavior_name)
+    return self.behaviors[behavior_name]
+end
+
+-- 启用功能行为
+function NPCEntity:enable_behavior(behavior_name)
+    local behavior = self.behaviors[behavior_name]
+    if behavior then
+        behavior:enable()
+        return true
+    end
+    return false
+end
+
+-- 禁用功能行为
+function NPCEntity:disable_behavior(behavior_name)
+    local behavior = self.behaviors[behavior_name]
+    if behavior then
+        behavior:disable()
+        return true
+    end
+    return false
+end
+
+-- 获取所有可用功能
+function NPCEntity:get_available_behaviors(player)
+    local available_behaviors = {}
+    
+    for behavior_name, behavior in pairs(self.behaviors) do
+        if behavior:is_enabled() and behavior:can_interact(player) then
+            table.insert(available_behaviors, behavior_name)
+        end
+    end
+    
+    return available_behaviors
 end
 
 -- 当玩家进入视野
@@ -36,9 +99,9 @@ function NPCEntity:on_entity_enter(other)
         other:send_message("npc_enter", {
             npc_id = self.id,
             name = self.name,
-            npc_type = self.npc_type,
             x = self.x,
-            y = self.y
+            y = self.y,
+            available_behaviors = self:get_available_behaviors(other)
         })
     end
 end
@@ -53,7 +116,7 @@ function NPCEntity:on_entity_leave(other)
 end
 
 -- 处理玩家交互
-function NPCEntity:handle_interact(player)
+function NPCEntity:handle_interact(player, behavior_name)
     -- 检查交互距离
     local dx = player.x - self.x
     local dy = player.y - self.y
@@ -63,225 +126,89 @@ function NPCEntity:handle_interact(player)
         return false, "距离太远"
     end
     
-    -- 根据NPC类型处理交互
-    if self.npc_type == NPC_TYPE.QUEST then
-        return self:handle_quest_interact(player)
-    elseif self.npc_type == NPC_TYPE.SHOP then
-        return self:handle_shop_interact(player)
-    elseif self.npc_type == NPC_TYPE.STORAGE then
-        return self:handle_storage_interact(player)
-    elseif self.npc_type == NPC_TYPE.TRANSPORT then
-        return self:handle_transport_interact(player)
-    end
-    
-    return false, "无法与该NPC交互"
-end
-
--- 处理任务交互
-function NPCEntity:handle_quest_interact(player)
-    local available_quests = {}
-    local in_progress_quests = {}
-    local completed_quests = {}
-    
-    -- 检查每个任务的状态
-    for _, quest in pairs(self.quests) do
-        local quest_status = player:get_quest_status(quest.id)
+    -- 如果指定了行为名称，直接调用对应行为
+    if behavior_name then
+        local behavior = self.behaviors[behavior_name]
+        if not behavior then
+            return false, "该NPC没有此功能"
+        end
         
-        if not quest_status then
-            -- 检查是否可接任务
-            if self:can_accept_quest(player, quest) then
-                table.insert(available_quests, quest)
-            end
-        elseif quest_status == "in_progress" then
-            -- 检查是否可完成任务
-            if self:can_complete_quest(player, quest) then
-                table.insert(completed_quests, quest)
-            else
-                table.insert(in_progress_quests, quest)
-            end
+        if not behavior:is_enabled() then
+            return false, "该功能暂时不可用"
         end
+        
+        return behavior:handle_interact(player)
     end
     
-    -- 发送任务列表给玩家
-    player:send_message("npc_quest_list", {
+    -- 如果没有指定行为名称，显示功能选择界面
+    local available_behaviors = self:get_available_behaviors(player)
+    if #available_behaviors == 0 then
+        return false, "该NPC暂时没有可用功能"
+    end
+    
+    -- 如果只有一个功能，直接调用
+    if #available_behaviors == 1 then
+        return self:handle_interact(player, available_behaviors[1])
+    end
+    
+    -- 多个功能时，发送功能选择界面
+    player:send_message("npc_behavior_select", {
         npc_id = self.id,
-        available_quests = available_quests,
-        in_progress_quests = in_progress_quests,
-        completed_quests = completed_quests
+        available_behaviors = available_behaviors
     })
     
     return true
 end
 
--- 检查是否可接任务
-function NPCEntity:can_accept_quest(player, quest)
-    -- 检查等级要求
-    if quest.require_level and player.level < quest.require_level then
-        return false
+-- 处理特定行为的操作（使用操作接口系统）
+function NPCEntity:handle_operation(player, behavior_name, operation, ...)
+    local behavior = self.behaviors[behavior_name]
+    if not behavior then
+        return false, "该NPC没有此功能"
     end
     
-    -- 检查职业要求
-    if quest.require_profession and player.profession ~= quest.require_profession then
-        return false
+    if not behavior:is_enabled() then
+        return false, "该功能暂时不可用"
     end
     
-    -- 检查前置任务
-    if quest.require_quests then
-        for _, require_quest_id in ipairs(quest.require_quests) do
-            if player:get_quest_status(require_quest_id) ~= "completed" then
-                return false
-            end
-        end
-    end
-    
-    return true
+    return behavior:handle_operation(player, operation, ...)
 end
 
--- 检查是否可完成任务
-function NPCEntity:can_complete_quest(player, quest)
-    -- 检查任务条件
-    for _, condition in ipairs(quest.conditions) do
-        if not player:check_quest_condition(condition) then
-            return false
-        end
+-- 动态更新NPC行为配置
+function NPCEntity:update_behavior_config(behavior_name, new_config)
+    local behavior = self.behaviors[behavior_name]
+    if behavior then
+        -- 更新配置
+        behavior:update_config(new_config)
+        return true
     end
-    
-    return true
+    return false
 end
 
--- 处理商店交互
-function NPCEntity:handle_shop_interact(player)
-    -- 发送商店物品列表给玩家
-    player:send_message("npc_shop_list", {
-        npc_id = self.id,
-        shop_items = self.shop_items
-    })
-    
-    return true
+-- 批量更新行为配置
+function NPCEntity:update_behavior_configs(configs)
+    for behavior_name, config in pairs(configs) do
+        self:update_behavior_config(behavior_name, config)
+    end
 end
 
--- 处理仓库交互
-function NPCEntity:handle_storage_interact(player)
-    -- 发送仓库物品列表给玩家
-    local storage = player:get_storage()
-    player:send_message("npc_storage_list", {
-        npc_id = self.id,
-        storage_items = storage
-    })
-    
-    return true
+-- 获取NPC当前行为状态
+function NPCEntity:get_behavior_status()
+    local status = {}
+    for behavior_name, behavior in pairs(self.behaviors) do
+        status[behavior_name] = behavior:get_status()
+    end
+    return status
 end
 
--- 处理传送交互
-function NPCEntity:handle_transport_interact(player)
-    -- 发送传送点列表给玩家
-    player:send_message("npc_transport_list", {
-        npc_id = self.id,
-        transport_points = self.transport_points
-    })
-    
-    return true
+-- 注册新的行为类型
+function NPCEntity.register_behavior(behavior_name, behavior_class)
+    BehaviorRegistry.register_behavior(behavior_name, behavior_class)
 end
 
--- 处理购买物品
-function NPCEntity:handle_buy_item(player, item_id, count)
-    if self.npc_type ~= NPC_TYPE.SHOP then
-        return false, "该NPC不是商人"
-    end
-    
-    -- 查找商品
-    local shop_item = nil
-    for _, item in ipairs(self.shop_items) do
-        if item.id == item_id then
-            shop_item = item
-            break
-        end
-    end
-    
-    if not shop_item then
-        return false, "商品不存在"
-    end
-    
-    -- 检查金钱
-    local total_price = shop_item.price * count
-    if player:get_money() < total_price then
-        return false, "金钱不足"
-    end
-    
-    -- 检查背包空间
-    if not player:check_bag_space(item_id, count) then
-        return false, "背包空间不足"
-    end
-    
-    -- 扣除金钱
-    player:remove_money(total_price)
-    
-    -- 添加物品
-    player:add_item(item_id, count)
-    
-    return true
+-- 获取所有行为类型
+function NPCEntity.get_all_behavior_types()
+    return BehaviorRegistry.get_behavior_names()
 end
 
--- 处理出售物品
-function NPCEntity:handle_sell_item(player, bag_slot, count)
-    if self.npc_type ~= NPC_TYPE.SHOP then
-        return false, "该NPC不是商人"
-    end
-    
-    -- 获取物品信息
-    local item = player:get_bag_item(bag_slot)
-    if not item then
-        return false, "物品不存在"
-    end
-    
-    if item.count < count then
-        return false, "物品数量不足"
-    end
-    
-    -- 计算出售价格
-    local sell_price = math.floor(item.price * 0.3) * count  -- 假设出售价为原价的30%
-    
-    -- 移除物品
-    player:remove_item(bag_slot, count)
-    
-    -- 添加金钱
-    player:add_money(sell_price)
-    
-    return true
-end
-
--- 处理传送
-function NPCEntity:handle_transport(player, point_id)
-    if self.npc_type ~= NPC_TYPE.TRANSPORT then
-        return false, "该NPC不是传送员"
-    end
-    
-    -- 查找传送点
-    local transport_point = nil
-    for _, point in ipairs(self.transport_points) do
-        if point.id == point_id then
-            transport_point = point
-            break
-        end
-    end
-    
-    if not transport_point then
-        return false, "传送点不存在"
-    end
-    
-    -- 检查金钱
-    if player:get_money() < transport_point.price then
-        return false, "金钱不足"
-    end
-    
-    -- 扣除金钱
-    player:remove_money(transport_point.price)
-    
-    -- 传送玩家
-    player:transport(transport_point.scene_id, transport_point.x, transport_point.y)
-    
-    return true
-end
-
-NPCEntity.NPC_TYPE = NPC_TYPE
 return NPCEntity

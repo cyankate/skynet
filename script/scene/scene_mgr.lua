@@ -1,7 +1,6 @@
 local skynet = require "skynet"
 local Scene = require "scene.scene"
 local log = require "log"
-local ParallelPathfinder = require "scene.pathfinding.parallel_pathfinding"
 
 local scene_mgr = {}
 
@@ -10,13 +9,6 @@ local scenes = {}  -- scene_id => scene_obj
 
 -- 场景更新间隔(秒)
 local UPDATE_INTERVAL = 0.1
-
--- 初始化
-function scene_mgr.init()
-    -- 可以在这里加载场景配置
-    log.info("Scene manager initialized")
-    -- 移除navmesh测试，因为已经迁移到RecastNavigation
-end
 
 -- 创建场景
 function scene_mgr.create_scene(scene_id, config)
@@ -58,9 +50,7 @@ local function update()
     end
 end
 
--- 启动场景管理器
-function scene_mgr.start()
-    -- 启动更新协程
+function scene_mgr.init()
     skynet.fork(update)
 end
 
@@ -174,11 +164,6 @@ function scene_mgr.load_scene_data(scene_id, file_path)
     scene:deserialize(data)
     
     return true
-end
-
--- 获取所有场景
-function scene_mgr.get_all_scenes()
-    return scenes
 end
 
 -- 传送玩家到指定场景

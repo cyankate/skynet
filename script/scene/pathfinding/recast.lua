@@ -92,50 +92,6 @@ function RecastAPI.create_navmesh_from_heightmap(heightmap, config)
     end
 end
 
--- 从三角形网格创建导航网格
-function RecastAPI.create_navmesh_from_triangles(triangles, config)
-    config = config or {}
-    
-    -- 合并默认配置
-    for k, v in pairs(RecastAPI.DEFAULT_CONFIG) do
-        if config[k] == nil then
-            config[k] = v
-        end
-    end
-    
-    -- 验证三角形数据
-    if not triangles or #triangles == 0 then
-        log.error("Invalid triangle data")
-        return nil, "Invalid triangle data"
-    end
-    
-    -- 预处理三角形数据
-    local processed_triangles = preprocess_triangles(triangles)
-    
-    -- 创建导航网格
-    local navmesh_id = recast_c.create_navmesh({
-        triangles = processed_triangles,
-        config = config
-    })
-    
-    if navmesh_id then
-        -- 缓存导航网格信息
-        navmesh_cache[navmesh_id] = {
-            id = navmesh_id,
-            config = config,
-            triangle_count = #triangles,
-            created_time = skynet.time()
-        }
-        
-        log.info("创建导航网格成功，ID: %d, 三角形数量: %d", 
-                navmesh_id, #triangles)
-        return navmesh_id
-    else
-        log.error("创建导航网格失败")
-        return nil, "Failed to create navmesh"
-    end
-end
-
 -- 寻路（带缓存）
 function RecastAPI.find_path(navmesh_id, start_pos, end_pos, options)
     -- 参数验证
@@ -254,23 +210,6 @@ function RecastAPI.get_navmesh_info(navmesh_id)
     return info
 end
 
--- 获取导航网格三角形信息
-function RecastAPI.get_navmesh_triangles(navmesh_id)
-    if not navmesh_cache[navmesh_id] then
-        return nil, "Navmesh not found"
-    end
-    
-    local triangles = recast_c.get_navmesh_triangles(navmesh_id)
-    
-    if triangles then
-        log.debug("获取导航网格%d三角形信息成功，数量: %d", navmesh_id, #triangles)
-        return triangles
-    else
-        log.error("获取导航网格%d三角形信息失败", navmesh_id)
-        return nil, "Failed to get triangles"
-    end
-end
-
 -- 销毁导航网格
 function RecastAPI.destroy_navmesh(navmesh_id)
     if not navmesh_cache[navmesh_id] then
@@ -317,13 +256,6 @@ function preprocess_heightmap(heightmap)
     -- 这里可以添加高度图预处理逻辑
     -- 比如：平滑处理、噪声过滤、边界处理等
     return heightmap
-end
-
--- 预处理三角形数据
-function preprocess_triangles(triangles)
-    -- 这里可以添加三角形预处理逻辑
-    -- 比如：法向量计算、面积计算、邻居关系建立等
-    return triangles
 end
 
 -- 生成路径缓存键

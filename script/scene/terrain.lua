@@ -188,4 +188,9 @@ function Terrain:deserialize(data)
     end
 end
 
+-- 检查地形类型是否被阻塞
+function Terrain:is_blocked_type(terrain_type)
+    return blocked_types[terrain_type] == true
+end
+
 return Terrain

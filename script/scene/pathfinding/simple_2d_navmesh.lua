@@ -504,12 +504,14 @@ function Simple2DNavMesh:is_line_walkable(x1, y1, x2, y2)
     local dy = y2 - y1
     local distance = math.sqrt(dx * dx + dy * dy)
     local steps = math.ceil(distance / (self.grid_size * 0.5))
-    
+    if steps == 0 then
+        local node = self:get_node(x1, y1)
+        return node and node.walkable
+    end
     for i = 0, steps do
         local t = i / steps
         local x = x1 + dx * t
         local y = y1 + dy * t
-        
         local node = self:get_node(x, y)
         if not node or not node.walkable then
             return false

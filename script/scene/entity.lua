@@ -104,5 +104,9 @@ function Entity:broadcast_message(name, data)
     end
 end
 
+function Entity:send_message(name, data)
+    self:broadcast_message(name, data)
+end
+
 Entity.ENTITY_TYPE = ENTITY_TYPE
 return Entity

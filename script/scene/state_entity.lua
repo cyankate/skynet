@@ -1,62 +1,22 @@
+local skynet = require "skynet"
 local Entity = require "scene.entity"
 local class = require "utils.class"
 local log = require "log"
+local StateMachine = require "scene.ai.state_machine"
+local Blackboard = require "scene.ai.blackboard"
+local SyncConfig = require "scene.ai.sync_config"
 
 local StateEntity = class("StateEntity", Entity)
-
--- 定义实体状态
-StateEntity.STATE = {
-    IDLE = "IDLE",           -- 空闲
-    MOVING = "MOVING",       -- 移动中
-    ATTACKING = "ATTACKING", -- 攻击中
-    CASTING = "CASTING",     -- 施法中
-    STUNNED = "STUNNED",     -- 眩晕
-    DEAD = "DEAD",          -- 死亡
-}
-
--- 定义状态转换规则
-local STATE_TRANSITIONS = {
-    [StateEntity.STATE.IDLE] = {
-        [StateEntity.STATE.MOVING] = true,
-        [StateEntity.STATE.ATTACKING] = true,
-        [StateEntity.STATE.CASTING] = true,
-        [StateEntity.STATE.STUNNED] = true,
-        [StateEntity.STATE.DEAD] = true,
-    },
-    [StateEntity.STATE.MOVING] = {
-        [StateEntity.STATE.IDLE] = true,
-        [StateEntity.STATE.ATTACKING] = true,
-        [StateEntity.STATE.CASTING] = true,
-        [StateEntity.STATE.STUNNED] = true,
-        [StateEntity.STATE.DEAD] = true,
-    },
-    [StateEntity.STATE.ATTACKING] = {
-        [StateEntity.STATE.IDLE] = true,
-        [StateEntity.STATE.MOVING] = true,
-        [StateEntity.STATE.STUNNED] = true,
-        [StateEntity.STATE.DEAD] = true,
-    },
-    [StateEntity.STATE.CASTING] = {
-        [StateEntity.STATE.IDLE] = true,
-        [StateEntity.STATE.STUNNED] = true,
-        [StateEntity.STATE.DEAD] = true,
-    },
-    [StateEntity.STATE.STUNNED] = {
-        [StateEntity.STATE.IDLE] = true,
-        [StateEntity.STATE.DEAD] = true,
-    },
-    [StateEntity.STATE.DEAD] = {
-        [StateEntity.STATE.IDLE] = true, -- 只有复活可以从死亡状态转换到空闲
-    }
-}
 
 function StateEntity:ctor(id, type)
     StateEntity.super.ctor(self, id, type)
     
-    -- 状态相关属性
-    self.current_state = StateEntity.STATE.IDLE
-    self.state_time = 0          -- 当前状态持续时间
-    self.state_data = {}         -- 状态相关数据
+    -- 状态机相关
+    self.state_machine = nil     -- 状态机实例
+    
+    -- 行为树相关
+    self.behavior_tree = nil     -- 行为树实例
+    self.blackboard = Blackboard.new():set_entity(self)  -- 黑板系统
     
     -- 移动相关
     self.moving = false
@@ -64,8 +24,6 @@ function StateEntity:ctor(id, type)
     self.move_target_y = nil
     self.move_path = nil
     self.move_path_index = 1
-    self.last_move_time = 0
-    self.move_interval = 0.1
     self.move_speed = 5          -- 默认移动速度
     
     -- 战斗相关
@@ -76,118 +34,445 @@ function StateEntity:ctor(id, type)
     -- 状态效果
     self.stun_duration = 0
     self.cast_duration = 0
+    
+    -- 初始化同步配置
+    self:init_blackboard_sync()
 end
 
--- 状态机更新
-function StateEntity:update()
-    local now = skynet.now() / 100
-    self.state_time = self.state_time + 0.1  -- 假设每次更新间隔0.1秒
-    
-    -- 根据当前状态执行对应的更新逻辑
-    if self.current_state == StateEntity.STATE.MOVING then
-        self:update_move()
-    elseif self.current_state == StateEntity.STATE.ATTACKING then
-        self:update_attack()
-    elseif self.current_state == StateEntity.STATE.CASTING then
-        self:update_cast()
-    elseif self.current_state == StateEntity.STATE.STUNNED then
-        self:update_stun()
+-- 初始化黑板同步配置
+function StateEntity:init_blackboard_sync()
+    -- 设置初始值
+    self.blackboard:set("current_state", "idle", "entity_init")
+    self.blackboard:set("hp", 100, "entity_init")
+    self.blackboard:set("is_dead", false, "entity_init")
+    self.blackboard:set("moving", false, "entity_init")
+    self.blackboard:set("move_target_x", 0, "entity_init")
+    self.blackboard:set("move_target_y", 0, "entity_init")
+    self.blackboard:set("target_id", nil, "entity_init")
+end
+
+-- 更新实体
+function StateEntity:update(dt)
+    -- 更新状态机
+    if self.state_machine then
+        self.state_machine:update(dt)
+    end
+    -- 更新行为树（如果有）
+    self:update_behavior_tree(dt)
+end
+
+-- 设置状态机
+function StateEntity:set_state_machine(state_machine)
+    self.state_machine = state_machine
+    if state_machine then
+        state_machine:set_entity(self)
+    end
+    return self
+end
+
+-- 获取属性值（支持getter方法）
+function StateEntity:get_attr_value(attr_name, config)
+    if config.getter and type(self[config.getter]) == "function" then
+        return self[config.getter](self)
+    else
+        return self[attr_name]
     end
 end
 
--- 切换状态
-function StateEntity:change_state(new_state, state_data)
-    -- 检查状态转换是否合法
-    if not self:can_change_state(new_state) then
-        return false, "不能切换到该状态"
-    end
-    
-    -- 退出当前状态
-    self:exit_state(self.current_state)
-    
-    -- 记录新状态
-    local old_state = self.current_state
-    self.current_state = new_state
-    self.state_time = 0
-    self.state_data = state_data or {}
-    
-    -- 进入新状态
-    self:enter_state(new_state)
-    
-    -- 广播状态变化
-    self:broadcast_state_change(old_state, new_state)
-    
-    return true
-end
-
--- 检查是否可以切换到目标状态
-function StateEntity:can_change_state(new_state)
-    -- 检查状态转换规则
-    return STATE_TRANSITIONS[self.current_state] and 
-           STATE_TRANSITIONS[self.current_state][new_state]
-end
-
--- 进入新状态时的处理
-function StateEntity:enter_state(state)
-    if state == StateEntity.STATE.MOVING then
-        self.moving = true
-    elseif state == StateEntity.STATE.ATTACKING then
-        -- 重置攻击计时
-        self.last_attack_time = skynet.now() / 100
-    elseif state == StateEntity.STATE.CASTING then
-        -- 设置施法持续时间
-        self.cast_duration = self.state_data.duration or 1.0
-    elseif state == StateEntity.STATE.STUNNED then
-        -- 设置眩晕持续时间
-        self.stun_duration = self.state_data.duration or 1.0
+-- 设置属性值（支持setter方法）
+function StateEntity:set_attr_value(attr_name, value, config)
+    if config.setter and type(self[config.setter]) == "function" then
+        return self[config.setter](self, value)
+    else
+        self[attr_name] = value
+        return true
     end
 end
 
--- 退出当前状态时的处理
-function StateEntity:exit_state(state)
-    if state == StateEntity.STATE.MOVING then
-        self.moving = false
-        self.move_target_x = nil
-        self.move_target_y = nil
-        self.move_path = nil
-        self.move_path_index = 1
-    elseif state == StateEntity.STATE.ATTACKING then
-        self.target_id = nil
-    elseif state == StateEntity.STATE.CASTING then
-        -- 取消施法效果
-        if self.state_data.on_cancel then
-            self.state_data.on_cancel()
+-- 设置移动目标（实体接口）
+function StateEntity:set_move_target(x, y)
+    self.blackboard:set("move_target_x", x, "entity_set_move_target")
+    self.blackboard:set("move_target_y", y, "entity_set_move_target")
+    self.blackboard:set("moving", true, "entity_set_move_target")
+    
+    log.debug("StateEntity: 设置移动目标 %s: (%f, %f)", self.id, x, y)
+    
+    return self
+end
+
+-- 停止移动（实体接口）
+function StateEntity:stop_moving()
+    self.blackboard:set("moving", false, "entity_stop_moving")
+    
+    log.debug("StateEntity: 停止移动 %s", self.id)
+    
+    return self
+end
+
+-- 设置目标（实体接口）
+function StateEntity:set_target(target_id)
+    self.blackboard:set("target_id", target_id, "entity_set_target")
+    
+    log.debug("StateEntity: 设置目标 %s: %s", self.id, tostring(target_id))
+    
+    return self
+end
+
+-- 获取目标
+function StateEntity:get_target()
+    return self.blackboard:get("target_id")
+end
+
+-- 设置眩晕时间（实体接口）
+function StateEntity:set_stun_duration(duration)
+    self.blackboard:set("stun_duration", duration, "entity_set_stun")
+    
+    log.debug("StateEntity: 设置眩晕时间 %s: %f", self.id, duration)
+    
+    return self
+end
+
+-- 设置施法时间（实体接口）
+function StateEntity:set_cast_duration(duration)
+    self.blackboard:set("cast_duration", duration, "entity_set_cast")
+    
+    log.debug("StateEntity: 设置施法时间 %s: %f", self.id, duration)
+    
+    return self
+end
+
+-- 停止状态机
+function StateEntity:stop_state_machine()
+    if self.state_machine then
+        self.state_machine:stop()
+    end
+end
+
+-- 中断状态机
+function StateEntity:interrupt_state_machine()
+    if self.state_machine then
+        self.state_machine:interrupt()
+    end
+end
+
+-- 行为树相关方法
+function StateEntity:set_behavior_tree(behavior_tree)
+    self.behavior_tree = behavior_tree
+    return self
+end
+
+function StateEntity:update_behavior_tree(dt)
+    if self.behavior_tree then
+        local context = {
+            entity = self,
+            blackboard = self.blackboard,
+            dt = dt,
+            log = true,
+        }
+        self.behavior_tree:run(context)
+    end
+end
+
+function StateEntity:get_behavior_tree()
+    return self.behavior_tree
+end
+
+-- 获取当前状态名称
+function StateEntity:get_current_state_name()
+    if self.state_machine then
+        return self.state_machine:get_current_state_name()
+    else
+        return "none"
+    end
+end
+
+-- 获取状态持续时间
+function StateEntity:get_state_time()
+    if self.state_machine then
+        return self.state_machine:get_state_time()
+    else
+        return 0
+    end
+end
+
+-- 设置移动速度
+function StateEntity:set_move_speed(speed)
+    self.move_speed = speed
+end
+
+-- 获取移动速度
+function StateEntity:get_move_speed()
+    return self.move_speed
+end
+
+-- 检查是否正在移动
+function StateEntity:is_moving()
+    return self.moving
+end
+
+-- 获取移动目标位置
+function StateEntity:get_move_target()
+    if self.move_path and #self.move_path > 0 then
+        return self.move_path[#self.move_path]
+    end
+    return nil
+end
+
+-- 获取当前移动进度（0-1）
+function StateEntity:get_move_progress()
+    if not self.move_path or #self.move_path == 0 then
+        return 0
+    end
+    
+    local total_distance = 0
+    local traveled_distance = 0
+    
+    -- 计算总距离
+    for i = 1, #self.move_path - 1 do
+        local p1 = self.move_path[i]
+        local p2 = self.move_path[i + 1]
+        local dx = p2.x - p1.x
+        local dy = p2.y - p1.y
+        total_distance = total_distance + math.sqrt(dx * dx + dy * dy)
+    end
+    
+    -- 计算已移动距离
+    for i = 1, self.move_path_index - 1 do
+        if i < #self.move_path then
+            local p1 = self.move_path[i]
+            local p2 = self.move_path[i + 1]
+            local dx = p2.x - p1.x
+            local dy = p2.y - p1.y
+            traveled_distance = traveled_distance + math.sqrt(dx * dx + dy * dy)
         end
     end
-end
-
--- 广播状态变化
-function StateEntity:broadcast_state_change(old_state, new_state)
-    self:broadcast_message("entity_state_change", {
-        entity_id = self.id,
-        old_state = old_state,
-        new_state = new_state,
-        state_data = self.state_data
-    })
-end
-
--- 统一的路径移动实现
-function StateEntity:move_along_path(path)
-    if not path or #path == 0 then
-        return false
+    
+    -- 加上当前位置到下一个路径点的距离
+    if self.move_path_index <= #self.move_path then
+        local current_point = self.move_path[self.move_path_index]
+        local dx = current_point.x - self.x
+        local dy = current_point.y - self.y
+        traveled_distance = traveled_distance + math.sqrt(dx * dx + dy * dy)
     end
     
-    -- 设置移动路径
-    self.move_path = path  -- 路径已经在Scene:find_path中被平滑
+    return total_distance > 0 and (traveled_distance / total_distance) or 0
+end
+
+-- 停止移动
+function StateEntity:stop_move()
+    self.moving = false
+    self.move_target_x = nil
+    self.move_target_y = nil
+    self.move_path = nil
     self.move_path_index = 1
+end
+
+-- 暂停移动
+function StateEntity:pause_move()
+    self.moving = false
+end
+
+-- 恢复移动
+function StateEntity:resume_move()
+    if self.move_path and #self.move_path > 0 then
+        self.moving = true
+    end
+end
+
+-- 更新移动
+function StateEntity:update_move(dt)
+    if not self.moving or not self.move_path then
+        self:stop_move()
+        return
+    end
     
-    -- 切换到移动状态
-    self:change_state(StateEntity.STATE.MOVING)
+    -- 获取当前路径点
+    local current_point = self.move_path[self.move_path_index]
+    if not current_point then
+        self:stop_move()
+        return
+    end
     
-    -- 调用移动开始钩子
-    self:on_move_start()
+    -- 计算到当前路径点的距离
+    local dx = current_point.x - self.x
+    local dy = current_point.y - self.y
+    local distance = math.sqrt(dx * dx + dy * dy)
+
+    -- 计算这一帧应该移动的距离
+    local frame_distance = self.move_speed * dt
+    if distance <= frame_distance then
+        -- 可以直接到达路径点
+        local success = self.scene:move_entity(self.id, current_point.x, current_point.y)
+        if not success then
+            log.error("StateEntity:update_move() move_entity failed")
+            self:stop_move()
+            return
+        end
+        
+        -- 移动到下一个路径点
+        self.move_path_index = self.move_path_index + 1
+        
+        -- 检查是否到达终点
+        if self.move_path_index > #self.move_path then
+            self:stop_move()
+            -- 调用移动结束钩子
+            self:on_move_end()
+            return
+        end
+    else
+        -- 需要插值移动到路径点
+        local ratio = frame_distance / distance
+        local next_x = self.x + dx * ratio
+        local next_y = self.y + dy * ratio
+        
+        -- 检查下一个位置是否可行走
+        if not self.scene:is_position_walkable(next_x, next_y) then
+            -- 如果下一个位置不可行走，尝试重新寻路
+            local target_point = self.move_path[#self.move_path]
+            if target_point then
+                local new_path = self.scene:find_path(self.x, self.y, target_point.x, target_point.y)
+                if new_path then
+                    self.move_path = new_path
+                    self.move_path_index = 1
+                    return
+                else
+                    self:stop_move()
+                    return
+                end
+            else
+                self:stop_move()
+                return
+            end
+        end
+        --log.debug("StateEntity: 移动到计算出的下一个位置 (%.1f, %.1f)", next_x, next_y)
+        -- 移动到计算出的下一个位置
+        local success = self.scene:move_entity(self.id, next_x, next_y)
+        if not success then
+            self:stop_move()
+            return
+        end
+    end
+    
+    -- 调用移动更新钩子
+    self:on_move_update()
+end
+
+-- 处理移动请求
+function StateEntity:handle_move(x, y)
+    -- 获取路径
+    if self.scene then
+        --log.debug("StateEntity: 开始寻路 (%.1f, %.1f) -> (%.1f, %.1f)", self.x, self.y, x, y)
+        local path = self.scene:find_path(self.x, self.y, x, y)
+        if not path then
+            log.warning("StateEntity: 寻路失败，直接设置位置")
+            self:set_position(x, y)
+            return true
+        end
+        
+        -- 设置移动路径数据
+        self.move_path = path
+        self.move_path_index = 1
+        self.move_target_x = x
+        self.move_target_y = y
+        self.moving = true
+        
+        -- 调用移动开始钩子
+        self:on_move_start()
+        return true
+    else
+        log.warning("StateEntity: 实体不在场景中，直接设置位置")
+        self:set_position(x, y)
+        return true
+    end
+end
+
+-- 处理攻击请求
+function StateEntity:handle_attack(target_id)
+    -- 检查目标是否存在
+    local target = self.scene:get_entity(target_id)
+    if not target then
+        return false, "目标不存在"
+    end
+    
+    self.target_id = target_id
+    return true
+end
+
+-- 处理施法请求
+function StateEntity:handle_cast(skill_id, target_id)
+    -- 获取技能配置
+    local skill_config = self:get_skill_config(skill_id)
+    if not skill_config then
+        return false, "技能不存在"
+    end
+    
+    -- 设置施法数据
+    self.cast_duration = skill_config.cast_time
+    self.target_id = target_id
     
     return true
+end
+
+-- 处理眩晕
+function StateEntity:handle_stun(duration)
+    self.stun_duration = duration
+    return true
+end
+
+-- 处理死亡
+function StateEntity:handle_death(killer)
+    -- 停止所有活动
+    self:stop_move()
+    self.target_id = nil
+    self.stun_duration = 0
+    self.cast_duration = 0
+end
+
+-- 播放动画（基类空实现）
+function StateEntity:play_animation(anim_name)
+
+end
+
+-- 复活
+function StateEntity:respawn()
+    -- 恢复生命值和魔法值
+    self.hp = self.max_hp
+    if self.mana then
+        self.mana = self.max_mana
+    end
+    
+    -- 清除死亡标志
+    self.is_dead = false
+    
+    -- 切换到待机状态
+    self:change_state(StateMachine.STATE.IDLE)
+    
+    log.info("StateEntity: 实体 %d 复活", self.id)
+end
+
+-- 受到伤害
+function StateEntity:take_damage(damage, attacker)
+    -- 计算实际伤害
+    local actual_damage = math.max(1, damage - (self.defense or 0))
+    self.hp = math.max(0, self.hp - actual_damage)
+    
+    -- 记录攻击者
+    self.last_attacker = attacker
+    
+    log.info("StateEntity: 实体 %d 受到 %d 点伤害，剩余血量 %d", self.id, actual_damage, self.hp)
+    
+    -- 检查死亡
+    if self.hp <= 0 then
+        self:handle_death(attacker)
+    end
+    
+    return actual_damage
+end
+
+-- 掉落物品（基类空实现）
+function StateEntity:drop_loot()
+    -- 基类空实现，由子类重写
+    log.debug("StateEntity: 实体 %d 掉落物品", self.id)
 end
 
 -- 移动开始钩子
@@ -205,174 +490,170 @@ function StateEntity:on_move_update()
     -- 基类空实现,由子类重写
 end
 
--- 更新移动
-function StateEntity:update_move()
-    if not self.moving or not self.move_path then
-        self:change_state(StateEntity.STATE.IDLE)
+-- 黑板相关方法
+function StateEntity:get_blackboard()
+    return self.blackboard
+end
+
+function StateEntity:set_blackboard_data(key, value)
+    self.blackboard:set(key, value)
+    return self
+end
+
+function StateEntity:get_blackboard_data(key, default_value)
+    return self.blackboard:get(key, default_value)
+end
+
+function StateEntity:has_blackboard_data(key)
+    return self.blackboard:has(key)
+end
+
+function StateEntity:remove_blackboard_data(key)
+    self.blackboard:remove(key)
+    return self
+end
+
+function StateEntity:request_move(x, y)
+    -- 业务逻辑：设置移动数据
+    if not self:can_move() then
+        log.warning("StateEntity: 实体无法移动")
         return
     end
     
-    local now = skynet.now() / 100
+    -- 设置移动目标到黑板
+    self.blackboard:set("move_target_x", x)
+    self.blackboard:set("move_target_y", y)
+    self.blackboard:set("move_requested", true)
     
-    -- 检查移动间隔
-    if now - self.last_move_time < self.move_interval then
-        return
-    end
-    
-    -- 获取当前路径点
-    local current_point = self.move_path[self.move_path_index]
-    if not current_point then
-        self:change_state(StateEntity.STATE.IDLE)
-        return
-    end
-    
-    -- 移动到路径点
-    local success = self.scene:move_entity(self.id, current_point.x, current_point.y)
-    if not success then
-        self:change_state(StateEntity.STATE.IDLE)
-        return
-    end
-    
-    -- 更新移动时间
-    self.last_move_time = now
-    
-    -- 调用移动更新钩子
-    self:on_move_update()
-    
-    -- 检查是否到达路径点
-    if self.x == current_point.x and self.y == current_point.y then
-        self.move_path_index = self.move_path_index + 1
-        
-        -- 检查是否到达终点
-        if self.move_path_index > #self.move_path then
-            self:change_state(StateEntity.STATE.IDLE)
-            -- 调用移动结束钩子
-            self:on_move_end()
-        end
-    end
+    log.debug("StateEntity: 请求移动到 (%.1f, %.1f)", x, y)
+    return true
 end
 
--- 更新攻击
-function StateEntity:update_attack()
-    local now = skynet.now() / 100
-    
-    -- 检查目标是否有效
-    local target = self.scene:get_entity(self.target_id)
-    if not target then
-        self:change_state(StateEntity.STATE.IDLE)
-        return
-    end
-    
-    -- 检查攻击CD
-    if now - self.last_attack_time >= self.attack_cd then
-        -- 执行攻击
-        self:perform_attack(target)
-        self.last_attack_time = now
-    end
-end
-
--- 更新施法
-function StateEntity:update_cast()
-    -- 检查施法是否完成
-    if self.state_time >= self.cast_duration then
-        -- 执行施法效果
-        if self.state_data.on_complete then
-            self.state_data.on_complete()
-        end
-        self:change_state(StateEntity.STATE.IDLE)
-    end
-end
-
--- 更新眩晕
-function StateEntity:update_stun()
-    -- 检查眩晕是否结束
-    if self.state_time >= self.stun_duration then
-        self:change_state(StateEntity.STATE.IDLE)
-    end
-end
-
--- 处理移动请求
-function StateEntity:handle_move(x, y)
-    -- 检查当前状态是否可以移动
-    if not self:can_change_state(StateEntity.STATE.MOVING) then
-        return false, "当前状态不能移动"
-    end
-    
-    -- 获取路径
-    if self.scene then
-        local path = self.scene:find_path(self.x, self.y, x, y)
-        if not path then
-            return false, "无法到达目标位置"
-        end
-        
-        -- 设置移动数据
-        local move_data = {
-            target_x = x,
-            target_y = y,
-            path = path,
-            start_x = self.x,
-            start_y = self.y
-        }
-        
-        -- 切换到移动状态
-        return self:change_state(StateEntity.STATE.MOVING, move_data)
-    else
-        self:set_position(x, y)
-        return true
-    end
-end
-
--- 处理攻击请求
-function StateEntity:handle_attack(target_id)
-    -- 检查当前状态是否可以攻击
-    if not self:can_change_state(StateEntity.STATE.ATTACKING) then
-        return false, "当前状态不能攻击"
-    end
-    
-    -- 检查目标是否存在
+function StateEntity:request_move_to_entity(target_id, distance)
     local target = self.scene:get_entity(target_id)
     if not target then
-        return false, "目标不存在"
+        return false, "目标实体不存在"
     end
     
-    -- 切换到攻击状态
-    return self:change_state(StateEntity.STATE.ATTACKING, {target_id = target_id})
+    distance = distance or 2.0
+    
+    -- 计算移动目标位置
+    local dx = self.x - target.x
+    local dy = self.y - target.y
+    local current_distance = math.sqrt(dx * dx + dy * dy)
+    
+    if current_distance <= distance then
+        return true, "已在目标距离内"
+    end
+    
+    local angle = math.atan(dy, dx)
+    local target_x = target.x + math.cos(angle) * distance
+    local target_y = target.y + math.sin(angle) * distance
+    
+    return self:request_move(target_x, target_y)
 end
 
--- 处理施法请求
-function StateEntity:handle_cast(skill_id, target_id)
-    -- 检查当前状态是否可以施法
-    if not self:can_change_state(StateEntity.STATE.CASTING) then
-        return false, "当前状态不能施法"
+function StateEntity:request_random_move(max_distance)
+    max_distance = max_distance or 10.0
+    
+    local angle = math.random() * math.pi * 2
+    local distance = math.random() * max_distance
+    
+    local target_x = self.x + math.cos(angle) * distance
+    local target_y = self.y + math.sin(angle) * distance
+    
+    return self:request_move(target_x, target_y)
+end
+
+function StateEntity:request_patrol_move(center_x, center_y, radius)
+    center_x = center_x or self.x
+    center_y = center_y or self.y
+    radius = radius or 10.0
+    
+    local angle = math.random() * math.pi * 2
+    local distance = math.random() * radius
+    
+    local target_x = center_x + math.cos(angle) * distance
+    local target_y = center_y + math.sin(angle) * distance
+    
+    return self:request_move(target_x, target_y)
+end
+
+function StateEntity:cancel_move()
+    -- 清除移动相关数据
+    self.blackboard:remove("move_target_x")
+    self.blackboard:remove("move_target_y")
+    self.blackboard:set("move_requested", false)
+    self.blackboard:set("is_moving", false)
+    
+    -- 停止实际移动
+    self:stop_move()
+    
+    log.debug("StateEntity: 取消移动")
+    return true
+end
+
+-- 检查是否可以移动
+function StateEntity:can_move()
+    if self.hp <= 0 then
+        return false
     end
     
-    -- 获取技能配置
-    local skill_config = self:get_skill_config(skill_id)
-    if not skill_config then
-        return false, "技能不存在"
+    local current_state = self:get_current_state_name()
+    if current_state == StateMachine.STATE.DEAD or 
+       current_state == StateMachine.STATE.STUNNED then
+        return false
     end
     
-    -- 切换到施法状态
-    return self:change_state(StateEntity.STATE.CASTING, {
-        skill_id = skill_id,
-        target_id = target_id,
-        duration = skill_config.cast_time,
-        on_complete = function()
-            self:perform_skill(skill_id, target_id)
+    return true
+end
+
+-- 切换状态（代理到状态机）
+function StateEntity:change_state(state_name)
+    if self.state_machine then
+        local success = self.state_machine:change_state(state_name)
+        if success then
+            -- 状态切换成功后，立即同步到黑板
+
         end
-    })
+        return success
+    else
+        log.warning("StateEntity: 尝试切换状态但状态机未设置")
+        return false
+    end
 end
 
--- 处理眩晕
-function StateEntity:handle_stun(duration)
-    -- 强制切换到眩晕状态
-    return self:change_state(StateEntity.STATE.STUNNED, {duration = duration})
+-- 检查是否可以攻击
+function StateEntity:can_attack()
+    -- 检查血量
+    if self.hp <= 0 then
+        return false
+    end
+    
+    -- 检查是否有目标
+    if not self.target_id then
+        return false
+    end
+    
+    -- 检查攻击冷却
+    local current_time = skynet.now() / 100
+    if self.last_attack_time and (current_time - self.last_attack_time) < self.attack_cd then
+        return false
+    end
+    
+    -- 检查状态
+    local current_state = self:get_current_state_name()
+    if current_state == "stunned" or current_state == "dead" then
+        return false
+    end
+    
+    return true
 end
 
--- 处理死亡
-function StateEntity:handle_death(killer)
-    -- 强制切换到死亡状态
-    self:change_state(StateEntity.STATE.DEAD, {killer_id = killer and killer.id})
+-- 场景销毁回调（基类空实现）
+function StateEntity:on_scene_destroy()
+    -- 基类空实现，由子类重写
+    log.debug("StateEntity: 实体 %d 场景销毁", self.id)
 end
 
 return StateEntity

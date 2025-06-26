@@ -3,6 +3,8 @@ local class = require "utils.class"
 local log = require "log"
 local GridAOI = require "scene.grid_aoi"
 local Terrain = require "scene.terrain"
+local Simple2DNavMesh = require "scene.pathfinding.simple_2d_navmesh"
+local NPCMgr = require "scene.npc_mgr"
 
 local Scene = class("Scene")
 
@@ -25,64 +27,72 @@ function Scene:ctor(scene_id, config)
         config.grid_size or 50
     )
     
-    self.navmesh_id = nil
+    -- 初始化导航网格系统
+    self.navmesh = Simple2DNavMesh.new(
+        config.width or 1000,
+        config.height or 1000,
+        config.grid_size or 50
+    )
     
     -- 加载地形数据
     if config.terrain_data then
         self.terrain:load_terrain_data(config.terrain_data)
     end
     
-    -- 初始化路径查找系统
-    self:init_pathfinding()
+    -- 同步地形数据到导航网格
+    self:sync_terrain_to_navmesh()
+    
+    -- 初始化NPC管理器
+    self.npc_mgr = NPCMgr.new(self)
+    
+    log.info("场景%d初始化完成: %dx%d, 网格大小: %d", 
+             self.scene_id, self.terrain.width, self.terrain.height, self.terrain.grid_size)
 end
 
--- 初始化路径查找系统
-function Scene:init_pathfinding()
-    -- 创建导航网格
-    local heightmap = self:create_heightmap_from_terrain()
-    local pathfinding = skynet.localname("pathfindingS")
-    self.navmesh_id = skynet.call(pathfinding, "lua", "create_navmesh_from_heightmap", heightmap, {
-        cell_size = self.config.grid_size or 50,
-        cell_height = 10,
-        walkable_slope_angle = 45
-    })
+-- 同步地形数据到导航网格
+function Scene:sync_terrain_to_navmesh()
+    log.info("开始同步地形数据到导航网格...")
     
-    if self.navmesh_id then
-        log.info("场景%d导航网格创建成功，ID: %d", self.scene_id, self.navmesh_id)
-    else
-        log.error("场景%d导航网格创建失败", self.scene_id)
-    end
-end
-
--- 从地形数据创建高度图
-function Scene:create_heightmap_from_terrain()
-    local heightmap = {
-        width = self.terrain.width,
-        height = self.terrain.height,
-        data = {}
-    }
+    local terrain_data = {}
+    local cols = self.terrain.cols
+    local rows = self.terrain.rows
     
-    -- 生成高度图数据
-    for y = 0, heightmap.height - 1 do
-        heightmap.data[y] = {}
-        for x = 0, heightmap.width - 1 do
-            local terrain_type = self.terrain:get_terrain_type(x, y)
-            -- 将地形类型转换为高度值
-            local height = 0
-            if terrain_type == 4 then  -- 障碍物
-                height = 100  -- 高障碍物
-            elseif terrain_type == 3 then  -- 山地
-                height = 50   -- 中等高度
-            elseif terrain_type == 2 then  -- 水域
-                height = -10  -- 低洼地
-            else  -- 平地
-                height = 0
-            end
-            heightmap.data[y][x] = height
+    for row = 1, rows do
+        for col = 1, cols do
+            local cell = self.terrain.grid[row][col]
+            local world_x = (col - 0.5) * self.terrain.grid_size
+            local world_y = (row - 0.5) * self.terrain.grid_size
+            
+            -- 转换地形类型到导航网格格式
+            local navmesh_terrain_type = self:convert_terrain_type(cell.type)
+            
+            table.insert(terrain_data, {
+                x = world_x,
+                y = world_y,
+                terrain_type = navmesh_terrain_type
+            })
         end
     end
     
-    return heightmap
+    -- 批量设置导航网格地形
+    self.navmesh:set_terrain_batch(terrain_data)
+    
+    log.info("地形数据同步完成，共处理 %d 个网格", #terrain_data)
+end
+
+-- 转换地形类型
+function Scene:convert_terrain_type(terrain_type)
+    -- Terrain类型到Simple2DNavMesh类型的映射
+    local type_mapping = {
+        [Terrain.TERRAIN_TYPE.PLAIN] = 1,      -- 平地
+        [Terrain.TERRAIN_TYPE.WATER] = 2,      -- 水域
+        [Terrain.TERRAIN_TYPE.MOUNTAIN] = 3,   -- 山地
+        [Terrain.TERRAIN_TYPE.OBSTACLE] = 4,   -- 障碍物
+        [Terrain.TERRAIN_TYPE.SAFE_ZONE] = 5,  -- 安全区
+        [Terrain.TERRAIN_TYPE.TRANSPORT] = 6,  -- 传送点
+    }
+    
+    return type_mapping[terrain_type] or 1
 end
 
 -- 添加实体
@@ -93,7 +103,7 @@ function Scene:add_entity(entity)
     end
     
     -- 检查位置是否可通行
-    if not self.terrain:is_walkable(entity.x, entity.y) then
+    if not self:is_position_walkable(entity.x, entity.y) then
         log.error("Cannot add entity %d to scene %d at position (%d,%d): terrain not walkable", 
             entity.id, self.scene_id, entity.x, entity.y)
         return false
@@ -106,7 +116,7 @@ function Scene:add_entity(entity)
     self.aoi:add_entity(entity)
     
     -- 通知周围的实体
-    local surrounding = self:get_surrounding_entities(entity)
+    local surrounding = self:get_surrounding_entities(entity.id)
     for _, other in pairs(surrounding) do
         other:on_entity_enter(entity)
         entity:on_entity_enter(other)
@@ -123,7 +133,7 @@ function Scene:remove_entity(entity_id)
     end
     
     -- 通知周围的实体
-    local surrounding = self:get_surrounding_entities(entity)
+    local surrounding = self:get_surrounding_entities(entity_id)
     for _, other in pairs(surrounding) do
         other:on_entity_leave(entity)
         entity:on_entity_leave(other)
@@ -142,16 +152,18 @@ end
 function Scene:move_entity(entity_id, x, y)
     local entity = self.entities[entity_id]
     if not entity then
-        return false, "实体不存在"
+        log.error("Scene:move_entity() not found, entity_id: %d", entity_id)
+        return false
     end
     
     -- 检查移动是否合法
-    if not self.terrain:check_move(entity.x, entity.y, x, y) then
-        return false, "无法移动到目标位置"
+    if not self:can_move_to(entity.x, entity.y, x, y) then
+        log.error("Scene:move_entity() can't move to, {x: %f, y: %f} -> {x: %f, y: %f}", entity.x, entity.y, x, y)
+        return false
     end
     
     -- 获取移动前的周围实体
-    local old_surrounding = self:get_surrounding_entities(entity)
+    local old_surrounding = self:get_surrounding_entities(entity_id)
     
     -- 更新位置
     local old_x, old_y = entity.x, entity.y
@@ -159,19 +171,24 @@ function Scene:move_entity(entity_id, x, y)
     entity.y = y
     
     -- 更新AOI网格
-    self.aoi:move_entity(entity, old_x, old_y)
+    self.aoi:move_entity(entity, old_x, old_y, x, y)
     
     -- 获取移动后的周围实体
-    local new_surrounding = self:get_surrounding_entities(entity)
+    local new_surrounding = self:get_surrounding_entities(entity_id)
     
     -- 处理视野变化
-    self:handle_view_change(entity, old_surrounding, new_surrounding)
+    self:handle_view_change(entity_id, old_surrounding, new_surrounding)
     
     return true
 end
 
 -- 处理视野变化
-function Scene:handle_view_change(entity, old_surrounding, new_surrounding)
+function Scene:handle_view_change(entity_id, old_surrounding, new_surrounding)
+    local entity = self.entities[entity_id]
+    if not entity then
+        return
+    end
+    
     -- 找出离开视野的实体
     for _, old in pairs(old_surrounding) do
         if not new_surrounding[old.id] then
@@ -190,8 +207,13 @@ function Scene:handle_view_change(entity, old_surrounding, new_surrounding)
 end
 
 -- 获取周围实体
-function Scene:get_surrounding_entities(entity)
-    return self.aoi:get_surrounding_entities(entity)
+function Scene:get_surrounding_entities(entity_id, view_range)
+    local entity = self.entities[entity_id]
+    if not entity then
+        return {}
+    end
+    view_range = view_range or entity.view_range
+    return self.aoi:get_surrounding_entities(entity, view_range)
 end
 
 -- 获取实体
@@ -213,30 +235,54 @@ function Scene:broadcast_message(message_name, message_data)
     end
 end
 
--- 寻路接口
-function Scene:find_path(start_x, start_y, end_x, end_y)
-    if not self.navmesh_id then
-        return nil, "导航网格未初始化"
+-- 寻路接口（使用Simple2DNavMesh）
+function Scene:find_path(start_x, start_y, end_x, end_y, options)
+    options = options or {}
+    
+    -- 检查起点和终点是否可行走
+    if not self:is_position_walkable(start_x, start_y) then
+        log.error("Scene:find_path() start_x: %f, start_y: %f is not walkable", start_x, start_y)
+        return nil
     end
     
-    -- 使用路径查找服务寻路
-    local path, error = skynet.call(self.pathfinding_service, "lua", "find_path", 
-        self.navmesh_id, 
-        {start_x, 0, start_y},  -- 3D坐标格式
-        {end_x, 0, end_y},      -- 3D坐标格式
-        {max_path_length = 256}
-    )
+    if not self:is_position_walkable(end_x, end_y) then
+        log.error("Scene:find_path() end_x: %f, end_y: %f is not walkable", end_x, end_y)
+        return nil
+    end
+    
+    -- 使用Simple2DNavMesh进行寻路
+    local path = self.navmesh:find_path(start_x, start_y, end_x, end_y, options)
     
     if path then
-        -- 转换为2D路径格式
-        local path_2d = {}
-        for i, point in ipairs(path) do
-            table.insert(path_2d, {x = point[1], y = point[3]})  -- 取x和z坐标
-        end
-        return path_2d
+        return path
     else
-        return nil, error
+        log.warn("寻路失败: (%.1f, %.1f) -> (%.1f, %.1f)", start_x, start_y, end_x, end_y)
+        return nil
     end
+end
+
+-- 检查位置是否可行走
+function Scene:is_position_walkable(x, y)
+    -- 首先检查是否在地图范围内
+    if not self:is_position_valid(x, y) then
+        return false
+    end
+    
+    -- 使用导航网格检查是否可行走
+    local node = self.navmesh:get_node(x, y)
+    return node and node.walkable
+end
+
+-- 检查是否可以移动到目标位置
+function Scene:can_move_to(from_x, from_y, to_x, to_y)
+    -- 检查起点和终点是否可行走
+    if not self:is_position_walkable(from_x, from_y) or 
+       not self:is_position_walkable(to_x, to_y) then
+        return false
+    end
+    
+    -- 检查路径是否可行
+    return self.navmesh:is_line_walkable(from_x, from_y, to_x, to_y)
 end
 
 -- 检查位置是否有效
@@ -251,7 +297,7 @@ end
 
 -- 检查是否有碰撞
 function Scene:has_collision(from_x, from_y, to_x, to_y)
-    return not self.terrain:check_move(from_x, from_y, to_x, to_y)
+    return not self:can_move_to(from_x, from_y, to_x, to_y)
 end
 
 -- 检查位置是否安全区
@@ -266,6 +312,7 @@ end
 
 -- 添加传送点
 function Scene:add_transport_point(point)
+    -- 更新地形数据
     local terrain_data = {
         x = point.x,
         y = point.y,
@@ -279,6 +326,9 @@ function Scene:add_transport_point(point)
         }
     }
     self.terrain:load_terrain_data({terrain_data})
+    
+    -- 同步到导航网格
+    self.navmesh:set_terrain(point.x, point.y, 6)  -- 传送点类型
 end
 
 -- 添加安全区
@@ -298,6 +348,44 @@ function Scene:add_safe_zone(zone)
         end
     end
     self.terrain:load_terrain_data(terrain_data)
+    
+    -- 同步到导航网格
+    for _, data in ipairs(terrain_data) do
+        self.navmesh:set_terrain(data.x, data.y, 5)  -- 安全区类型
+    end
+end
+
+-- 添加动态障碍物
+function Scene:add_dynamic_obstacle(x, y, radius)
+    return self.navmesh:add_obstacle(x, y, radius)
+end
+
+-- 移除动态障碍物
+function Scene:remove_dynamic_obstacle(x, y, radius)
+    return self.navmesh:remove_obstacle(x, y, radius)
+end
+
+-- 更新地形类型
+function Scene:update_terrain_type(x, y, new_terrain_type)
+    -- 更新地形系统
+    local row = math.ceil(y / self.terrain.grid_size)
+    local col = math.ceil(x / self.terrain.grid_size)
+    
+    if row >= 1 and row <= self.terrain.rows and col >= 1 and col <= self.terrain.cols then
+        self.terrain.grid[row][col].type = new_terrain_type
+        self.terrain.grid[row][col].walkable = not self.terrain:is_blocked_type(new_terrain_type)
+    end
+    
+    -- 同步到导航网格
+    local navmesh_type = self:convert_terrain_type(new_terrain_type)
+    self.navmesh:set_terrain(x, y, navmesh_type)
+    
+    log.info("更新地形类型: (%.1f, %.1f) -> %d", x, y, new_terrain_type)
+end
+
+-- 获取导航网格统计信息
+function Scene:get_navmesh_stats()
+    return self.navmesh:get_stats()
 end
 
 -- 序列化场景数据
@@ -305,14 +393,15 @@ function Scene:serialize()
     local data = {
         scene_id = self.scene_id,
         config = self.config,
-        entities = {}
+        entities = {},
+        terrain = self.terrain:serialize(),
+        navmesh_stats = self:get_navmesh_stats()
     }
     
     -- 序列化实体数据
     for id, entity in pairs(self.entities) do
         -- 只序列化固定实体(怪物、NPC等)
-        if entity.type == Entity.ENTITY_TYPE.MONSTER or 
-           entity.type == Entity.ENTITY_TYPE.NPC then
+        if entity.type == "monster" or entity.type == "npc" then
             data.entities[id] = {
                 id = entity.id,
                 type = entity.type,
@@ -331,13 +420,20 @@ function Scene:deserialize(data)
     -- 恢复场景配置
     self.config = data.config
     
+    -- 恢复地形数据
+    if data.terrain then
+        self.terrain:deserialize(data.terrain)
+        -- 重新同步到导航网格
+        self:sync_terrain_to_navmesh()
+    end
+    
     -- 恢复实体
     for _, entity_data in pairs(data.entities) do
-        if entity_data.type == Entity.ENTITY_TYPE.MONSTER then
+        if entity_data.type == "monster" then
             local MonsterEntity = require "scene.monster_entity"
             local monster = MonsterEntity.new(entity_data.id, entity_data)
             self:add_entity(monster)
-        elseif entity_data.type == Entity.ENTITY_TYPE.NPC then
+        elseif entity_data.type == "npc" then
             local NPCEntity = require "scene.npc_entity"
             local npc = NPCEntity.new(entity_data.id, entity_data)
             self:add_entity(npc)
@@ -355,9 +451,6 @@ function Scene:update()
             entity:update()
         end
     end
-    
-    -- 更新AOI系统
-    self.aoi:update()
     
     -- 更新地形系统(如果有动态地形)
     if self.terrain.update then
@@ -380,23 +473,25 @@ function Scene:cleanup()
         self.terrain:cleanup()
     end
     
+    -- 清理导航网格
+    if self.navmesh.clear_cache then
+        self.navmesh:clear_cache()
+    end
+    
     -- 清理其他资源
     self.entities = {}
-    self.transport_points = {}
-    self.safe_zones = {}
 end
 
 -- 销毁场景
 function Scene:destroy()
-    -- 清理资源
-    self:cleanup()
-    
     -- 通知所有实体场景销毁
     for _, entity in pairs(self.entities) do
         if entity.on_scene_destroy then
             entity:on_scene_destroy()
         end
     end
+    -- 清理资源
+    self:cleanup()
 end
 
 return Scene
