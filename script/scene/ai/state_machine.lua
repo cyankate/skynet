@@ -1,22 +1,7 @@
 local class = require "utils.class"
 local log = require "log"
 
--- 通用状态常量
-local STATE = {
-    -- 基础状态
-    IDLE = "idle",           -- 待机状态
-    MOVING = "moving",       -- 移动状态
-    ATTACKING = "attacking", -- 攻击状态
-    STUNNED = "stunned",     -- 眩晕状态
-    DEAD = "dead",          -- 死亡状态
-    
-    -- 怪物特有状态
-    PATROL = "patrol",       -- 巡逻状态
-    CHASE = "chase",         -- 追击状态
-    FLEE = "flee",          -- 逃跑状态
-}
-
--- 状态机基类
+-- 状态机
 local StateMachine = class("StateMachine")
 
 function StateMachine:ctor(name)
@@ -25,47 +10,16 @@ function StateMachine:ctor(name)
     self.current_state = nil
     self.previous_state = nil
     self.is_running = false
-    self.is_interrupted = false
-    self.context = {}
+    self.blackboard = nil
+    self.entity = nil
     self.state_time = 0
-    
-    -- 状态打断配置
-    self.interruptible_states = {}  -- 可被打断的状态
-    self.priority_states = {}       -- 高优先级状态（可以打断其他状态）
 end
 
--- 设置状态是否可被打断
-function StateMachine:set_state_interruptible(state_name, interruptible)
-    self.interruptible_states[state_name] = interruptible
+-- 设置黑板和实体
+function StateMachine:set_context(blackboard, entity)
+    self.blackboard = blackboard
+    self.entity = entity
     return self
-end
-
--- 设置高优先级状态
-function StateMachine:set_priority_state(state_name, priority)
-    self.priority_states[state_name] = priority or 1
-    return self
-end
-
--- 检查状态是否可以被打断
-function StateMachine:can_state_be_interrupted(state_name)
-    return self.interruptible_states[state_name] ~= false
-end
-
--- 检查是否可以切换到目标状态
-function StateMachine:can_change_to_state(target_state_name)
-    -- 当前状态可被打断
-    if not self:can_state_be_interrupted(self.current_state.name) then
-        return false
-    end
-    local current_priority = self.priority_states[self.current_state.name] or 0
-    local target_priority = self.priority_states[target_state_name] or 0
-    
-    -- 高优先级状态可以打断低优先级状态
-    if target_priority < current_priority then
-        return false 
-    end
-    
-    return true
 end
 
 -- 添加状态
@@ -82,14 +36,12 @@ function StateMachine:set_initial_state(state_name)
 end
 
 -- 启动状态机
-function StateMachine:start(context)
+function StateMachine:start()
     if self.is_running then
         return
     end
     
-    self.context = context or {}
     self.is_running = true
-    self.is_interrupted = false
     self.state_time = 0
     
     if self.initial_state and self.states[self.initial_state] then
@@ -100,7 +52,7 @@ end
 -- 停止状态机
 function StateMachine:stop()
     if self.current_state then
-        self.current_state:exit(self.context)
+        self.current_state:exit()
     end
     self.is_running = false
     self.current_state = nil
@@ -108,36 +60,18 @@ function StateMachine:stop()
     self.state_time = 0
 end
 
--- 中断状态机
-function StateMachine:interrupt()
-    self.is_interrupted = true
-    if self.current_state then
-        self.current_state:interrupt(self.context)
-    end
-end
-
 -- 更新状态机
 function StateMachine:update(dt)
-    if not self.is_running or self.is_interrupted then
-        return "failure"
+    if not self.is_running then
+        return
     end
     
     self.state_time = self.state_time + (dt or 0.1)
     
+    -- 更新当前状态
     if self.current_state then
-        local result = self.current_state:update(self.context, dt)
-        if result == "success" then
-            -- 状态成功完成，但不停止状态机，让它继续运行
-            --log.debug("StateMachine: 状态 %s 完成", self.current_state.name)
-            return "running"
-        elseif result == "failure" then
-            -- 状态失败，也不停止状态机
-            log.debug("StateMachine: 状态 %s 失败", self.current_state.name)
-            return "running"
-        end
+        self.current_state:update(dt)
     end
-    
-    return "running"
 end
 
 -- 切换状态
@@ -146,44 +80,23 @@ function StateMachine:change_state(state_name)
         log.error("StateMachine: 状态 %s 不存在", state_name)
         return false
     end
+    
     if self.current_state and self.current_state.name == state_name then
         return false
     end
-    -- 检查是否可以切换状态
-    if self.current_state and not self:can_change_to_state(state_name) then
-        return false
-    end
     
     -- 退出当前状态
     if self.current_state then
-        self.current_state:exit(self.context)
+        self.current_state:exit()
         self.previous_state = self.current_state.name
     end
     
     -- 进入新状态
     self.current_state = self.states[state_name]
     self.state_time = 0
-    self.current_state:enter(self.context)
-    return true
-end
-
--- 强制切换状态（忽略打断限制）
-function StateMachine:force_change_state(state_name)
-    if not self.states[state_name] then
-        log.error("StateMachine: 状态 %s 不存在", state_name)
-        return false
-    end
+    self.current_state:enter()
     
-    -- 退出当前状态
-    if self.current_state then
-        self.current_state:exit(self.context)
-        self.previous_state = self.current_state.name
-    end
-    
-    -- 进入新状态
-    self.current_state = self.states[state_name]
-    self.state_time = 0
-    self.current_state:enter(self.context)
+    log.debug("StateMachine: 切换到状态 %s", state_name)
     return true
 end
 
@@ -197,6 +110,11 @@ function StateMachine:get_state_time()
     return self.state_time
 end
 
+-- 检查是否在指定状态
+function StateMachine:is_in_state(state_name)
+    return self.current_state and self.current_state.name == state_name
+end
+
 -- 状态基类
 local State = class("State")
 
@@ -205,315 +123,369 @@ function State:ctor(name)
     self.machine = nil
 end
 
-function State:enter(context)
+function State:enter()
     -- 子类重写
 end
 
-function State:update(context, dt)
-    -- 子类重写
-    return "running"
-end
-
-function State:exit(context)
+function State:update(dt)
     -- 子类重写
 end
 
-function State:interrupt(context)
+function State:exit()
     -- 子类重写
+end
+
+-- 空闲状态
+local IdleState = class("IdleState", State)
+
+function IdleState:ctor()
+    State.ctor(self, "idle")
+end
+
+function IdleState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("idle")
+        log.debug("IdleState: 进入空闲状态")
+    end
+end
+
+function IdleState:update(dt)
+    -- 空闲状态不需要特殊处理
+    -- 等待行为树决策
+end
+
+function IdleState:exit()
+    log.debug("IdleState: 退出空闲状态")
 end
 
 -- 移动状态
-local MoveState = class("MoveState", State)
+local MovingState = class("MovingState", State)
 
-function MoveState:ctor(name)
-    State.ctor(self, name or STATE.MOVING)
+function MovingState:ctor()
+    State.ctor(self, "moving")
 end
 
-function MoveState:enter(context)
-
+function MovingState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("walk")
+        log.debug("MovingState: 进入移动状态")
+    end
 end
 
-function MoveState:update(context, dt)
-    local entity = context.entity
-    if not entity then
-        return "failure"
+function MovingState:update(dt)
+    local blackboard = self.machine.blackboard
+    local entity = self.machine.entity
+    
+    if not blackboard or not entity then
+        return
     end
     
-    -- 检查是否被中断
-    if context.is_interrupted then
-        entity:stop_move()
-        return "failure"
+    -- 检查是否有移动目标
+    local move_target = blackboard:get("move_target")
+    if not move_target then
+        -- 没有移动目标，切换到空闲状态
+        self.machine:change_state("idle")
+        return
     end
     
-    -- 更新移动
-    entity:update_move(dt)
+    -- 执行移动
+    if entity:can_move() then
+        entity:move_to(move_target.x, move_target.y)
+        
+        -- 检查是否到达目标
+        if entity:is_at_target(move_target) then
+            blackboard:clear("move_target")
+            self.machine:change_state("idle")
+        end
+    else
+        -- 无法移动，切换到空闲状态
+        self.machine:change_state("idle")
+    end
+end
+
+function MovingState:exit()
+    log.debug("MovingState: 退出移动状态")
+end
+
+-- 攻击状态
+local AttackingState = class("AttackingState", State)
+
+function AttackingState:ctor()
+    State.ctor(self, "attacking")
+end
+
+function AttackingState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("attack")
+        log.debug("AttackingState: 进入攻击状态")
+    end
+end
+
+function AttackingState:update(dt)
+    local blackboard = self.machine.blackboard
+    local entity = self.machine.entity
     
-    -- 检查是否到达目标
-    if not entity:is_moving() then
-        log.debug("MoveState: 移动完成")
-        return "success"
+    if not blackboard or not entity then
+        return
     end
     
-    return "running"
-end
-
-function MoveState:exit(context)
-    local entity = context.entity
-    if entity then
-        entity:stop_move()
+    -- 获取攻击目标
+    local attack_target = blackboard:get("attack_target")
+    if not attack_target then
+        -- 没有攻击目标，切换到空闲状态
+        self.machine:change_state("idle")
+        return
+    end
+    
+    -- 检查目标是否还在
+    if not attack_target.scene or attack_target.hp <= 0 then
+        blackboard:clear("attack_target")
+        self.machine:change_state("idle")
+        return
+    end
+    
+    -- 检查是否在攻击范围内
+    if entity:is_in_attack_range(attack_target) then
+        -- 执行攻击
+        if entity:can_attack() then
+            entity:perform_attack(attack_target)
+        end
+    else
+        -- 不在攻击范围内，切换到追击状态
+        self.machine:change_state("chasing")
     end
 end
 
-function MoveState:interrupt(context)
-    local entity = context.entity
-    if entity then
-        entity:stop_move()
+function AttackingState:exit()
+    log.debug("AttackingState: 退出攻击状态")
+end
+
+-- 追击状态
+local ChasingState = class("ChasingState", State)
+
+function ChasingState:ctor()
+    State.ctor(self, "chasing")
+end
+
+function ChasingState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("walk")
+        log.debug("ChasingState: 进入追击状态")
     end
 end
 
--- 待机状态（通用）
-local IdleState = class("IdleState", State)
-
-function IdleState:ctor(name)
-    State.ctor(self, name or STATE.IDLE)
-end
-
-function IdleState:enter(context)
-    local entity = context.entity
-    if entity then
-        entity:play_animation("idle")
+function ChasingState:update(dt)
+    local blackboard = self.machine.blackboard
+    local entity = self.machine.entity
+    
+    if not blackboard or not entity then
+        return
+    end
+    
+    -- 获取攻击目标
+    local attack_target = blackboard:get("attack_target")
+    if not attack_target then
+        -- 没有攻击目标，切换到空闲状态
+        self.machine:change_state("idle")
+        return
+    end
+    
+    -- 检查目标是否还在
+    if not attack_target.scene or attack_target.hp <= 0 then
+        blackboard:clear("attack_target")
+        self.machine:change_state("idle")
+        return
+    end
+    
+    -- 检查是否在攻击范围内
+    if entity:is_in_attack_range(attack_target) then
+        -- 到达攻击范围，切换到攻击状态
+        self.machine:change_state("attacking")
+        return
+    end
+    
+    -- 追击目标
+    if entity:can_move() then
+        entity:move_to(attack_target.x, attack_target.y)
+    else
+        -- 无法移动，切换到空闲状态
+        self.machine:change_state("idle")
     end
 end
 
-function IdleState:update(context, dt)
-    -- 待机状态通常由子类重写，添加具体的待机逻辑
-    return "running"
+function ChasingState:exit()
+    log.debug("ChasingState: 退出追击状态")
 end
 
-function IdleState:exit(context)
+-- 巡逻状态
+local PatrolState = class("PatrolState", State)
+
+function PatrolState:ctor()
+    State.ctor(self, "patrol")
 end
 
--- 复合状态（可以包含子状态机）
-local CompositeState = class("CompositeState", State)
-
-function CompositeState:ctor(name)
-    State.ctor(self, name)
-    self.sub_machine = nil
-end
-
-function CompositeState:set_sub_machine(machine)
-    self.sub_machine = machine
-    return self
-end
-
-function CompositeState:enter(context)
-    if self.sub_machine then
-        self.sub_machine:start(context)
+function PatrolState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("walk")
+        log.debug("PatrolState: 进入巡逻状态")
     end
 end
 
-function CompositeState:update(context, dt)
-    if self.sub_machine then
-        return self.sub_machine:update(dt)
+function PatrolState:update(dt)
+    local blackboard = self.machine.blackboard
+    local entity = self.machine.entity
+    
+    if not blackboard or not entity then
+        return
     end
-    return "running"
-end
-
-function CompositeState:exit(context)
-    if self.sub_machine then
-        self.sub_machine:stop()
-    end
-end
-
-function CompositeState:interrupt(context)
-    if self.sub_machine then
-        self.sub_machine:interrupt()
-    end
-end
-
--- 条件状态（根据条件决定下一个状态）
-local ConditionalState = class("ConditionalState", State)
-
-function ConditionalState:ctor(name)
-    State.ctor(self, name)
-    self.conditions = {}
-end
-
-function ConditionalState:add_condition(condition_func, target_state)
-    table.insert(self.conditions, {
-        func = condition_func,
-        target = target_state
-    })
-    return self
-end
-
-function ConditionalState:update(context, dt)
-    -- 检查所有条件
-    for _, condition in ipairs(self.conditions) do
-        if condition.func(context) then
-            self.machine:change_state(condition.target)
-            return "running"
+    
+    -- 检查是否有移动目标
+    local move_target = blackboard:get("move_target")
+    if not move_target then
+        -- 没有移动目标，生成新的巡逻目标
+        local patrol_center = blackboard:get("patrol_center")
+        if patrol_center then
+            local target_x, target_y = entity:generate_patrol_position(patrol_center.x, patrol_center.y, 10.0)
+            blackboard:set("move_target", {x = target_x, y = target_y})
+        else
+            -- 没有巡逻中心，切换到空闲状态
+            self.machine:change_state("idle")
+            return
         end
     end
     
-    return "running"
-end
-
--- 延迟状态（延迟一段时间后切换到指定状态）
-local DelayState = class("DelayState", State)
-
-function DelayState:ctor(name, delay_time, target_state)
-    State.ctor(self, name)
-    self.delay_time = delay_time or 1.0
-    self.target_state = target_state
-end
-
-function DelayState:update(context, dt)
-    if self.machine:get_state_time() >= self.delay_time then
-        if self.target_state then
-            self.machine:change_state(self.target_state)
+    -- 执行移动
+    if entity:can_move() then
+        entity:move_to(move_target.x, move_target.y)
+        
+        -- 检查是否到达目标
+        if entity:is_at_target(move_target) then
+            blackboard:clear("move_target")
+            -- 到达巡逻点后等待一段时间
+            self.machine:change_state("idle")
         end
-        return "success"
+    else
+        -- 无法移动，切换到空闲状态
+        self.machine:change_state("idle")
     end
-    return "running"
+end
+
+function PatrolState:exit()
+    log.debug("PatrolState: 退出巡逻状态")
+end
+
+-- 逃跑状态
+local FleeState = class("FleeState", State)
+
+function FleeState:ctor()
+    State.ctor(self, "flee")
+end
+
+function FleeState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("walk")
+        log.debug("FleeState: 进入逃跑状态")
+    end
+end
+
+function FleeState:update(dt)
+    local blackboard = self.machine.blackboard
+    local entity = self.machine.entity
+    
+    if not blackboard or not entity then
+        return
+    end
+    
+    -- 检查是否有移动目标
+    local move_target = blackboard:get("move_target")
+    if not move_target then
+        -- 没有移动目标，生成逃跑目标
+        local target_x, target_y = entity:generate_flee_position(100.0)
+        blackboard:set("move_target", {x = target_x, y = target_y})
+    end
+    
+    -- 执行移动
+    if entity:can_move() then
+        entity:move_to(move_target.x, move_target.y)
+        
+        -- 检查是否到达目标
+        if entity:is_at_target(move_target) then
+            blackboard:clear("move_target")
+            self.machine:change_state("idle")
+        end
+    else
+        -- 无法移动，切换到空闲状态
+        self.machine:change_state("idle")
+    end
+end
+
+function FleeState:exit()
+    log.debug("FleeState: 退出逃跑状态")
 end
 
 -- 眩晕状态
 local StunnedState = class("StunnedState", State)
 
-function StunnedState:ctor(name, duration)
-    State.ctor(self, name or STATE.STUNNED)
-    self.duration = duration or 2.0  -- 默认眩晕2秒
+function StunnedState:ctor()
+    State.ctor(self, "stunned")
 end
 
-function StunnedState:enter(context)
-    local entity = context.entity
-    if entity then
-        -- 停止所有活动
-        entity:stop_move()
-        entity.target_id = nil
-        
-        -- 播放眩晕动画
-        entity:play_animation("stunned")
-        
-        log.debug("StunnedState: 实体 %d 进入眩晕状态，持续 %.1f 秒", entity.id, self.duration)
+function StunnedState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("stunned")
+        log.debug("StunnedState: 进入眩晕状态")
     end
 end
 
-function StunnedState:update(context, dt)
-    local entity = context.entity
+function StunnedState:update(dt)
+    local entity = self.machine.entity
+    
     if not entity then
-        return "failure"
+        return
     end
     
-    -- 检查眩晕时间是否结束
-    if self.machine:get_state_time() >= self.duration then
-        log.debug("StunnedState: 实体 %d 眩晕状态结束", entity.id)
-        return "success"
-    end
-    
-    return "running"
-end
-
-function StunnedState:exit(context)
-    local entity = context.entity
-    if entity then
-        -- 恢复动画
-        entity:play_animation("idle")
-        log.debug("StunnedState: 实体 %d 退出眩晕状态", entity.id)
+    -- 检查是否还在眩晕
+    if not entity:is_stunned() then
+        self.machine:change_state("idle")
     end
 end
 
-function StunnedState:interrupt(context)
-    local entity = context.entity
-    if entity then
-        log.debug("StunnedState: 实体 %d 眩晕状态被中断", entity.id)
-    end
+function StunnedState:exit()
+    log.debug("StunnedState: 退出眩晕状态")
 end
 
 -- 死亡状态
 local DeadState = class("DeadState", State)
 
-function DeadState:ctor(name)
-    State.ctor(self, name or STATE.DEAD)
+function DeadState:ctor()
+    State.ctor(self, "dead")
 end
 
-function DeadState:enter(context)
-    local entity = context.entity
-    if entity then
-        -- 停止所有活动
-        entity:stop_move()
-        entity.target_id = nil
-        
-        -- 播放死亡动画
-        entity:play_animation("dead")
-        
-        -- 设置死亡标志
-        entity.is_dead = true
-        
-        log.debug("DeadState: 实体 %d 进入死亡状态", entity.id)
+function DeadState:enter()
+    if self.machine.entity then
+        self.machine.entity:play_animation("dead")
+        log.debug("DeadState: 进入死亡状态")
     end
 end
 
-function DeadState:update(context, dt)
-    local entity = context.entity
-    if not entity then
-        return "failure"
-    end
-    
-    -- 死亡状态通常需要外部干预才能恢复（如复活）
-    -- 这里可以添加自动复活的逻辑，或者保持死亡状态
-    return "running"
+function DeadState:update(dt)
+    -- 死亡状态不需要特殊处理
 end
 
-function DeadState:exit(context)
-    local entity = context.entity
-    if entity then
-        -- 清除死亡标志
-        entity.is_dead = false
-        
-        -- 恢复动画
-        entity:play_animation("idle")
-        
-        log.debug("DeadState: 实体 %d 退出死亡状态", entity.id)
-    end
+function DeadState:exit()
+    log.debug("DeadState: 退出死亡状态")
 end
 
-function DeadState:interrupt(context)
-    local entity = context.entity
-    if entity then
-        log.debug("DeadState: 实体 %d 死亡状态被中断", entity.id)
-    end
-end
-
--- 动作状态（执行一次性动作）
-local ActionState = class("ActionState", State)
-
-function ActionState:ctor(name, action_func)
-    State.ctor(self, name)
-    self.action_func = action_func
-end
-
-function ActionState:enter(context)
-    if self.action_func then
-        self.action_func(context)
-    end
-end
-
-function ActionState:update(context, dt)
-    return "success"
-end
-
+-- 导出
 return {
-    STATE = STATE,
     StateMachine = StateMachine,
     State = State,
-    MoveState = MoveState,
     IdleState = IdleState,
+    MovingState = MovingState,
+    AttackingState = AttackingState,
+    ChasingState = ChasingState,
+    PatrolState = PatrolState,
+    FleeState = FleeState,
     StunnedState = StunnedState,
     DeadState = DeadState,
-    CompositeState = CompositeState,
-    ConditionalState = ConditionalState,
-    DelayState = DelayState,
-    ActionState = ActionState
 } 

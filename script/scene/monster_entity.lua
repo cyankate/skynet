@@ -3,7 +3,7 @@ local Entity = require "scene.entity"
 local StateEntity = require "scene.state_entity"
 local class = require "utils.class"
 local log = require "log"
-local MonsterStateMachine = require "scene.ai.monster_state_machine"
+local AIConfig = require "scene.ai.ai_config"
 
 local MonsterEntity = class("MonsterEntity", StateEntity)
 
@@ -40,35 +40,58 @@ function MonsterEntity:ctor(id, monster_data)
     -- 初始化AI上下文
     self.ai_context = {}
     
-    -- 创建状态机
-    local state_machine = MonsterStateMachine.create_monster_state_machine()
-    self:set_state_machine(state_machine)
+    -- 创建AI管理器
+    self:create_ai_manager(monster_data.ai_config)
     
-    -- 初始化怪物特有的黑板同步配置
-    self:init_monster_blackboard_sync()
+    log.debug("MonsterEntity: 创建怪物 %s", self.id)
+end
+
+-- 创建AI管理器
+function MonsterEntity:create_ai_manager(ai_config)
+    -- 获取怪物AI配置
+    local config = AIConfig:get_config("monster", ai_config)
     
-    log.debug("MonsterEntity: 创建怪物 %s (类型: %s)", self.id, self.monster_type)
+    -- 验证配置
+    local is_valid, errors = AIConfig:validate_config(config)
+    if not is_valid then
+        log.error("MonsterEntity: AI配置验证失败: %s", table.concat(errors, ", "))
+        config = AIConfig:get_config("monster") -- 使用默认配置
+    end
+    
+    -- 创建AI管理器
+    local AIManager = require "scene.ai.ai_manager"
+    self.ai_manager = AIManager.new(self, config)
+    
+    -- 配置AI管理器
+    if config.enable_logging then
+        self.ai_manager:set_logging(true)
+    end
+    
+    -- 设置黑板配置
+    if config.blackboard then
+        local blackboard = self.ai_manager:get_blackboard()
+        if config.blackboard.max_history then
+            blackboard:set_max_history(config.blackboard.max_history)
+        end
+    end
+    
+    log.debug("MonsterEntity: 创建AI管理器 %s", self.id)
 end
 
 -- 初始化怪物特有黑板同步配置
 function MonsterEntity:init_monster_blackboard_sync()
-    -- 使用静态配置
-    for key, config in pairs(SyncConfig.MONSTER_ENTITY_SYNC_CONFIG) do
-        self.blackboard:add_sync_config(key, config)
-    end
-    
     -- 设置初始值
-    self.blackboard:set("in_combat", false, "entity_init")
-    self.blackboard:set("combat_target", nil, "entity_init")
-    self.blackboard:set("last_attacker", nil, "entity_init")
-    self.blackboard:set("patrol_center_x", 0, "entity_init")
-    self.blackboard:set("patrol_center_y", 0, "entity_init")
-    self.blackboard:set("attack_cooldown", 0, "entity_init")
-    self.blackboard:set("max_hp", self.max_hp, "entity_init")
-    self.blackboard:set("attack_power", self.attack_power, "entity_init")
-    self.blackboard:set("defense", self.defense, "entity_init")
-    self.blackboard:set("attack_range", self.attack_range, "entity_init")
-    self.blackboard:set("move_speed", self.move_speed, "entity_init")
+    self.blackboard:set_entity_data("in_combat", false, "entity_init")
+    self.blackboard:set_entity_data("combat_target", nil, "entity_init")
+    self.blackboard:set_entity_data("last_attacker", nil, "entity_init")
+    self.blackboard:set_entity_data("patrol_center_x", 0, "entity_init")
+    self.blackboard:set_entity_data("patrol_center_y", 0, "entity_init")
+    self.blackboard:set_entity_data("attack_cooldown", 0, "entity_init")
+    self.blackboard:set_entity_data("max_hp", self.max_hp, "entity_init")
+    self.blackboard:set_entity_data("attack", self.attack, "entity_init")
+    self.blackboard:set_entity_data("defense", self.defense, "entity_init")
+    self.blackboard:set_entity_data("attack_range", self.attack_radius, "entity_init")
+    self.blackboard:set_entity_data("move_speed", self.speed, "entity_init")
 end
 
 -- 执行攻击
@@ -102,8 +125,7 @@ function MonsterEntity:take_damage(damage, attacker)
         max_hp = self.max_hp
     })
     
-    -- 记录攻击者到黑板，让行为树处理战斗状态
-    self.blackboard:set("last_attacker", attacker.id)
+    -- 记录攻击者
     self.last_attacker = attacker
     
     -- 检查死亡
@@ -114,42 +136,30 @@ function MonsterEntity:take_damage(damage, attacker)
     return actual_damage
 end
 
--- 战斗状态管理（保持向后兼容）
+-- 战斗状态管理
 function MonsterEntity:enter_combat(target)
-    local current_target = self.blackboard:get("combat_target")
-    if current_target == target then
-        return false
-    end
-    
-    self.blackboard:set("in_combat", true, "monster_enter_combat")
-    self.blackboard:set("combat_target", target and target.id or nil, "monster_enter_combat")
+    self.in_combat = true
+    self.combat_target = target
     
     log.debug("MonsterEntity: 进入战斗 %s -> %s", self.id, target and target.id or "nil")
-    
     return true
 end
 
 function MonsterEntity:exit_combat()
-    local in_combat = self.blackboard:get("in_combat", false)
-    if not in_combat then
-        return false
-    end
-    
-    self.blackboard:set("in_combat", false, "monster_exit_combat")
-    self.blackboard:set("combat_target", nil, "monster_exit_combat")
+    self.in_combat = false
+    self.combat_target = nil
     
     log.debug("MonsterEntity: 退出战斗 %s", self.id)
-    
     return true
 end
 
 function MonsterEntity:is_in_combat()
-    return self.blackboard:get("in_combat", false)
+    return self.in_combat
 end
 
 -- 设置战斗目标（实体接口）
 function MonsterEntity:set_combat_target(target)
-    self.blackboard:set("combat_target", target, "entity_set_combat_target")
+    self.combat_target = target
     
     if target then
         log.debug("MonsterEntity: 设置战斗目标 %s: %s", self.id, target.id)
@@ -162,12 +172,12 @@ end
 
 -- 获取战斗目标
 function MonsterEntity:get_combat_target()
-    return self.blackboard:get("combat_target")
+    return self.combat_target
 end
 
 -- 设置最后攻击者（实体接口）
 function MonsterEntity:set_last_attacker(attacker)
-    self.blackboard:set("last_attacker", attacker, "entity_set_last_attacker")
+    self.last_attacker = attacker
     
     if attacker then
         log.debug("MonsterEntity: 设置最后攻击者 %s: %s", self.id, attacker.id)
@@ -178,7 +188,7 @@ end
 
 -- 获取最后攻击者
 function MonsterEntity:get_last_attacker()
-    return self.blackboard:get("last_attacker")
+    return self.last_attacker
 end
 
 function MonsterEntity:cast_skill(skill, target)
@@ -208,9 +218,15 @@ end
 
 -- 攻击相关
 function MonsterEntity:can_attack()
-    local attack_cooldown = self.blackboard:get("attack_cooldown", 0)
-    local is_dead = self.blackboard:get("is_dead", false)
-    return attack_cooldown <= 0 and not is_dead
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            local attack_cooldown = blackboard:get_state("attack_cooldown", 0)
+            local is_dead = blackboard:get_state("is_dead", false)
+            return attack_cooldown <= 0 and not is_dead
+        end
+    end
+    return false
 end
 
 function MonsterEntity:is_in_attack_range(target)
@@ -292,7 +308,7 @@ function MonsterEntity:find_nearest_target()
     return nearest_target
 end
 
-function MonsterEntity:get_nearest_threat()
+function MonsterEntity:find_nearest_threat()
     -- 返回最近的威胁（通常是攻击者）
     return self.combat_target
 end
@@ -340,20 +356,6 @@ function MonsterEntity:on_attacked(attacker, damage)
     end
 end
 
--- 设置最后攻击者（实体接口）
-function MonsterEntity:set_last_attacker(attacker)
-    self.blackboard:set("last_attacker", attacker and attacker.id or nil, "monster_set_attacker")
-    
-    log.debug("MonsterEntity: 设置最后攻击者 %s: %s", self.id, attacker and attacker.id or "nil")
-    
-    return self
-end
-
--- 获取最后攻击者
-function MonsterEntity:get_last_attacker()
-    return self.blackboard:get_entity_attr("last_attacker")
-end
-
 -- 检查是否在视野范围内
 function MonsterEntity:is_in_detect_range(target)
     if not target then
@@ -382,79 +384,84 @@ end
 
 -- 设置巡逻中心点（实体接口）
 function MonsterEntity:set_patrol_center(x, y)
-    self.blackboard:set("patrol_center_x", x, "monster_set_patrol")
-    self.blackboard:set("patrol_center_y", y, "monster_set_patrol")
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            blackboard:set_entity_data("patrol_center_x", x, "monster_set_patrol")
+            blackboard:set_entity_data("patrol_center_y", y, "monster_set_patrol")
+        end
+    end
     
     log.debug("MonsterEntity: 设置巡逻中心点 %s: (%f, %f)", self.id, x, y)
-    
     return self
 end
 
--- 获取巡逻中心点
-function MonsterEntity:get_patrol_center()
-    local x = self.blackboard:get("patrol_center_x", self.x)
-    local y = self.blackboard:get("patrol_center_y", self.y)
-    return x, y
+-- AI管理器相关方法
+function MonsterEntity:set_ai_manager(ai_manager)
+    self.ai_manager = ai_manager
+    return self
 end
 
--- 生成随机巡逻目标（实体接口）
-function MonsterEntity:generate_patrol_target()
-    local patrol_center_x = self.blackboard:get("patrol_center_x", self.x)
-    local patrol_center_y = self.blackboard:get("patrol_center_y", self.y)
-    
-    local angle = math.random() * 2 * math.pi
-    local distance = math.random() * self.patrol_radius
-    
-    local target_x = patrol_center_x + math.cos(angle) * distance
-    local target_y = patrol_center_y + math.sin(angle) * distance
-    
-    self:set_move_target(target_x, target_y)
-    
-    log.debug("MonsterEntity: 生成巡逻目标 %s: (%f, %f)", self.id, target_x, target_y)
-    
-    return target_x, target_y
+function MonsterEntity:get_ai_manager()
+    return self.ai_manager
 end
 
--- 检查是否在巡逻范围内
-function MonsterEntity:is_in_patrol_range()
-    local patrol_center_x = self.blackboard:get("patrol_center_x", self.x)
-    local patrol_center_y = self.blackboard:get("patrol_center_y", self.y)
-    
-    local dx = self.x - patrol_center_x
-    local dy = self.y - patrol_center_y
-    local distance = math.sqrt(dx * dx + dy * dy)
-    
-    return distance <= self.patrol_radius
+function MonsterEntity:create_ai_manager(config)
+    local AIManager = require "scene.ai.ai_manager"
+    self.ai_manager = AIManager.new(self, config)
+    return self.ai_manager
 end
 
--- 获取调试信息
-function MonsterEntity:get_debug_info()
-    local info = MonsterEntity.super.get_debug_info(self)
+function MonsterEntity:update_behavior_tree(dt)
+    if self.ai_manager then
+        self.ai_manager:update(dt)
+    end
+end
+
+function MonsterEntity:get_behavior_tree()
+    if self.ai_manager then
+        return self.ai_manager:get_behavior_tree()
+    end
+    return nil
+end
+
+-- 获取当前状态名称
+function MonsterEntity:get_current_state_name()
+    if self.ai_manager then
+        return self.ai_manager:get_current_state()
+    end
+    return "none"
+end
+
+-- 获取状态持续时间
+function MonsterEntity:get_state_time()
+    if self.ai_manager then
+        return self.ai_manager:get_state_time()
+    end
+    return 0
+end
+
+-- 便捷方法
+function MonsterEntity:request_state(state_name)
+    if self.ai_manager then
+        self.ai_manager:request_state(state_name)
+    end
+end
+
+function MonsterEntity:set_move_target(x, y)
+    if self.ai_manager then
+        self.ai_manager:set_move_target(x, y)
+    end
     
-    -- 添加怪物特有信息
-    info.monster_type = self.monster_type
-    info.combat = {
-        in_combat = self.blackboard:get("in_combat", false),
-        combat_target = self.blackboard:get("combat_target"),
-        last_attacker = self.blackboard:get("last_attacker"),
-        attack_cooldown = self.blackboard:get("attack_cooldown", 0),
-        attack_range = self.attack_range,
-        attack_damage = self.attack_damage
-    }
-    info.movement = {
-        move_speed = self.move_speed,
-        patrol_radius = self.patrol_radius,
-        patrol_center = {
-            x = self.blackboard:get("patrol_center_x", self.x),
-            y = self.blackboard:get("patrol_center_y", self.y)
-        }
-    }
-    info.detection = {
-        detect_range = self.detect_range,
-        aggro_range = self.aggro_range
-    }
-    
-    return info
+    log.debug("MonsterEntity: 设置移动目标 %s: (%f, %f)", self.id, x, y)
+    return self
+end
+
+function MonsterEntity:get_blackboard()
+    if self.ai_manager then
+        return self.ai_manager:get_blackboard()
+    end
+    return nil
 end
 
 return MonsterEntity

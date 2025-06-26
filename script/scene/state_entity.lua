@@ -4,7 +4,6 @@ local class = require "utils.class"
 local log = require "log"
 local StateMachine = require "scene.ai.state_machine"
 local Blackboard = require "scene.ai.blackboard"
-local SyncConfig = require "scene.ai.sync_config"
 
 local StateEntity = class("StateEntity", Entity)
 
@@ -34,21 +33,6 @@ function StateEntity:ctor(id, type)
     -- 状态效果
     self.stun_duration = 0
     self.cast_duration = 0
-    
-    -- 初始化同步配置
-    self:init_blackboard_sync()
-end
-
--- 初始化黑板同步配置
-function StateEntity:init_blackboard_sync()
-    -- 设置初始值
-    self.blackboard:set("current_state", "idle", "entity_init")
-    self.blackboard:set("hp", 100, "entity_init")
-    self.blackboard:set("is_dead", false, "entity_init")
-    self.blackboard:set("moving", false, "entity_init")
-    self.blackboard:set("move_target_x", 0, "entity_init")
-    self.blackboard:set("move_target_y", 0, "entity_init")
-    self.blackboard:set("target_id", nil, "entity_init")
 end
 
 -- 更新实体
@@ -91,53 +75,71 @@ end
 
 -- 设置移动目标（实体接口）
 function StateEntity:set_move_target(x, y)
-    self.blackboard:set("move_target_x", x, "entity_set_move_target")
-    self.blackboard:set("move_target_y", y, "entity_set_move_target")
-    self.blackboard:set("moving", true, "entity_set_move_target")
+    if self.ai_manager then
+        self.ai_manager:set_move_target(x, y)
+    end
     
     log.debug("StateEntity: 设置移动目标 %s: (%f, %f)", self.id, x, y)
-    
     return self
 end
 
 -- 停止移动（实体接口）
 function StateEntity:stop_moving()
-    self.blackboard:set("moving", false, "entity_stop_moving")
+    if self.ai_manager then
+        self.ai_manager:request_state("idle")
+    end
     
     log.debug("StateEntity: 停止移动 %s", self.id)
-    
     return self
 end
 
 -- 设置目标（实体接口）
 function StateEntity:set_target(target_id)
-    self.blackboard:set("target_id", target_id, "entity_set_target")
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            blackboard:set_decision("attack_target", target_id, "entity_set_target")
+        end
+    end
     
     log.debug("StateEntity: 设置目标 %s: %s", self.id, tostring(target_id))
-    
     return self
 end
 
 -- 获取目标
 function StateEntity:get_target()
-    return self.blackboard:get("target_id")
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            return blackboard:get_decision("attack_target")
+        end
+    end
+    return nil
 end
 
 -- 设置眩晕时间（实体接口）
 function StateEntity:set_stun_duration(duration)
-    self.blackboard:set("stun_duration", duration, "entity_set_stun")
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            blackboard:set_state("stun_duration", duration, "entity_set_stun")
+        end
+    end
     
     log.debug("StateEntity: 设置眩晕时间 %s: %f", self.id, duration)
-    
     return self
 end
 
 -- 设置施法时间（实体接口）
 function StateEntity:set_cast_duration(duration)
-    self.blackboard:set("cast_duration", duration, "entity_set_cast")
+    if self.ai_manager then
+        local blackboard = self.ai_manager:get_blackboard()
+        if blackboard then
+            blackboard:set_state("cast_duration", duration, "entity_set_cast")
+        end
+    end
     
     log.debug("StateEntity: 设置施法时间 %s: %f", self.id, duration)
-    
     return self
 end
 
@@ -161,37 +163,55 @@ function StateEntity:set_behavior_tree(behavior_tree)
     return self
 end
 
+-- AI管理器相关方法
+function StateEntity:set_ai_manager(ai_manager)
+    self.ai_manager = ai_manager
+    return self
+end
+
+function StateEntity:get_ai_manager()
+    return self.ai_manager
+end
+
+function StateEntity:create_ai_manager(config)
+    local AIManager = require "scene.ai.ai_manager"
+    self.ai_manager = AIManager.new(self, config)
+    return self.ai_manager
+end
+
 function StateEntity:update_behavior_tree(dt)
-    if self.behavior_tree then
-        local context = {
-            entity = self,
-            blackboard = self.blackboard,
-            dt = dt,
-            log = true,
-        }
-        self.behavior_tree:run(context)
+    if self.ai_manager then
+        self.ai_manager:update(dt)
     end
 end
 
 function StateEntity:get_behavior_tree()
-    return self.behavior_tree
+    if self.ai_manager then
+        return self.ai_manager:get_behavior_tree()
+    end
+    return nil
 end
 
 -- 获取当前状态名称
 function StateEntity:get_current_state_name()
-    if self.state_machine then
-        return self.state_machine:get_current_state_name()
-    else
-        return "none"
+    if self.ai_manager then
+        return self.ai_manager:get_current_state()
     end
+    return "none"
 end
 
 -- 获取状态持续时间
 function StateEntity:get_state_time()
-    if self.state_machine then
-        return self.state_machine:get_state_time()
-    else
-        return 0
+    if self.ai_manager then
+        return self.ai_manager:get_state_time()
+    end
+    return 0
+end
+
+-- 便捷方法
+function StateEntity:request_state(state_name)
+    if self.ai_manager then
+        self.ai_manager:request_state(state_name)
     end
 end
 
@@ -283,14 +303,14 @@ end
 function StateEntity:update_move(dt)
     if not self.moving or not self.move_path then
         self:stop_move()
-        return
+        return "failed"
     end
     
     -- 获取当前路径点
     local current_point = self.move_path[self.move_path_index]
     if not current_point then
         self:stop_move()
-        return
+        return "failed"
     end
     
     -- 计算到当前路径点的距离
@@ -306,7 +326,7 @@ function StateEntity:update_move(dt)
         if not success then
             log.error("StateEntity:update_move() move_entity failed")
             self:stop_move()
-            return
+            return "failed"
         end
         
         -- 移动到下一个路径点
@@ -317,7 +337,7 @@ function StateEntity:update_move(dt)
             self:stop_move()
             -- 调用移动结束钩子
             self:on_move_end()
-            return
+            return "success"
         end
     else
         -- 需要插值移动到路径点
@@ -329,19 +349,14 @@ function StateEntity:update_move(dt)
         if not self.scene:is_position_walkable(next_x, next_y) then
             -- 如果下一个位置不可行走，尝试重新寻路
             local target_point = self.move_path[#self.move_path]
-            if target_point then
-                local new_path = self.scene:find_path(self.x, self.y, target_point.x, target_point.y)
-                if new_path then
-                    self.move_path = new_path
-                    self.move_path_index = 1
-                    return
-                else
-                    self:stop_move()
-                    return
-                end
+            local new_path = self.scene:find_path(self.x, self.y, target_point.x, target_point.y)
+            if new_path then
+                self.move_path = new_path
+                self.move_path_index = 1
+                return "running"
             else
                 self:stop_move()
-                return
+                return "failed"
             end
         end
         --log.debug("StateEntity: 移动到计算出的下一个位置 (%.1f, %.1f)", next_x, next_y)
@@ -349,12 +364,13 @@ function StateEntity:update_move(dt)
         local success = self.scene:move_entity(self.id, next_x, next_y)
         if not success then
             self:stop_move()
-            return
+            return "failed"
         end
     end
     
     -- 调用移动更新钩子
     self:on_move_update()
+    return "running"
 end
 
 -- 处理移动请求
@@ -445,7 +461,7 @@ function StateEntity:respawn()
     self.is_dead = false
     
     -- 切换到待机状态
-    self:change_state(StateMachine.STATE.IDLE)
+    self:change_state("idle")
     
     log.info("StateEntity: 实体 %d 复活", self.id)
 end
@@ -490,43 +506,27 @@ function StateEntity:on_move_update()
     -- 基类空实现,由子类重写
 end
 
--- 黑板相关方法
+-- 便捷方法：获取黑板
 function StateEntity:get_blackboard()
-    return self.blackboard
-end
-
-function StateEntity:set_blackboard_data(key, value)
-    self.blackboard:set(key, value)
-    return self
-end
-
-function StateEntity:get_blackboard_data(key, default_value)
-    return self.blackboard:get(key, default_value)
-end
-
-function StateEntity:has_blackboard_data(key)
-    return self.blackboard:has(key)
-end
-
-function StateEntity:remove_blackboard_data(key)
-    self.blackboard:remove(key)
-    return self
+    if self.ai_manager then
+        return self.ai_manager:get_blackboard()
+    end
+    return nil
 end
 
 function StateEntity:request_move(x, y)
-    -- 业务逻辑：设置移动数据
     if not self:can_move() then
         log.warning("StateEntity: 实体无法移动")
-        return
+        return false
     end
     
-    -- 设置移动目标到黑板
-    self.blackboard:set("move_target_x", x)
-    self.blackboard:set("move_target_y", y)
-    self.blackboard:set("move_requested", true)
+    if self.ai_manager then
+        self.ai_manager:set_move_target(x, y)
+        log.debug("StateEntity: 请求移动到 (%.1f, %.1f)", x, y)
+        return true
+    end
     
-    log.debug("StateEntity: 请求移动到 (%.1f, %.1f)", x, y)
-    return true
+    return false
 end
 
 function StateEntity:request_move_to_entity(target_id, distance)
@@ -537,7 +537,6 @@ function StateEntity:request_move_to_entity(target_id, distance)
     
     distance = distance or 2.0
     
-    -- 计算移动目标位置
     local dx = self.x - target.x
     local dy = self.y - target.y
     local current_distance = math.sqrt(dx * dx + dy * dy)
@@ -580,15 +579,11 @@ function StateEntity:request_patrol_move(center_x, center_y, radius)
 end
 
 function StateEntity:cancel_move()
-    -- 清除移动相关数据
-    self.blackboard:remove("move_target_x")
-    self.blackboard:remove("move_target_y")
-    self.blackboard:set("move_requested", false)
-    self.blackboard:set("is_moving", false)
+    if self.ai_manager then
+        self.ai_manager:request_state("idle")
+    end
     
-    -- 停止实际移动
     self:stop_move()
-    
     log.debug("StateEntity: 取消移动")
     return true
 end
@@ -600,27 +595,22 @@ function StateEntity:can_move()
     end
     
     local current_state = self:get_current_state_name()
-    if current_state == StateMachine.STATE.DEAD or 
-       current_state == StateMachine.STATE.STUNNED then
+    if current_state == "dead" or current_state == "stunned" then
         return false
     end
     
     return true
 end
 
--- 切换状态（代理到状态机）
+-- 切换状态
 function StateEntity:change_state(state_name)
-    if self.state_machine then
-        local success = self.state_machine:change_state(state_name)
-        if success then
-            -- 状态切换成功后，立即同步到黑板
-
-        end
-        return success
-    else
-        log.warning("StateEntity: 尝试切换状态但状态机未设置")
-        return false
+    if self.ai_manager then
+        self.ai_manager:request_state(state_name)
+        return true
     end
+    
+    log.warning("StateEntity: 尝试切换状态但AI管理器未设置")
+    return false
 end
 
 -- 检查是否可以攻击

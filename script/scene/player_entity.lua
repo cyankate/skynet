@@ -4,8 +4,6 @@ local Entity = require "scene.entity"
 local class = require "utils.class"
 local log = require "log"
 local protocol_handler = require "protocol_handler"
-local PlayerStateMachine = require "scene.ai.player_state_machine"
-local StateMachine = require "scene.ai.state_machine"
 
 local PlayerEntity = class("PlayerEntity", StateEntity)
 
@@ -33,11 +31,21 @@ function PlayerEntity:ctor(id, x, y)
     self.attack_speed = 1.0
     self.attack_range = 2.0
     
-    -- 状态机
-    local state_machine = PlayerStateMachine.create_player_state_machine()
-    self:set_state_machine(state_machine)
+    -- 创建AI管理器
+    self:create_ai_manager()
     
     log.info("PlayerEntity: 创建玩家 %d 在位置 (%.1f, %.1f)", id, x, y)
+end
+
+-- 创建AI管理器
+function PlayerEntity:create_ai_manager()
+    local AIManager = require "scene.ai.ai_manager"
+    self.ai_manager = AIManager.new(self, {
+        sync_interval = 0.1,
+        enable_logging = true
+    })
+    
+    log.debug("PlayerEntity: 创建AI管理器 %s", self.id)
 end
 
 function PlayerEntity:can_attack()
@@ -86,7 +94,7 @@ end
 
 -- 重写父类的update方法，添加玩家特有的更新逻辑
 function PlayerEntity:update()
-    -- 更新基础实体（包括状态机和行为树）
+    -- 更新基础实体（包括AI管理器）
     StateEntity.update(self)
 end
 
@@ -96,11 +104,12 @@ function PlayerEntity:can_move()
         return false, "玩家已死亡"
     end
     
-    if self:get_current_state_name() == StateMachine.STATE.STUNNED then
+    local current_state = self:get_current_state_name()
+    if current_state == "stunned" then
         return false, "玩家被眩晕"
     end
     
-    if self:get_current_state_name() == StateMachine.STATE.DEAD then
+    if current_state == "dead" then
         return false, "玩家已死亡"
     end
     
