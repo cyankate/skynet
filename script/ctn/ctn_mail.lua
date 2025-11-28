@@ -1,46 +1,45 @@
 local skynet = require "skynet"
-local class = require "utils.class"
 local log = require "log"
-local ctn_kv = require "ctn.ctn_kv"
+local CtnKv = require "ctn.ctn_kv"
 
-local ctn_mail = class("ctn_mail", ctn_kv)
+local CtnMail = class("CtnMail", CtnKv)
 
-function ctn_mail:ctor(player_id)
-    ctn_mail.super.ctor(self, player_id, "mail", "mail")
+function CtnMail:ctor(player_id)
+    CtnMail.super.ctor(self, player_id, "mail", "mail")
     self.mail_list = {}
     self.gmail_version = 0
     self.mail_cache = mail_cache.new(player_id)
     self.unread_count = 0
 end
 
-function ctn_mail:onload(_data)
-    ctn_mail.super.onload(self, _data.kvdata)
+function CtnMail:onload(_data)
+    CtnMail.super.onload(self, _data.kvdata)
     self.mail_list = _data.mail_list
     self.gmail_version = _data.gmail_version
 end 
 
-function ctn_mail:onsave()
+function CtnMail:onsave()
     local data = {
-        kvdata = ctn_mail.super.onsave(self),
+        kvdata = CtnMail.super.onsave(self),
     }
     data.mail_list = self.mail_list
     data.gmail_version = self.gmail_version
     return data
 end
 
-function ctn_mail:add_mail(mail_id)
+function CtnMail:add_mail(mail_id)
 
 end 
 
-function ctn_mail:remove_mail(mail_id)
+function CtnMail:remove_mail(mail_id)
 
 end
 
-function ctn_mail:get_mail_list()
+function CtnMail:get_mail_list()
 
 end
 
-function ctn_mail:pull_global_mail()
+function CtnMail:pull_global_mail()
     local mailS = skynet.localname(".mailS")
     local ret = skynet.call(mailS, "lua", "pull_global_mail", self.owner_, self.gmail_version)
     if ret then
@@ -49,4 +48,4 @@ function ctn_mail:pull_global_mail()
     end
 end
 
-return ctn_mail
+return CtnMail

@@ -703,14 +703,7 @@ local function register_default_routes()
     end)
     
     -- 注册白名单查询接口
-    register_param_route("GET", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params)
-        -- 解析查询参数
-        local path, query_string = urllib.parse(url)
-        local query_params = {}
-        if query_string then
-            query_params = urllib.parse_query(query_string)
-        end
-        
+    register_param_route("GET", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params, query_params)
         local server_id = tonumber(params.server_id)
         local page = tonumber(query_params.page) or 1
         local page_size = tonumber(query_params.page_size) or 10
@@ -769,7 +762,7 @@ local function register_default_routes()
     end)
     
     -- 添加白名单接口
-    register_param_route("POST", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params)
+    register_param_route("POST", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params, query_params)
         local server_id = tonumber(params.server_id)
         if not server_id or server_id <= 0 then
             error_response(fd, interface, 400, "Invalid server ID")
@@ -803,7 +796,7 @@ local function register_default_routes()
     end)
     
     -- 删除白名单接口
-    register_param_route("DELETE", "/api/servers/{server_id}/whitelist/{whitelist_id}", function(fd, method, url, headers, body, interface, params)
+    register_param_route("DELETE", "/api/servers/{server_id}/whitelist/{whitelist_id}", function(fd, method, url, headers, body, interface, params, query_params)
         local server_id = tonumber(params.server_id)
         local whitelist_id = tonumber(params.whitelist_id)
         
@@ -960,8 +953,12 @@ local function handle_request(fd, method, url, headers, body, interface)
     --     return
     -- end
     
-    -- 解析URL
+    -- 解析URL和查询参数
     local path, query = urllib.parse(url)
+    local query_params = {}
+    if query then
+        query_params = urllib.parse_query(query)
+    end
     
     -- 标准化路径
     local normalized_path = normalize_path(path)
@@ -972,7 +969,7 @@ local function handle_request(fd, method, url, headers, body, interface)
     -- 查找并执行路由处理函数
     local handler, params = find_route_handler(method, normalized_path)
     if handler then
-        local ok, result = pcall(handler, fd, method, url, headers, body, interface, params)
+        local ok, result = pcall(handler, fd, method, url, headers, body, interface, params, query_params)
         if not ok then
             error_response(fd, interface, 500, result)
             return

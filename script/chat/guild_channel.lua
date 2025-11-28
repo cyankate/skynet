@@ -1,18 +1,17 @@
 local skynet = require "skynet"
-local channel_base = require "chat.channel_base"
-local class = require "utils.class"
+local ChannelBase = require "chat.channel_base"
 
-local guild_channel = class("guild_channel", channel_base)
+local GuildChannel = class("GuildChannel", ChannelBase)
 
 -- 构造函数
-function guild_channel:ctor(channel_id, channel_name, channel_type, guild_id)
-    channel_base.ctor(self, channel_id, channel_name, channel_type)
+function GuildChannel:ctor(channel_id, channel_name, channel_type, guild_id)
+    ChannelBase.ctor(self, channel_id, channel_name, channel_type)
     self.guild_id = guild_id
     self.max_members = 100  -- 公会频道最大成员数
 end
 
 -- 检查玩家是否可以加入频道
-function guild_channel:can_join(player_id, player_name)
+function GuildChannel:can_join(player_id, player_name)
     -- 检查频道是否已满
     if self:get_member_count() >= self.max_members then
         return false
@@ -33,7 +32,7 @@ function guild_channel:can_join(player_id, player_name)
 end
 
 -- 检查是否有踢人权限
-function guild_channel:can_kick(operator_id, target_id)
+function GuildChannel:can_kick(operator_id, target_id)
     -- 检查操作者是否是公会管理员
     local is_admin = skynet.call(".guild", "lua", "is_guild_admin", self.guild_id, operator_id)
     if not is_admin then
@@ -50,8 +49,8 @@ function guild_channel:can_kick(operator_id, target_id)
 end
 
 -- 获取公会ID
-function guild_channel:get_guild_id()
+function GuildChannel:get_guild_id()
     return self.guild_id
 end
 
-return guild_channel
+return GuildChannel

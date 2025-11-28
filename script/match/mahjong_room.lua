@@ -1,9 +1,9 @@
 local skynet = require "skynet"
 local log = require "log"
 local class = require "utils.class"
-local room = require "match.room"
+local Room = require "match.room"
 
-local mahjong_room = class("mahjong_room", room)
+local MahjongRoom = class("MahjongRoom", Room)
 
 -- 麻将牌定义
 local TILE_TYPE = {
@@ -37,8 +37,8 @@ local MELD_TYPE = {
     HU = 4,     -- 胡
 }
 
-function mahjong_room:ctor(room_id, owner_id)
-    mahjong_room.super.ctor(self, room_id, owner_id)
+function MahjongRoom:ctor(room_id, owner_id)
+    MahjongRoom.super.ctor(self, room_id, owner_id)
     self.current_player = nil  -- 当前玩家
     self.last_tile = nil       -- 最后一张牌
     self.last_action = nil     -- 最后动作
@@ -46,12 +46,12 @@ function mahjong_room:ctor(room_id, owner_id)
     self.remaining_tiles = {}  -- 剩余牌堆
 end
 
-function mahjong_room:get_max_players()
+function MahjongRoom:get_max_players()
     return 4
 end
 
-function mahjong_room:add_player(player_id)
-    if not mahjong_room.super.add_player(self, player_id) then
+function MahjongRoom:add_player(player_id)
+    if not MahjongRoom.super.add_player(self, player_id) then
         return false
     end
     
@@ -62,7 +62,7 @@ function mahjong_room:add_player(player_id)
 end
 
 -- 添加玩家
-function mahjong_room:add_player(player_id)
+function MahjongRoom:add_player(player_id)
     if #self.players >= 4 then
         return false, "房间已满"
     end
@@ -88,7 +88,7 @@ function mahjong_room:add_player(player_id)
 end
 
 -- 移除玩家
-function mahjong_room:remove_player(player_id)
+function MahjongRoom:remove_player(player_id)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -119,7 +119,7 @@ function mahjong_room:remove_player(player_id)
 end
 
 -- 玩家准备
-function mahjong_room:player_ready(player_id)
+function MahjongRoom:player_ready(player_id)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -152,7 +152,7 @@ function mahjong_room:player_ready(player_id)
 end
 
 -- 开始游戏
-function mahjong_room:start_game()
+function MahjongRoom:start_game()
     self.status = 1
     
     -- 初始化牌堆
@@ -177,7 +177,7 @@ function mahjong_room:start_game()
 end
 
 -- 初始化牌堆
-function mahjong_room:init_tiles()
+function MahjongRoom:init_tiles()
     local tiles = {}
     
     -- 添加数牌(万、条、筒)
@@ -213,7 +213,7 @@ function mahjong_room:init_tiles()
 end
 
 -- 摸牌
-function mahjong_room:draw_tile(player_id)
+function MahjongRoom:draw_tile(player_id)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -250,7 +250,7 @@ function mahjong_room:draw_tile(player_id)
 end
 
 -- 出牌
-function mahjong_room:play_tile(player_id, tile)
+function MahjongRoom:play_tile(player_id, tile)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -359,7 +359,7 @@ function mahjong_room:play_tile(player_id, tile)
 end
 
 -- 获取房间信息
-function mahjong_room:get_info()
+function MahjongRoom:get_info()
     return {
         room_id = self.room_id,
         creator_id = self.creator_id,
@@ -373,7 +373,7 @@ function mahjong_room:get_info()
 end
 
 -- 获取玩家信息
-function mahjong_room:get_players_info()
+function MahjongRoom:get_players_info()
     local info = {}
     for pid, player in pairs(self.players) do
         info[pid] = {
@@ -387,14 +387,14 @@ function mahjong_room:get_players_info()
 end
 
 -- 广播消息
-function mahjong_room:broadcast(msg_type, data)
+function MahjongRoom:broadcast(msg_type, data)
     for pid, _ in pairs(self.players) do
         skynet.send(pid, "lua", "send_msg", msg_type, data)
     end
 end
 
 -- 检查是否可以吃牌
-function mahjong_room:can_chi(player_id, tile)
+function MahjongRoom:can_chi(player_id, tile)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -448,7 +448,7 @@ function mahjong_room:can_chi(player_id, tile)
 end
 
 -- 检查是否可以碰牌
-function mahjong_room:can_peng(player_id, tile)
+function MahjongRoom:can_peng(player_id, tile)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -474,7 +474,7 @@ function mahjong_room:can_peng(player_id, tile)
 end
 
 -- 检查是否可以杠牌
-function mahjong_room:can_gang(player_id, tile)
+function MahjongRoom:can_gang(player_id, tile)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -500,7 +500,7 @@ function mahjong_room:can_gang(player_id, tile)
 end
 
 -- 检查是否可以胡牌
-function mahjong_room:can_hu(player_id, tile)
+function MahjongRoom:can_hu(player_id, tile)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -522,7 +522,7 @@ function mahjong_room:can_hu(player_id, tile)
 end
 
 -- 检查胡牌
-function mahjong_room:check_hu(tiles)
+function MahjongRoom:check_hu(tiles)
     -- 复制牌组
     local t = {}
     for _, tile in ipairs(tiles) do
@@ -542,7 +542,7 @@ function mahjong_room:check_hu(tiles)
 end
 
 -- 递归检查胡牌
-function mahjong_room:check_hu_recursive(tiles)
+function MahjongRoom:check_hu_recursive(tiles)
     if #tiles == 0 then
         return true
     end
@@ -589,7 +589,7 @@ function mahjong_room:check_hu_recursive(tiles)
 end
 
 -- 吃牌
-function mahjong_room:chi_tile(player_id, tiles)
+function MahjongRoom:chi_tile(player_id, tiles)
     local ok, result = self:can_chi(player_id, self.last_tile)
     if not ok then
         return false, result
@@ -627,7 +627,7 @@ function mahjong_room:chi_tile(player_id, tiles)
 end
 
 -- 碰牌
-function mahjong_room:peng_tile(player_id)
+function MahjongRoom:peng_tile(player_id)
     local ok, _ = self:can_peng(player_id, self.last_tile)
     if not ok then
         return false, "不能碰牌"
@@ -668,7 +668,7 @@ function mahjong_room:peng_tile(player_id)
 end
 
 -- 杠牌
-function mahjong_room:gang_tile(player_id, tile)
+function MahjongRoom:gang_tile(player_id, tile)
     local ok, _ = self:can_gang(player_id, tile)
     if not ok then
         return false, "不能杠牌"
@@ -709,7 +709,7 @@ function mahjong_room:gang_tile(player_id, tile)
 end
 
 -- 胡牌
-function mahjong_room:hu_tile(player_id)
+function MahjongRoom:hu_tile(player_id)
     local ok, _ = self:can_hu(player_id, self.last_tile)
     if not ok then
         return false, "不能胡牌"
@@ -736,7 +736,7 @@ function mahjong_room:hu_tile(player_id)
 end
 
 -- 计算分数
-function mahjong_room:calculate_score(player_id)
+function MahjongRoom:calculate_score(player_id)
     local score = 0
     local player = self.players[player_id]
     
@@ -759,7 +759,7 @@ function mahjong_room:calculate_score(player_id)
 end
 
 -- 游戏结束
-function mahjong_room:game_over(winner_id)
+function MahjongRoom:game_over(winner_id)
     self.status = 0
     
     -- 重置所有玩家状态
@@ -779,7 +779,7 @@ function mahjong_room:game_over(winner_id)
 end
 
 -- 检查游戏状态
-function mahjong_room:check_game_state()
+function MahjongRoom:check_game_state()
     -- 检查玩家数量
     if #self.players < 4 then
         return false, "玩家数量不足"
@@ -796,7 +796,7 @@ function mahjong_room:check_game_state()
 end
 
 -- 检查玩家状态
-function mahjong_room:check_player_state(player_id)
+function MahjongRoom:check_player_state(player_id)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -813,7 +813,7 @@ function mahjong_room:check_player_state(player_id)
 end
 
 -- 检查牌堆状态
-function mahjong_room:check_tiles_state()
+function MahjongRoom:check_tiles_state()
     if #self.remaining_tiles == 0 then
         return false, "牌堆已空"
     end
@@ -822,7 +822,7 @@ function mahjong_room:check_tiles_state()
 end
 
 -- 检查玩家手牌
-function mahjong_room:check_player_tiles(player_id)
+function MahjongRoom:check_player_tiles(player_id)
     local player = self.players[player_id]
     if not player then
         return false, "玩家不在房间中"
@@ -836,7 +836,7 @@ function mahjong_room:check_player_tiles(player_id)
 end
 
 -- 检查玩家是否可以操作
-function mahjong_room:check_player_action(player_id, action_type)
+function MahjongRoom:check_player_action(player_id, action_type)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -864,7 +864,7 @@ function mahjong_room:check_player_action(player_id, action_type)
 end
 
 -- 检查玩家是否可以吃碰杠胡
-function mahjong_room:check_player_meld(player_id, meld_type)
+function MahjongRoom:check_player_meld(player_id, meld_type)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -906,7 +906,7 @@ function mahjong_room:check_player_meld(player_id, meld_type)
 end
 
 -- 获取玩家手牌数量
-function mahjong_room:get_player_tile_count(player_id)
+function MahjongRoom:get_player_tile_count(player_id)
     local player = self.players[player_id]
     if not player then
         return 0
@@ -916,7 +916,7 @@ function mahjong_room:get_player_tile_count(player_id)
 end
 
 -- 获取玩家弃牌数量
-function mahjong_room:get_player_discarded_count(player_id)
+function MahjongRoom:get_player_discarded_count(player_id)
     local player = self.players[player_id]
     if not player then
         return 0
@@ -926,7 +926,7 @@ function mahjong_room:get_player_discarded_count(player_id)
 end
 
 -- 获取玩家吃碰杠数量
-function mahjong_room:get_player_meld_count(player_id)
+function MahjongRoom:get_player_meld_count(player_id)
     local player = self.players[player_id]
     if not player then
         return 0
@@ -936,12 +936,12 @@ function mahjong_room:get_player_meld_count(player_id)
 end
 
 -- 获取剩余牌堆数量
-function mahjong_room:get_remaining_tile_count()
+function MahjongRoom:get_remaining_tile_count()
     return #self.remaining_tiles
 end
 
 -- 获取玩家信息
-function mahjong_room:get_player_info(player_id)
+function MahjongRoom:get_player_info(player_id)
     local player = self.players[player_id]
     if not player then
         return nil
@@ -956,7 +956,7 @@ function mahjong_room:get_player_info(player_id)
 end
 
 -- 获取房间信息
-function mahjong_room:get_room_info()
+function MahjongRoom:get_room_info()
     return {
         room_id = self.room_id,
         creator_id = self.creator_id,
@@ -968,7 +968,7 @@ function mahjong_room:get_room_info()
 end
 
 -- 获取玩家列表
-function mahjong_room:get_player_list()
+function MahjongRoom:get_player_list()
     local players = {}
     for pid, _ in pairs(self.players) do
         table.insert(players, pid)
@@ -977,27 +977,27 @@ function mahjong_room:get_player_list()
 end
 
 -- 获取玩家数量
-function mahjong_room:get_player_count()
+function MahjongRoom:get_player_count()
     return #self.players
 end
 
 -- 检查是否是房主
-function mahjong_room:is_creator(player_id)
+function MahjongRoom:is_creator(player_id)
     return player_id == self.creator_id
 end
 
 -- 检查是否是当前玩家
-function mahjong_room:is_current_player(player_id)
+function MahjongRoom:is_current_player(player_id)
     return player_id == self.current_player
 end
 
 -- 检查是否是最后动作的玩家
-function mahjong_room:is_last_action_player(player_id)
+function MahjongRoom:is_last_action_player(player_id)
     return player_id == self.last_action_player
 end
 
 -- 检查是否是下家
-function mahjong_room:is_next_player(player_id)
+function MahjongRoom:is_next_player(player_id)
     local player_ids = {}
     for pid, _ in pairs(self.players) do
         table.insert(player_ids, pid)
@@ -1016,7 +1016,7 @@ function mahjong_room:is_next_player(player_id)
 end
 
 -- 检查是否是上家
-function mahjong_room:is_prev_player(player_id)
+function MahjongRoom:is_prev_player(player_id)
     local player_ids = {}
     for pid, _ in pairs(self.players) do
         table.insert(player_ids, pid)
@@ -1034,4 +1034,4 @@ function mahjong_room:is_prev_player(player_id)
     return player_ids[prev_index] == player_id
 end
 
-return mahjong_room 
+return MahjongRoom 

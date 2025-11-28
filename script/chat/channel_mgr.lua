@@ -1,10 +1,10 @@
 local skynet = require "skynet"
 local log = require "log"
-local chat_cache = require "cache.chat_cache"
-local private_cache = require "cache.private_cache"
-local private_channel = require "chat.private_channel"
-local guild_channel = require "chat.guild_channel"
-local world_channel = require "chat.world_channel"
+local ChatCache = require "cache.chat_cache"
+local PrivateCache = require "cache.private_cache"
+local PrivateChannel = require "chat.private_channel"
+local GuildChannel = require "chat.guild_channel"
+local WorldChannel = require "chat.world_channel"
 
 -- 频道管理器
 channel_mgr = {
@@ -58,7 +58,7 @@ function channel_mgr.create_private_channel(player_id, to_player_id)
         channel_id = channel_mgr.gen_channel_id()
     end 
     
-    channel_mgr.create_channel(private_channel, channel_id, "私聊频道", CHANNEL_TYPE.PRIVATE, player_id, to_player_id)
+    channel_mgr.create_channel(PrivateChannel, channel_id, "私聊频道", CHANNEL_TYPE.PRIVATE, player_id, to_player_id)
     channel_mgr.private_channels[channel_key] = channel_id
 
     local private_channel_cache = channel_mgr.private_channel_cache:get(player_id)
@@ -245,8 +245,8 @@ end
 
 -- 初始化管理器
 function channel_mgr.init()
-    channel_mgr.cache = chat_cache.new()   
-    channel_mgr.private_channel_cache = private_cache.new()
+    channel_mgr.cache = ChatCache.new()   
+    channel_mgr.private_channel_cache = PrivateCache.new()
     local function tick()
         skynet.timeout(60 * 100, tick)
         channel_mgr.cache:tick()

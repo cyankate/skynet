@@ -1,5 +1,4 @@
 local skynet = require "skynet"
-local service_wrapper = require "service_wrapper"
 local log = require "log"
 
 local player_id2agent = {}

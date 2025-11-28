@@ -1,26 +1,26 @@
 local skynet = require "skynet"
-local base_cache = require "cache.base_cache"
+local BaseCache = require "cache.base_cache"
 local class = require "utils.class"
 local log = require "log"
-local friend_cache_item = require "cache.friend_cache_item"
+local FriendCacheItem = require "cache.friend_cache_item"
 
-local friend_cache = class("friend_cache", base_cache)
+local FriendCache = class("FriendCache", BaseCache)
 
-function friend_cache:ctor()
-    self.super.ctor(self, "friend_cache", "friend")
+function FriendCache:ctor()
+    self.super.ctor(self, "FriendCache", "friend")
 end
 
 -- 创建新的缓存项
-function friend_cache:new_item(player_id)
-    local obj = friend_cache_item.new(player_id)
+function FriendCache:new_item(player_id)
+    local obj = FriendCacheItem.new(player_id)
     return obj
 end
 
 -- 获取缓存统计信息
-function friend_cache:get_stats()
+function FriendCache:get_stats()
     local stats = self.super.get_stats(self)
-    stats.name = "friend_cache"
+    stats.name = "FriendCache"
     return stats
 end
 
-return friend_cache
+return FriendCache

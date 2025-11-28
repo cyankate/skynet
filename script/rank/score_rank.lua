@@ -3,16 +3,16 @@ local log = require "log"
 local class = require "utils.class"
 local tableUtils = require "utils.tableUtils"
 
-local rank_base = require "rank.rank_base"
+local Rank = require "rank.rank_base"
 
-local score_rank = class("rank", rank_base)
+local ScoreRank = class("ScoreRank", Rank)
 
-function score_rank:ctor(_name)
-    rank_base.ctor(self, _name)
+function ScoreRank:ctor(_name)
+    Rank.ctor(self, _name)
 
 end
 
-function score_rank:compare_func(_data1, _data2)
+function ScoreRank:compare_func(_data1, _data2)
     if not _data1 or not _data2 then
         return 0
     end
@@ -28,7 +28,7 @@ function score_rank:compare_func(_data1, _data2)
     end
 end
 
-function score_rank:rkey(_data)
+function ScoreRank:rkey(_data)
     if not _data or type(_data) ~= "table" then
         return nil
     end
@@ -39,7 +39,7 @@ function score_rank:rkey(_data)
     return key
 end
 
-function score_rank:check_data(_data)
+function ScoreRank:check_data(_data)
     if not _data or type(_data) ~= "table" then
         return false
     end
@@ -53,8 +53,8 @@ function score_rank:check_data(_data)
 end 
 
 
-function score_rank:is_realtime_update()
+function ScoreRank:is_realtime_update()
     return true
 end
 
-return score_rank
+return ScoreRank

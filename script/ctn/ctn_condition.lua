@@ -1,13 +1,12 @@
 local skynet = require "skynet"
-local class = require "utils.class"
-local ctn_kv = require "ctn.ctn_kv"
+local CtnKv = require "ctn.ctn_kv"
 local log = require "log" 
 local condition_def = require "define.condition_def"
 
-local ctn_condition = class("ctn_condition", ctn_kv)
+local CtnCondition = class("CtnCondition", CtnKv)
 
-function ctn_condition:ctor(player)
-    ctn_condition.super.ctor(self, player)
+function CtnCondition:ctor(player)
+    CtnCondition.super.ctor(self, player)
     
     -- 条件数据
     self.conditions = {
@@ -26,7 +25,7 @@ function ctn_condition:ctor(player)
 end
 
 -- 初始化条件数据
-function ctn_condition:init_conditions()
+function CtnCondition:init_conditions()
     -- 从数据库加载玩家条件数据
     local ok, db_conditions = pcall(function()
         return skynet.call("dbS", "lua", "load_player_conditions", self.player.id)
@@ -42,7 +41,7 @@ function ctn_condition:init_conditions()
 end
 
 -- 订阅单个条件
-function ctn_condition:subscribe(condition_type, condition_data, callback, always_notify)
+function CtnCondition:subscribe(condition_type, condition_data, callback, always_notify)
     if not condition_type or not condition_data or not callback then
         log.error("Invalid parameters for subscribe")
         return
@@ -69,7 +68,7 @@ function ctn_condition:subscribe(condition_type, condition_data, callback, alway
 end
 
 -- 订阅多个条件
-function ctn_condition:subscribe_multiple(conditions, callback)
+function CtnCondition:subscribe_multiple(conditions, callback)
     if not conditions or not callback then
         log.error("Invalid parameters for subscribe_multiple")
         return
@@ -98,7 +97,7 @@ function ctn_condition:subscribe_multiple(conditions, callback)
 end
 
 -- 检查多个条件是否都满足
-function ctn_condition:check_multiple_conditions(conditions, results)
+function CtnCondition:check_multiple_conditions(conditions, results)
     for _, condition in ipairs(conditions) do
         local current_value = results[condition.type]
         if not current_value or not self:is_condition_met(condition.type, current_value, condition.data) then
@@ -109,7 +108,7 @@ function ctn_condition:check_multiple_conditions(conditions, results)
 end
 
 -- 取消订阅单个条件
-function ctn_condition:unsubscribe(condition_type, condition_data)
+function CtnCondition:unsubscribe(condition_type, condition_data)
     if not condition_type or not condition_data then
         log.error("Invalid parameters for unsubscribe")
         return
@@ -122,7 +121,7 @@ function ctn_condition:unsubscribe(condition_type, condition_data)
 end
 
 -- 取消订阅多个条件
-function ctn_condition:unsubscribe_multiple(condition_ids)
+function CtnCondition:unsubscribe_multiple(condition_ids)
     if not condition_ids then
         log.error("Invalid parameters for unsubscribe_multiple")
         return
@@ -137,7 +136,7 @@ function ctn_condition:unsubscribe_multiple(condition_ids)
 end
 
 -- 生成条件ID
-function ctn_condition:generate_condition_id(condition_type, condition_data)
+function CtnCondition:generate_condition_id(condition_type, condition_data)
     local data_str = ""
     if type(condition_data) == "table" then
         local values = {}
@@ -152,7 +151,7 @@ function ctn_condition:generate_condition_id(condition_type, condition_data)
 end
 
 -- 解析条件ID
-function ctn_condition:parse_condition_id(condition_id)
+function CtnCondition:parse_condition_id(condition_id)
     if not condition_id then return nil, nil end
     
     local parts = string.split(condition_id, "_")
@@ -170,7 +169,7 @@ function ctn_condition:parse_condition_id(condition_id)
 end
 
 -- 获取条件值
-function ctn_condition:get_condition_value(condition_type, data)
+function CtnCondition:get_condition_value(condition_type, data)
     if not condition_type or not data then
         log.error("Invalid parameters for get_condition_value")
         return nil
@@ -184,7 +183,7 @@ function ctn_condition:get_condition_value(condition_type, data)
 end
 
 -- 判断条件是否满足
-function ctn_condition:is_condition_met(condition_type, current_value, data)
+function CtnCondition:is_condition_met(condition_type, current_value, data)
     if not condition_type or not data then
         log.error("Invalid parameters for is_condition_met")
         return false
@@ -198,7 +197,7 @@ function ctn_condition:is_condition_met(condition_type, current_value, data)
 end
 
 -- 更新条件值
-function ctn_condition:update_condition(condition_type, value)
+function CtnCondition:update_condition(condition_type, value)
     if not condition_type then
         log.error("Invalid parameters for update_condition")
         return
@@ -217,7 +216,7 @@ function ctn_condition:update_condition(condition_type, value)
 end
 
 -- 更新装备条件
-function ctn_condition:update_equip_condition(quality, level)
+function CtnCondition:update_equip_condition(quality, level)
     if not quality or not level then
         log.error("Invalid parameters for update_equip_condition")
         return
@@ -240,7 +239,7 @@ function ctn_condition:update_equip_condition(quality, level)
 end
 
 -- 检查条件
-function ctn_condition:check_condition(condition_type, condition_id)
+function CtnCondition:check_condition(condition_type, condition_id)
     local subscriber = self.subscribers[condition_type][condition_id]
     if not subscriber then return end
     
@@ -260,7 +259,7 @@ function ctn_condition:check_condition(condition_type, condition_id)
 end
 
 -- 检查所有相关条件
-function ctn_condition:check_all_conditions(condition_type)
+function CtnCondition:check_all_conditions(condition_type)
     if self.subscribers[condition_type] then
         for condition_id, _ in pairs(self.subscribers[condition_type]) do
             self:check_condition(condition_type, condition_id)
@@ -269,8 +268,8 @@ function ctn_condition:check_all_conditions(condition_type)
 end
 
 -- 清理所有订阅
-function ctn_condition:clear_subscribers()
+function CtnCondition:clear_subscribers()
     self.subscribers = {}
 end
 
-return ctn_condition
+return CtnCondition

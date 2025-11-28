@@ -2,9 +2,9 @@ local skynet = require "skynet"
 local log = require "log"
 local class = require "utils.class"
 
-local mailbox = class("mailbox")
+local Mailbox = class("Mailbox")
 
-function mailbox:ctor(player_id)
+function Mailbox:ctor(player_id)
     self.player_id = player_id
     
     -- 缓存数据
@@ -23,7 +23,7 @@ function mailbox:ctor(player_id)
 end
 
 -- 初始化邮箱数据
-function mailbox:init()
+function Mailbox:init()
     local dbS = skynet.localname(".db")
     -- 获取邮件总数（未删除）
     local count = skynet.call(dbS, "lua", "select", "mail", {
@@ -74,7 +74,7 @@ function mailbox:init()
 end
 
 -- 获取指定邮件
-function mailbox:get_mail(mail_id)
+function Mailbox:get_mail(mail_id)
     -- 先从缓存中查找
     local mail = self.mail_cache[mail_id]
     if mail then
@@ -100,7 +100,7 @@ function mailbox:get_mail(mail_id)
 end
 
 -- 加载指定页的邮件列表
-function mailbox:load_page(page)
+function Mailbox:load_page(page)
     local offset = (page - 1) * self.page_size
     local dbS = skynet.localname(".db")
     -- 获取邮件列表
@@ -122,7 +122,7 @@ function mailbox:load_page(page)
 end
 
 -- 获取下一页邮件
-function mailbox:next_page()
+function Mailbox:next_page()
     if not self.has_more then
         return nil, "没有更多邮件"
     end
@@ -130,7 +130,7 @@ function mailbox:next_page()
 end
 
 -- 更新邮件状态
-function mailbox:update_mail_status(mail_id, status)
+function Mailbox:update_mail_status(mail_id, status)
     -- 获取邮件数据
     local mail = self:get_mail(mail_id)
     if not mail then
@@ -155,7 +155,7 @@ function mailbox:update_mail_status(mail_id, status)
 end
 
 -- 更新邮件附件状态
-function mailbox:update_items_status(mail_id, items_status)
+function Mailbox:update_items_status(mail_id, items_status)
     -- 获取邮件数据
     local mail = self:get_mail(mail_id)
     if not mail then
@@ -177,7 +177,7 @@ function mailbox:update_items_status(mail_id, items_status)
 end
 
 -- 删除邮件
-function mailbox:delete_mail(mail_id)
+function Mailbox:delete_mail(mail_id)
     -- 获取邮件数据
     local mail = self:get_mail(mail_id)
     if not mail then
@@ -205,7 +205,7 @@ function mailbox:delete_mail(mail_id)
 end
 
 -- 添加新邮件
-function mailbox:add_mail(mail)
+function Mailbox:add_mail(mail)
     -- 更新计数
     self.mail_count = self.mail_count + 1
     if mail.status == 0 then  -- 未读邮件
@@ -226,41 +226,41 @@ function mailbox:add_mail(mail)
 end
 
 -- 生成新的邮件ID
-function mailbox:gen_mail_id()
+function Mailbox:gen_mail_id()
     self.gen_id = self.gen_id + 1
     return string.format("p_%d_%d", self.player_id, self.gen_id)
 end
 
 -- 更新最后一封全局邮件时间
-function mailbox:update_last_global_time(time)
+function Mailbox:update_last_global_time(time)
     self.last_global_time = time
 end
 
 -- 获取最后一封全局邮件时间
-function mailbox:get_last_global_time()
+function Mailbox:get_last_global_time()
     return self.last_global_time
 end
 
 -- 获取未读邮件数量
-function mailbox:get_unread_count()
+function Mailbox:get_unread_count()
     return self.unread_count
 end
 
 -- 获取邮件总数
-function mailbox:get_mail_count()
+function Mailbox:get_mail_count()
     return self.mail_count
 end
 
 -- 获取当前加载的邮件列表
-function mailbox:get_loaded_mails()
+function Mailbox:get_loaded_mails()
     return self.loaded_mails
 end
 
 -- 清理缓存
-function mailbox:clear_cache()
+function Mailbox:clear_cache()
     self.loaded_mails = {}
     self.current_page = 1
     self.has_more = false
 end
 
-return mailbox 
+return Mailbox 

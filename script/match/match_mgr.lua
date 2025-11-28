@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
-local landlord_room = require "match.landlord_room"
-local mahjong_room = require "match.mahjong_room"
+local LandlordRoom = require "match.landlord_room"
+local MahjongRoom = require "match.mahjong_room"
 
 local match_mgr = {}
 
@@ -44,9 +44,9 @@ function match_mgr.create_room(player_id, game_type)
     -- 创建房间
     local room
     if game_type == match_mgr.GAME_TYPE.LANDLORD then
-        room = landlord_room.new(room_id, player_id)
+        room = LandlordRoom.new(room_id, player_id)
     elseif game_type == match_mgr.GAME_TYPE.MAHJONG then
-        room = mahjong_room.new(room_id, player_id)
+        room = MahjongRoom.new(room_id, player_id)
     else
         log.error("invalid game type %d", game_type)
         return false, "无效的游戏类型"
@@ -227,9 +227,9 @@ function match_mgr.quick_match(player_id, game_type)
         -- 创建房间
         local room
         if game_type == match_mgr.GAME_TYPE.LANDLORD then
-            room = landlord_room.new(room_id, match_mgr.waiting_players[game_type][1])
+            room = LandlordRoom.new(room_id, match_mgr.waiting_players[game_type][1])
         else
-            room = mahjong_room.new(room_id, match_mgr.waiting_players[game_type][1])
+            room = MahjongRoom.new(room_id, match_mgr.waiting_players[game_type][1])
         end
         match_mgr.rooms[room_id] = room
         

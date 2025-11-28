@@ -1,6 +1,6 @@
 local skynet = require "skynet"
 local log = require "log"
-local friend_cache = require "cache.friend_cache"
+local FriendCache = require "cache.friend_cache"
 local protocol_handler = require "protocol_handler"
 
 -- 好友管理器
@@ -221,7 +221,7 @@ end
 
 -- 初始化管理器
 function friend_mgr.init()
-    friend_mgr.cache = friend_cache.new()
+    friend_mgr.cache = FriendCache.new()
     
     -- 定时保存数据
     local function tick()

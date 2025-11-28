@@ -2,7 +2,7 @@
 local skynet = require "skynet"
 local manager = require "skynet.manager"
 local log = require "log"
-local score_rank = require "rank.score_rank"
+local ScoreRank = require "rank.score_rank"
 local event_def = require "define.event_def"
 local service_wrapper = require "utils.service_wrapper"
 
@@ -11,7 +11,7 @@ local ranks = {}
 local SAVE_INTERVAL = 180 * 100
 
 function init_rank()
-    local score_rank = score_rank.new("score")
+    local score_rank = ScoreRank.new("score")
     ranks["score"] = score_rank
 
     -- local level_rank = level_rank.new("level")

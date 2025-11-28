@@ -1,16 +1,16 @@
 local skynet = require "skynet"
 local class = require "utils.class"
 
-local room = class("room")
+local Room = class("Room")
 
-function room:ctor(room_id, owner_id)
+function Room:ctor(room_id, owner_id)
     self.room_id = room_id
     self.owner_id = owner_id
     self.players = {}  -- {player_id = {ready = false, ...}}
     self.status = 0    -- 0:等待中 1:游戏中
 end
 
-function room:add_player(player_id)
+function Room:add_player(player_id)
     if self:is_full() then
         return false, "房间已满"
     end
@@ -32,7 +32,7 @@ function room:add_player(player_id)
     return true
 end
 
-function room:remove_player(player_id)
+function Room:remove_player(player_id)
     if not self.players[player_id] then
         return false, "玩家不在房间中"
     end
@@ -66,11 +66,11 @@ function room:remove_player(player_id)
     return true
 end
 
-function room:is_empty()
+function Room:is_empty()
     return next(self.players) == nil
 end
 
-function room:is_full()
+function Room:is_full()
     local count = 0
     for _ in pairs(self.players) do
         count = count + 1
@@ -78,12 +78,12 @@ function room:is_full()
     return count >= self:get_max_players()
 end
 
-function room:get_max_players()
+function Room:get_max_players()
     -- 子类重写
     return 0
 end
 
-function room:get_info()
+function Room:get_info()
     return {
         room_id = self.room_id,
         owner_id = self.owner_id,
@@ -92,7 +92,7 @@ function room:get_info()
     }
 end
 
-function room:get_players_info()
+function Room:get_players_info()
     local info = {}
     for pid, player in pairs(self.players) do
         info[pid] = {
@@ -102,10 +102,10 @@ function room:get_players_info()
     return info
 end
 
-function room:broadcast(msg_type, data)
+function Room:broadcast(msg_type, data)
     for pid, _ in pairs(self.players) do
         skynet.send(pid, "lua", "send_msg", msg_type, data)
     end
 end
 
-return room 
+return Room 

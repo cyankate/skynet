@@ -1,13 +1,13 @@
 local skynet = require "skynet"
-local ctn_base = require "ctn.ctn_base"
+local CtnBase = require "ctn.ctn_base"
 
 local class = require "utils.class"
 local tableUtils = require "utils.tableUtils"
 local log = require "log"
 
-local ctn_kv = class("ctn_kv", ctn_base)
+local CtnKv = class("CtnKv", CtnBase)
 --[[
-    ctn_kv 是一个键值对容器类，继承自 ctn_base 类。
+    CtnKv 是一个键值对容器类，继承自 CtnBase 类。
     它用于存储和管理键值对数据，并提供加载和保存数据的功能。
 ]]
 
@@ -21,8 +21,8 @@ local ERROR_CODE = {
     KEY_NOT_FOUND = 5,     -- 键不存在
 }
 
-function ctn_kv:ctor(_player_id, _tbl, _name)
-    ctn_base.ctor(self, _player_id, _name)
+function CtnKv:ctor(_player_id, _tbl, _name)
+    CtnBase.ctor(self, _player_id, _name)
     self.tbl_ = _tbl
     self.prikey_ = _player_id
     self.inserted_ = false 
@@ -32,25 +32,25 @@ function ctn_kv:ctor(_player_id, _tbl, _name)
     self.max_data_size_ = 1024 * 1024 -- 最大数据大小（1MB）
 end
 
-function ctn_kv:set_dirty()
+function CtnKv:set_dirty()
     self.dirty_ = true
 end 
 
-function ctn_kv:clear_dirty()
+function CtnKv:clear_dirty()
     self.dirty_ = false
 end
 
-function ctn_kv:is_dirty()
+function CtnKv:is_dirty()
     return self.dirty_
 end
 
 -- 设置最大数据大小
-function ctn_kv:set_max_data_size(size)
+function CtnKv:set_max_data_size(size)
     self.max_data_size_ = size
 end
 
 -- 保存数据
-function ctn_kv:onsave()
+function CtnKv:onsave()
     local data = {}
     for k, v in pairs(self.data_) do
         data[k] = v
@@ -60,7 +60,7 @@ function ctn_kv:onsave()
 end
 
 -- 加载数据
-function ctn_kv:onload(_data)
+function CtnKv:onload(_data)
     if not _data then
         return
     end
@@ -71,7 +71,7 @@ function ctn_kv:onload(_data)
 end
 
 -- 从数据库加载数据
-function ctn_kv:doload()
+function CtnKv:doload()
     local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
     local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
@@ -85,7 +85,7 @@ function ctn_kv:doload()
 end
 
 -- 保存数据到数据库
-function ctn_kv:dosave()
+function CtnKv:dosave()
     local data, err_code = self:onsave()
     if not data then
         return false, err_code
@@ -111,7 +111,7 @@ function ctn_kv:dosave()
     return true 
 end
 
-function ctn_kv:set(_key, _value)
+function CtnKv:set(_key, _value)
     if not _key or not _value then
         return false, ERROR_CODE.INVALID_DATA
     end
@@ -123,11 +123,11 @@ function ctn_kv:set(_key, _value)
     return true
 end
 
-function ctn_kv:get(_key)
+function CtnKv:get(_key)
     return self.data_[_key]
 end
 
-function ctn_kv:inc(_key, _value)
+function CtnKv:inc(_key, _value)
     if not _key or not _value then
         return false, ERROR_CODE.INVALID_DATA
     end
@@ -142,12 +142,12 @@ function ctn_kv:inc(_key, _value)
     return true
 end
 
-function ctn_kv:get_all()
+function CtnKv:get_all()
     return self.data_
 end
 
 -- 批量添加数据
-function ctn_kv:batch_add(items)
+function CtnKv:batch_add(items)
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -161,7 +161,7 @@ function ctn_kv:batch_add(items)
 end
 
 -- 批量删除数据
-function ctn_kv:batch_remove(keys)
+function CtnKv:batch_remove(keys)
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -175,7 +175,7 @@ function ctn_kv:batch_remove(keys)
 end
 
 -- 批量更新数据
-function ctn_kv:batch_update(items)
+function CtnKv:batch_update(items)
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -191,7 +191,7 @@ function ctn_kv:batch_update(items)
 end
 
 -- 获取所有键
-function ctn_kv:get_all_keys()
+function CtnKv:get_all_keys()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -204,7 +204,7 @@ function ctn_kv:get_all_keys()
 end
 
 -- 获取所有值
-function ctn_kv:get_all_values()
+function CtnKv:get_all_values()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -217,7 +217,7 @@ function ctn_kv:get_all_values()
 end
 
 -- 检查键是否存在
-function ctn_kv:has_key(key)
+function CtnKv:has_key(key)
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -225,7 +225,7 @@ function ctn_kv:has_key(key)
 end
 
 -- 获取数据大小
-function ctn_kv:get_data_size()
+function CtnKv:get_data_size()
     if not self:is_loaded() then
         return 0, ERROR_CODE.NOT_LOADED
     end
@@ -235,7 +235,7 @@ function ctn_kv:get_data_size()
 end
 
 -- 清空数据
-function ctn_kv:clear()
+function CtnKv:clear()
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -246,7 +246,7 @@ function ctn_kv:clear()
 end
 
 -- 获取数据统计信息
-function ctn_kv:get_stats()
+function CtnKv:get_stats()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -262,4 +262,4 @@ function ctn_kv:get_stats()
     return stats
 end
 
-return ctn_kv
+return CtnKv

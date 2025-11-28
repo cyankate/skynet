@@ -1,16 +1,15 @@
 local skynet = require "skynet"
-local class = require "utils.class"
-local ctn_kv = require "container.ctn_kv"
+local CtnKv = require "ctn.ctn_kv"
 local event_def = require "define.event_def"
 local condition_def = require "define.condition_def"
 
 -- 使用class模块实现继承
-local ctn_task = class("ctn_task", ctn_kv)
+local CtnTask = class("CtnTask", CtnKv)
 
 -- 构造函数
-function ctn_task:ctor(player)
+function CtnTask:ctor(player)
     -- 调用父类构造函数
-    ctn_task.super.ctor(self, player)
+    CtnTask.super.ctor(self, player)
     
     -- 任务相关属性
     self.tasks = {}           -- 当前任务列表 {task_id = task_data}
@@ -22,7 +21,7 @@ function ctn_task:ctor(player)
 end
 
 -- 初始化任务数据
-function ctn_task:init_tasks()
+function CtnTask:init_tasks()
     -- 从数据库加载玩家任务数据
     local db_tasks = skynet.call("dbS", "lua", "load_player_tasks", self.player.id)
     for _, task_data in ipairs(db_tasks) do
@@ -31,7 +30,7 @@ function ctn_task:init_tasks()
 end
 
 -- 接受任务
-function ctn_task:accept_task(task_id)
+function CtnTask:accept_task(task_id)
     local task_config = require("config.task_config")[task_id]
     if not task_config then
         return false, "任务不存在"
@@ -72,7 +71,7 @@ function ctn_task:accept_task(task_id)
 end
 
 -- 订阅条件
-function ctn_task:subscribe_condition(condition_id, condition_params, task_id)
+function CtnTask:subscribe_condition(condition_id, condition_params, task_id)
     if not self.condition_subscriptions[condition_id] then
         self.condition_subscriptions[condition_id] = {}
     end
@@ -87,7 +86,7 @@ function ctn_task:subscribe_condition(condition_id, condition_params, task_id)
 end
 
 -- 取消订阅条件
-function ctn_task:unsubscribe_condition(condition_id, task_id)
+function CtnTask:unsubscribe_condition(condition_id, task_id)
     if self.condition_subscriptions[condition_id] then
         self.condition_subscriptions[condition_id][task_id] = nil
         
@@ -100,7 +99,7 @@ function ctn_task:unsubscribe_condition(condition_id, task_id)
 end
 
 -- 条件变化回调
-function ctn_task:on_condition_changed(condition_id, task_id, value)
+function CtnTask:on_condition_changed(condition_id, task_id, value)
     local task_data = self.tasks[task_id]
     if not task_data or task_data.state ~= task_def.TASK_STATE.ACCEPTED then
         return
@@ -111,7 +110,7 @@ function ctn_task:on_condition_changed(condition_id, task_id, value)
 end
 
 -- 更新任务进度
-function ctn_task:update_task_progress(task_id, condition_id, progress)
+function CtnTask:update_task_progress(task_id, condition_id, progress)
     local task_data = self.tasks[task_id]
     if not task_data or task_data.state ~= task_def.TASK_STATE.ACCEPTED then
         return false
@@ -132,7 +131,7 @@ function ctn_task:update_task_progress(task_id, condition_id, progress)
 end
 
 -- 完成任务
-function ctn_task:complete_task(task_id)
+function CtnTask:complete_task(task_id)
     local task_data = self.tasks[task_id]
     if not task_data or task_data.state ~= task_def.TASK_STATE.ACCEPTED then
         return false
@@ -157,7 +156,7 @@ function ctn_task:complete_task(task_id)
 end
 
 -- 领取任务奖励
-function ctn_task:get_task_reward(task_id)
+function CtnTask:get_task_reward(task_id)
     local task_data = self.tasks[task_id]
     if not task_data or task_data.state ~= task_def.TASK_STATE.COMPLETED then
         return false, "任务未完成"
@@ -184,7 +183,7 @@ function ctn_task:get_task_reward(task_id)
 end
 
 -- 检查前置任务
-function ctn_task:check_pre_tasks(pre_tasks)
+function CtnTask:check_pre_tasks(pre_tasks)
     if not pre_tasks then return true end
     
     for _, task_id in ipairs(pre_tasks) do
@@ -196,7 +195,7 @@ function ctn_task:check_pre_tasks(pre_tasks)
 end
 
 -- 检查接取条件
-function ctn_task:check_accept_conditions(task_config)
+function CtnTask:check_accept_conditions(task_config)
     -- 检查等级要求
     if task_config.require_level and self.player.level < task_config.require_level then
         return false
@@ -211,7 +210,7 @@ function ctn_task:check_accept_conditions(task_config)
 end
 
 -- 检查任务完成
-function ctn_task:check_task_completed(task_id)
+function CtnTask:check_task_completed(task_id)
     local task_data = self.tasks[task_id]
     if not task_data then return false end
     
@@ -227,7 +226,7 @@ function ctn_task:check_task_completed(task_id)
 end
 
 -- 发放任务奖励
-function ctn_task:give_task_rewards(task_id)
+function CtnTask:give_task_rewards(task_id)
     local task_config = require("config.task_config")[task_id]
     if not task_config then
         return false, "任务不存在"
@@ -253,9 +252,9 @@ function ctn_task:give_task_rewards(task_id)
 end
 
 -- 触发事件
-function ctn_task:trigger_event(event_name, ...)
+function CtnTask:trigger_event(event_name, ...)
     local eventS = skynet.uniqueservice("event")
     skynet.call(eventS, "lua", "trigger", event_name, self.player.id, ...)
 end
 
-return ctn_task
+return CtnTask

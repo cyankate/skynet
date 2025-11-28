@@ -2,8 +2,9 @@ local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
+local Room = require "match.room"
 
-local landlord_room = class("landlord_room")
+local LandlordRoom = class("LandlordRoom", Room)
 
 -- 房间状态
 local ROOM_STATUS = {
@@ -20,7 +21,7 @@ local PLAYER_STATUS = {
     OFFLINE = 3,  -- 离线
 }
 
-function landlord_room:ctor(room_id, creator_id)
+function LandlordRoom:ctor(room_id, creator_id)
     self.room_id = room_id
     self.creator_id = creator_id
     self.status = ROOM_STATUS.WAITING
@@ -35,7 +36,7 @@ function landlord_room:ctor(room_id, creator_id)
 end
 
 -- 添加玩家
-function landlord_room:add_player(player_id)
+function LandlordRoom:add_player(player_id)
     if #self.players >= 3 then
         log.error("room %d is full when player %d try to join", self.room_id, player_id)
         return false, "房间已满"
@@ -64,7 +65,7 @@ function landlord_room:add_player(player_id)
 end
 
 -- 移除玩家
-function landlord_room:remove_player(player_id)
+function LandlordRoom:remove_player(player_id)
     if not self.players[player_id] then
         log.error("player %d not in room %d", player_id, self.room_id)
         return false, "玩家不在房间中"
@@ -99,7 +100,7 @@ function landlord_room:remove_player(player_id)
 end
 
 -- 玩家准备
-function landlord_room:player_ready(player_id)
+function LandlordRoom:player_ready(player_id)
     if not self.players[player_id] then
         log.error("player %d not in room %d", player_id, self.room_id)
         return false, "玩家不在房间中"
@@ -132,7 +133,7 @@ function landlord_room:player_ready(player_id)
 end
 
 -- 开始游戏
-function landlord_room:start_game()
+function LandlordRoom:start_game()
     self.status = ROOM_STATUS.PLAYING
     
     -- 初始化玩家状态
@@ -174,7 +175,7 @@ function landlord_room:start_game()
 end
 
 -- 发牌
-function landlord_room:deal_cards()
+function LandlordRoom:deal_cards()
     -- 生成所有牌
     local all_cards = self:generate_cards()
     -- 洗牌
@@ -193,7 +194,7 @@ function landlord_room:deal_cards()
 end
 
 -- 发地主牌
-function landlord_room:deal_landlord_cards()
+function LandlordRoom:deal_landlord_cards()
     -- 使用剩余的牌发地主牌
     local cards = {}
     for i = 1, 3 do
@@ -207,7 +208,7 @@ function landlord_room:deal_landlord_cards()
 end
 
 -- 洗牌函数
-function landlord_room:shuffle_cards(cards)
+function LandlordRoom:shuffle_cards(cards)
     local n = #cards
     for i = n, 2, -1 do
         local j = math.random(i)
@@ -216,7 +217,7 @@ function landlord_room:shuffle_cards(cards)
 end
 
 -- 生成所有牌
-function landlord_room:generate_cards()
+function LandlordRoom:generate_cards()
     local cards = {}
     local suits = {"♠", "♥", "♣", "♦"}
     local values = {"3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"}
@@ -236,7 +237,7 @@ function landlord_room:generate_cards()
 end
 
 -- 出牌
-function landlord_room:play_cards(player_id, cards)
+function LandlordRoom:play_cards(player_id, cards)
     if not self.players[player_id] then
         log.error("player %d not in room %d", player_id, self.room_id)
         return false, "玩家不在房间中"
@@ -313,19 +314,19 @@ function landlord_room:play_cards(player_id, cards)
 end
 
 -- 检查牌是否合法
-function landlord_room:is_valid_cards(cards)
+function LandlordRoom:is_valid_cards(cards)
     -- TODO: 实现牌型判断
     return true
 end
 
 -- 检查是否大于上家
-function landlord_room:is_bigger_cards(cards1, cards2)
+function LandlordRoom:is_bigger_cards(cards1, cards2)
     -- TODO: 实现牌型大小比较
     return true
 end
 
 -- 下一个玩家
-function landlord_room:next_player()
+function LandlordRoom:next_player()
     local player_ids = {}
     for pid, _ in pairs(self.players) do
         table.insert(player_ids, pid)
@@ -346,7 +347,7 @@ function landlord_room:next_player()
 end
 
 -- 玩家掉线
-function landlord_room:player_offline(player_id)
+function LandlordRoom:player_offline(player_id)
     if not self.players[player_id] then
         log.error("player %d not in room %d", player_id, self.room_id)
         return false, "玩家不在房间中"
@@ -385,7 +386,7 @@ function landlord_room:player_offline(player_id)
 end
 
 -- 玩家重连
-function landlord_room:player_reconnect(player_id)
+function LandlordRoom:player_reconnect(player_id)
     if not self.players[player_id] then
         log.error("player %d not in room %d", player_id, self.room_id)
         return false, "玩家不在房间中"
@@ -419,7 +420,7 @@ function landlord_room:player_reconnect(player_id)
 end
 
 -- 游戏结束
-function landlord_room:game_over(winner_id)
+function LandlordRoom:game_over(winner_id)
     self.status = ROOM_STATUS.FINISHED
     
     -- 计算分数
@@ -439,7 +440,7 @@ function landlord_room:game_over(winner_id)
 end
 
 -- 获取房间信息
-function landlord_room:get_info()
+function LandlordRoom:get_info()
     return {
         room_id = self.room_id,
         creator_id = self.creator_id,
@@ -456,7 +457,7 @@ function landlord_room:get_info()
 end
 
 -- 获取玩家信息
-function landlord_room:get_players_info()
+function LandlordRoom:get_players_info()
     local info = {}
     for player_id, player in pairs(self.players) do
         table.insert(info, {
@@ -470,7 +471,7 @@ function landlord_room:get_players_info()
 end
 
 -- 获取玩家座位号
-function landlord_room:get_player_seat(player_id)
+function LandlordRoom:get_player_seat(player_id)
     -- 将玩家ID按加入顺序排序
     local player_list = {}
     for pid, _ in pairs(self.players) do
@@ -488,7 +489,7 @@ function landlord_room:get_player_seat(player_id)
 end
 
 -- 获取下一个玩家
-function landlord_room:get_next_player(current_player_id)
+function LandlordRoom:get_next_player(current_player_id)
     local player_list = {}
     for pid, _ in pairs(self.players) do
         table.insert(player_list, pid)
@@ -510,7 +511,7 @@ function landlord_room:get_next_player(current_player_id)
 end
 
 -- 广播消息
-function landlord_room:broadcast(name, data)
+function LandlordRoom:broadcast(name, data)
     local player_list = {}
     for player_id, _ in pairs(self.players) do
         table.insert(player_list, player_id)
@@ -518,4 +519,4 @@ function landlord_room:broadcast(name, data)
     protocol_handler.send_to_players(player_list, name, data)
 end
 
-return landlord_room 
+return LandlordRoom 

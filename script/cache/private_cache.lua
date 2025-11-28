@@ -1,9 +1,9 @@
 local skynet = require "skynet"
-local base_cache = require "cache.base_cache"
+local BaseCache = require "cache.base_cache"
 local json = require "cjson"
-local private_cache_item = require "cache.private_cache_item"
+local PrivateCacheItem = require "cache.private_cache_item"
 
-private_cache = class("private_cache", base_cache)
+local PrivateCache = class("PrivateCache", BaseCache)
 
 -- 缓存配置
 local CACHE_CONFIG = {
@@ -13,13 +13,13 @@ local CACHE_CONFIG = {
 }
 
 -- 初始化
-function private_cache:ctor()
-    base_cache.ctor(self, "private_cache", "player_private")
+function PrivateCache:ctor()
+    BaseCache.ctor(self, "PrivateCache", "player_private")
 end
 
-function private_cache:new_item(player_id)
-    local obj = private_cache_item.new(player_id)
+function PrivateCache:new_item(player_id)
+    local obj = PrivateCacheItem.new(player_id)
     return obj
 end
 
-return private_cache 
+return PrivateCache 

@@ -8,9 +8,9 @@ local GUILD_POSITION = guild_def.GUILD_POSITION
 local POSITION_PERMISSIONS = guild_def.POSITION_PERMISSIONS
 local MEMBER_DATA_KEYS = guild_def.MEMBER_DATA_KEYS
 
-local guild_base = class("guild_base")
+local Guild = class("Guild")
 
-function guild_base:ctor(_id, _name)
+function Guild:ctor(_id, _name)
     self.id_ = _id                   -- 公会ID
     self.name_ = _name               -- 公会名称
     self.level_ = 1                  -- 公会等级
@@ -34,7 +34,7 @@ function guild_base:ctor(_id, _name)
 end
 
 -- 检查权限
-function guild_base:check_permission(_player_id, _permission)
+function Guild:check_permission(_player_id, _permission)
     local member = self.members_[_player_id]
     if not member then
         return false
@@ -55,7 +55,7 @@ function guild_base:check_permission(_player_id, _permission)
 end
 
 -- 添加成员
-function guild_base:add_member(_player_id, _player_name, _position, _data)
+function Guild:add_member(_player_id, _player_name, _position, _data)
     if self.members_[_player_id] then
         return false
     end
@@ -80,7 +80,7 @@ function guild_base:add_member(_player_id, _player_name, _position, _data)
 end
 
 -- 移除成员
-function guild_base:remove_member(_player_id)
+function Guild:remove_member(_player_id)
     if not self.members_[_player_id] then
         return false
     end
@@ -91,7 +91,7 @@ function guild_base:remove_member(_player_id)
 end
 
 -- 修改成员职位
-function guild_base:change_position(_player_id, _new_position)
+function Guild:change_position(_player_id, _new_position)
     local member = self.members_[_player_id]
     if not member then
         return false
@@ -103,7 +103,7 @@ function guild_base:change_position(_player_id, _new_position)
 end
 
 -- 更新成员在线状态
-function guild_base:update_member_online(_player_id, _online)
+function Guild:update_member_online(_player_id, _online)
     local member = self.members_[_player_id]
     if not member then
         return false
@@ -116,7 +116,7 @@ function guild_base:update_member_online(_player_id, _online)
 end
 
 -- 添加贡献
-function guild_base:add_contribution(_player_id, _amount)
+function Guild:add_contribution(_player_id, _amount)
     local member = self.members_[_player_id]
     if not member then
         return false
@@ -129,35 +129,35 @@ function guild_base:add_contribution(_player_id, _amount)
 end
 
 -- 添加经验
-function guild_base:add_exp(_amount)
+function Guild:add_exp(_amount)
     self.exp_ = self.exp_ + _amount
     self:dirty()
     return true
 end
 
 -- 添加资金
-function guild_base:add_funds(_amount)
+function Guild:add_funds(_amount)
     self.funds_ = self.funds_ + _amount
     self:dirty()
     return true
 end
 
 -- 修改公告
-function guild_base:modify_notice(_notice)
+function Guild:modify_notice(_notice)
     self.notice_ = _notice
     self:dirty()
     return true
 end
 
 -- 修改加入设置
-function guild_base:modify_join_setting(_setting)
+function Guild:modify_join_setting(_setting)
     self.join_setting_ = _setting
     self:dirty()
     return true
 end
 
 -- 添加申请
-function guild_base:add_application(_player_id, _player_name)
+function Guild:add_application(_player_id, _player_name)
     if self.applications_[_player_id] then
         return false
     end
@@ -173,7 +173,7 @@ function guild_base:add_application(_player_id, _player_name)
 end
 
 -- 移除申请
-function guild_base:remove_application(_player_id)
+function Guild:remove_application(_player_id)
     if not self.applications_[_player_id] then
         return false
     end
@@ -183,20 +183,20 @@ function guild_base:remove_application(_player_id)
     return true
 end 
 
-function guild_base:dirty()
+function Guild:dirty()
     self.dirty_ = true 
 end
 
-function guild_base:is_dirty()
+function Guild:is_dirty()
     return self.dirty_
 end
 
-function guild_base:clear_dirty()
+function Guild:clear_dirty()
     self.dirty_ = false
 end
 
 -- 获取公会数据
-function guild_base:get_data()
+function Guild:get_data()
     local data = {
         id = self.id_,
         name = self.name_,
@@ -228,12 +228,12 @@ function guild_base:get_data()
     return data
 end
 
-function guild_base:onsave()
+function Guild:onsave()
     return self:get_data()
 end 
 
 -- 加载公会数据
-function guild_base:onload(_data)
+function Guild:onload(_data)
     self.id_ = _data.id
     self.name_ = _data.name
     for _, member in ipairs(_data.members) do
@@ -256,4 +256,4 @@ function guild_base:onload(_data)
     self.inserted_ = true
 end
 
-return guild_base 
+return Guild 

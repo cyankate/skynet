@@ -7,9 +7,9 @@ local rate_limiter = require "chat.rate_limiter"
 
 -- 导入频道相关模块
 local channel_mgr = require "chat.channel_mgr"
-local world_channel = require "chat.world_channel"
-local guild_channel = require "chat.guild_channel"
-local private_channel = require "chat.private_channel"
+local WorldChannel = require "chat.world_channel"
+local GuildChannel = require "chat.guild_channel"
+local PrivateChannel = require "chat.private_channel"
 
 local limiters = nil
 
@@ -22,7 +22,7 @@ function CMD.init()
     channel_mgr.init()
     
     -- 创建世界频道
-    local world_channel_id = channel_mgr.create_channel(world_channel, 1, "世界频道", CHANNEL_TYPE.PUBLIC)
+    local world_channel_id = channel_mgr.create_channel(WorldChannel, 1, "世界频道", CHANNEL_TYPE.PUBLIC)
     channel_mgr.cache:get(world_channel_id)
 
     -- -- 创建系统频道
@@ -56,7 +56,7 @@ function CMD.on_event(event_name, event_data)
         -- 创建公会频道
         local guild_id = event_data.guild_id
         local guild_name = event_data.guild_name
-        local channel_id = channel_mgr.create_channel(guild_channel, guild_name .. "公会频道", "guild", guild_id)
+        local channel_id = channel_mgr.create_channel(GuildChannel, guild_name .. "公会频道", "guild", guild_id)
         log.info("Guild channel created for guild %d with ID: %d", guild_id, channel_id)
     elseif event_name == "guild.dismiss" then
         -- 删除公会频道

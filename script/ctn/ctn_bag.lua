@@ -1,10 +1,9 @@
 local skynet = require "skynet"
-local ctn_mf = require "ctn.ctn_mf"
-local class = require "utils.class"
+local CtnMf = require "ctn.ctn_mf"
 local tableUtils = require "utils.tableUtils"
 local log = require "log"
 
-local ctn_bag = class("ctn_bag", ctn_mf)
+local CtnBag = class("CtnBag", CtnMf)
 
 -- 背包配置
 local BAG_CONFIG = {
@@ -18,8 +17,8 @@ local SPECIAL_KEYS = {
     CONFIG = "bag_config",  -- 背包配置信息
 }
 
-function ctn_bag:ctor(_player_id, _tbl, _name)
-    ctn_mf.ctor(self, _player_id, _tbl, _name)
+function CtnBag:ctor(_player_id, _tbl, _name)
+    CtnMf.ctor(self, _player_id, _tbl, _name)
     self.slots_ = {}  -- 内存中的物品数据
     self.config_ = {  -- 背包配置信息
         max_slots = BAG_CONFIG.MAX_SLOTS,
@@ -29,7 +28,7 @@ function ctn_bag:ctor(_player_id, _tbl, _name)
 end
 
 -- 保存数据
-function ctn_bag:onsave()
+function CtnBag:onsave()
     local datas = {}
     -- 保存配置信息
     datas[SPECIAL_KEYS.CONFIG] = self.config_
@@ -59,12 +58,12 @@ function ctn_bag:onsave()
     for idx, data in pairs(datas) do
         table.insert(rows, {player_id = self.owner_, idx = idx, data = data})
     end
-    --log.debug("ctn_bag:onsave %s", tableUtils.serialize_table(rows))
+    --log.debug("CtnBag:onsave %s", tableUtils.serialize_table(rows))
     return rows
 end
 
 -- 加载数据
-function ctn_bag:onload(_rows)
+function CtnBag:onload(_rows)
     if not _rows then return end
     local datas = {}
     for _, row in pairs(_rows) do
@@ -92,23 +91,23 @@ function ctn_bag:onload(_rows)
 end
 
 -- 获取指定格子的物品
-function ctn_bag:get_item(slot)
+function CtnBag:get_item(slot)
     return self.slots_[slot]
 end
 
 -- 检查格子是否为空
-function ctn_bag:is_slot_empty(slot)
+function CtnBag:is_slot_empty(slot)
     return not self.slots_[slot]
 end
 
 -- 检查物品是否可以堆叠
-function ctn_bag:can_stack(item_id)
+function CtnBag:can_stack(item_id)
     -- TODO: 从配置中读取物品是否可以堆叠
     return true
 end
 
 -- 检查物品是否可以放入指定格子
-function ctn_bag:can_put_item(slot, item)
+function CtnBag:can_put_item(slot, item)
     if slot < 1 or slot > self.config_.max_slots then
         return false, "格子不存在"
     end
@@ -130,7 +129,7 @@ function ctn_bag:can_put_item(slot, item)
 end
 
 -- 添加物品
-function ctn_bag:add_item(item)
+function CtnBag:add_item(item)
     if not item or not item.item_id or not item.count then
         return false, "物品数据无效"
     end
@@ -150,7 +149,7 @@ function ctn_bag:add_item(item)
             end
         end
     end
-    --log.debug("ctn_bag:add_item %s", tableUtils.serialize_table(self.config_))
+    --log.debug("CtnBag:add_item %s", tableUtils.serialize_table(self.config_))
     -- 寻找空格子
     for slot = 1, self.config_.max_slots do
         if self:is_slot_empty(slot) then
@@ -169,7 +168,7 @@ function ctn_bag:add_item(item)
 end
 
 -- 删除物品
-function ctn_bag:remove_item(slot, count)
+function CtnBag:remove_item(slot, count)
     if not self.slots_[slot] then
         return false, "格子为空"
     end
@@ -187,7 +186,7 @@ function ctn_bag:remove_item(slot, count)
 end
 
 -- 移动物品
-function ctn_bag:move_item(from_slot, to_slot)
+function CtnBag:move_item(from_slot, to_slot)
     if not self.slots_[from_slot] then
         return false, "源格子为空"
     end
@@ -222,7 +221,7 @@ function ctn_bag:move_item(from_slot, to_slot)
 end
 
 -- 检查背包是否已满
-function ctn_bag:is_full()
+function CtnBag:is_full()
     local count = 0
     for _ in pairs(self.slots_) do
         count = count + 1
@@ -231,7 +230,7 @@ function ctn_bag:is_full()
 end
 
 -- 获取背包剩余格子数
-function ctn_bag:get_free_slots()
+function CtnBag:get_free_slots()
     local count = 0
     for _ in pairs(self.slots_) do
         count = count + 1
@@ -240,7 +239,7 @@ function ctn_bag:get_free_slots()
 end
 
 -- 获取指定物品的数量
-function ctn_bag:get_item_count(item_id)
+function CtnBag:get_item_count(item_id)
     local count = 0
     for _, item in pairs(self.slots_) do
         if item.item_id == item_id then
@@ -251,18 +250,18 @@ function ctn_bag:get_item_count(item_id)
 end
 
 -- 检查是否有足够数量的物品
-function ctn_bag:has_enough_items(item_id, count)
+function CtnBag:has_enough_items(item_id, count)
     return self:get_item_count(item_id) >= count
 end
 
 -- 获取物品所在批次的键名
-function ctn_bag:get_batch_key(slot)
+function CtnBag:get_batch_key(slot)
     local batch_index = math.ceil(slot / self.config_.batch_size)
     return string.format("items_batch_%d", batch_index)
 end
 
 -- 设置背包配置
-function ctn_bag:set_config(key, value)
+function CtnBag:set_config(key, value)
     if key == "max_slots" or key == "max_stack" or key == "batch_size" then
         self.config_[key] = value
         return true
@@ -270,4 +269,4 @@ function ctn_bag:set_config(key, value)
     return false, "无效的配置项"
 end
 
-return ctn_bag
+return CtnBag

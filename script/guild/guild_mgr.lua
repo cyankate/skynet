@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
-local guild_base = require "guild.guild_base"
+local Guild = require "guild.guild_base"
 local guild_def = require "define.guild_def"
 
 -- 错误码定义
@@ -35,7 +35,7 @@ function guild_mgr.init()
     local dbS = skynet.localname(".db")
     local guilds = skynet.call(dbS, "lua", "select", "guild", {is_deleted = 0})
     for _, guild_data in ipairs(guilds) do
-        local guild = guild_base.new(guild_data.id, guild_data.name, guild_data.leader_id)
+        local guild = Guild.new(guild_data.id, guild_data.name, guild_data.leader_id)
         guild:onload(guild_data)
         guild_mgr.add_guild(guild)
     end
@@ -73,7 +73,7 @@ function guild_mgr.create_guild(_leader_id, _leader_name, _guild_name)
     
     -- 创建公会
     local guild_id = guild_mgr.generate_guild_id()
-    local guild = guild_base.new(guild_id, _guild_name, _leader_id)
+    local guild = Guild.new(guild_id, _guild_name, _leader_id)
     
     -- 添加会长
     guild:add_member(_leader_id, _leader_name, guild_def.GUILD_POSITION.LEADER)

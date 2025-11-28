@@ -1,11 +1,10 @@
 local skynet = require "skynet"
-local ctn_base = require "ctn.ctn_base"
-local class = require "utils.class"
+local CtnBase = require "ctn.ctn_base"
 local tableUtils = require "utils.tableUtils"
 local log = require "log"
 local table_schema = require "sql/table_schema"
 
-local ctn_mf = class("ctn_mf", ctn_base)
+local CtnMf = class("CtnMf", CtnBase)
 
 -- 错误码
 local ERROR_CODE = {
@@ -18,8 +17,8 @@ local ERROR_CODE = {
     MERGE_ERROR = 6,       -- 合并错误
 }
 
-function ctn_mf:ctor(_player_id, _tbl, _name)
-    ctn_base.ctor(self, _player_id, _name)
+function CtnMf:ctor(_player_id, _tbl, _name)
+    CtnBase.ctor(self, _player_id, _name)
     self.tbl_ = _tbl
     self.prikey_ = _player_id
     self.datas_ = {}       -- 所有数据
@@ -31,15 +30,15 @@ function ctn_mf:ctor(_player_id, _tbl, _name)
 end 
 
 -- 设置最大数据大小
-function ctn_mf:set_max_data_size(size)
+function CtnMf:set_max_data_size(size)
     self.max_data_size_ = size
 end
 
 -- 从数据库加载数据
-function ctn_mf:doload()
-    local db = skynet.localname(".db")
+function CtnMf:doload()
+    local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
-    local ret = skynet.call(db, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
+    local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
     
     if ret.badresult then
         self:set_error("Failed to load data from database")
@@ -63,7 +62,7 @@ function ctn_mf:doload()
 end
 
 -- 保存数据到数据库
-function ctn_mf:dosave()
+function CtnMf:dosave()
     -- 获取需要保存的数据
     local datas, err_code = self:onsave()
     if not datas then
@@ -76,8 +75,10 @@ function ctn_mf:dosave()
     local fields = table_schema[self.tbl_].fields
     
     -- 获取数据库连接
-    local db = skynet.localname(".db")
-    
+    local dbc = skynet.localname(".db")
+    if not dbc then
+        log.error(">>>>>>>>>>>>>>>>>>>>>>> dbc not found")
+    end 
     -- 遍历所有数据行
     for _, data in pairs(datas) do
         -- 提取有效字段值
@@ -100,7 +101,7 @@ function ctn_mf:dosave()
         -- 根据是否已插入决定执行insert还是update
         if not self.sub_inserted_[prikeys_str] then
             -- 执行插入操作
-            local ret = skynet.call(db, "lua", "insert", self.tbl_, values)
+            local ret = skynet.call(dbc, "lua", "insert", self.tbl_, values)
             if not ret then
                 error(string.format("Failed to insert data with primary keys: %s", prikeys_str))
                 return
@@ -108,7 +109,7 @@ function ctn_mf:dosave()
             self.sub_inserted_[prikeys_str] = true
         else 
             -- 执行更新操作
-            skynet.send(db, "lua", "update", self.tbl_, values)
+            skynet.send(dbc, "lua", "update", self.tbl_, values)
         end 
     end
     
@@ -116,7 +117,7 @@ function ctn_mf:dosave()
 end
 
 -- 获取所有字段
-function ctn_mf:get_all_fields()
+function CtnMf:get_all_fields()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -129,7 +130,7 @@ function ctn_mf:get_all_fields()
 end
 
 -- 获取所有值
-function ctn_mf:get_all_values()
+function CtnMf:get_all_values()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -142,7 +143,7 @@ function ctn_mf:get_all_values()
 end
 
 -- 检查字段是否存在
-function ctn_mf:has_field(field)
+function CtnMf:has_field(field)
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -150,7 +151,7 @@ function ctn_mf:has_field(field)
 end
 
 -- 获取数据大小
-function ctn_mf:get_data_size()
+function CtnMf:get_data_size()
     if not self:is_loaded() then
         return 0, ERROR_CODE.NOT_LOADED
     end
@@ -160,7 +161,7 @@ function ctn_mf:get_data_size()
 end
 
 -- 清空数据
-function ctn_mf:clear()
+function CtnMf:clear()
     if not self:is_loaded() then
         return false, ERROR_CODE.NOT_LOADED
     end
@@ -173,7 +174,7 @@ function ctn_mf:clear()
 end
 
 -- 获取数据统计信息
-function ctn_mf:get_stats()
+function CtnMf:get_stats()
     if not self:is_loaded() then
         return nil, ERROR_CODE.NOT_LOADED
     end
@@ -190,4 +191,4 @@ function ctn_mf:get_stats()
     return stats
 end
 
-return ctn_mf
+return CtnMf

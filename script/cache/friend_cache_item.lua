@@ -1,10 +1,10 @@
 local skynet = require "skynet"
-local cache_item = require "cache.cache_item"
+local CacheItem = require "cache.cache_item"
 
-local friend_cache_item = class("friend_cache_item", cache_item)
+local FriendCacheItem = class("FriendCacheItem", CacheItem)
 
-function friend_cache_item:ctor(player_id)
-    cache_item.ctor(self, player_id)
+function FriendCacheItem:ctor(player_id)
+    CacheItem.ctor(self, player_id)
     self.player_id = player_id
     self.friend_map = {}  -- 好友列表
     self.apply_map = {}   -- 好友申请列表
@@ -12,7 +12,7 @@ function friend_cache_item:ctor(player_id)
     self.friend_info = {} -- 好友详细信息
 end
 
-function friend_cache_item:onsave()
+function FriendCacheItem:onsave()
     local ret = {}
     ret.player_id = self.player_id
     ret.data = {
@@ -24,7 +24,7 @@ function friend_cache_item:onsave()
     return ret
 end
 
-function friend_cache_item:onload(ret)
+function FriendCacheItem:onload(ret)
     self.player_id = ret.player_id
     if ret.data then
         self.friend_map = ret.data.friend_map or {}
@@ -35,7 +35,7 @@ function friend_cache_item:onload(ret)
 end
 
 -- 添加好友
-function friend_cache_item:add_friend(friend_id, friend_info)
+function FriendCacheItem:add_friend(friend_id, friend_info)
     if self.friend_map[friend_id] then
         return false, "Already friend"
     end
@@ -48,7 +48,7 @@ function friend_cache_item:add_friend(friend_id, friend_info)
 end
 
 -- 删除好友
-function friend_cache_item:remove_friend(friend_id)
+function FriendCacheItem:remove_friend(friend_id)
     if not self.friend_map[friend_id] then
         return false, "Not friend"
     end
@@ -58,7 +58,7 @@ function friend_cache_item:remove_friend(friend_id)
 end
 
 -- 添加好友申请
-function friend_cache_item:add_apply(player_id, message)
+function FriendCacheItem:add_apply(player_id, message)
     if self.apply_map[player_id] then
         return false, "Already applied"
     end
@@ -76,7 +76,7 @@ function friend_cache_item:add_apply(player_id, message)
 end
 
 -- 删除好友申请
-function friend_cache_item:remove_apply(player_id)
+function FriendCacheItem:remove_apply(player_id)
     if not self.apply_map[player_id] then
         return false, "No apply"
     end
@@ -85,7 +85,7 @@ function friend_cache_item:remove_apply(player_id)
 end
 
 -- 添加到黑名单
-function friend_cache_item:add_to_blacklist(player_id)
+function FriendCacheItem:add_to_blacklist(player_id)
     if self.black_list[player_id] then
         return false, "Already in black list"
     end
@@ -102,7 +102,7 @@ function friend_cache_item:add_to_blacklist(player_id)
 end
 
 -- 从黑名单移除
-function friend_cache_item:remove_from_blacklist(player_id)
+function FriendCacheItem:remove_from_blacklist(player_id)
     if not self.black_list[player_id] then
         return false, "Not in black list"
     end
@@ -111,7 +111,7 @@ function friend_cache_item:remove_from_blacklist(player_id)
 end
 
 -- 获取好友列表
-function friend_cache_item:get_friend_list()
+function FriendCacheItem:get_friend_list()
     local list = {}
     for id, time in pairs(self.friend_map) do
         table.insert(list, {
@@ -123,7 +123,7 @@ function friend_cache_item:get_friend_list()
 end
 
 -- 获取申请列表
-function friend_cache_item:get_apply_list()
+function FriendCacheItem:get_apply_list()
     local list = {}
     for id, data in pairs(self.apply_map) do
         table.insert(list, {
@@ -137,7 +137,7 @@ function friend_cache_item:get_apply_list()
 end
 
 -- 获取黑名单列表
-function friend_cache_item:get_black_list()
+function FriendCacheItem:get_black_list()
     local list = {}
     for id, time in pairs(self.black_list) do
         table.insert(list, {
@@ -150,18 +150,18 @@ function friend_cache_item:get_black_list()
 end
 
 -- 检查是否是好友
-function friend_cache_item:is_friend(player_id)
+function FriendCacheItem:is_friend(player_id)
     return self.friend_map[player_id] ~= nil
 end
 
 -- 检查是否在黑名单中
-function friend_cache_item:is_in_blacklist(player_id)
+function FriendCacheItem:is_in_blacklist(player_id)
     return self.black_list[player_id] ~= nil
 end
 
 -- 检查是否有申请
-function friend_cache_item:has_apply(player_id)
+function FriendCacheItem:has_apply(player_id)
     return self.apply_map[player_id] ~= nil
 end
 
-return friend_cache_item 
+return FriendCacheItem 

@@ -1,9 +1,9 @@
 local skynet = require "skynet"
-local base_cache = require "cache.base_cache"
+local BaseCache = require "cache.base_cache"
 local json = require "cjson"
-local chat_cache_item = require "cache.chat_cache_item"
+local ChatCacheItem = require "cache.chat_cache_item"
 
-local chat_cache = class("chat_cache", base_cache)
+local ChatCache = class("ChatCache", BaseCache)
 
 -- 缓存配置
 local CACHE_CONFIG = {
@@ -13,11 +13,11 @@ local CACHE_CONFIG = {
 }
 
 -- 初始化
-function chat_cache:ctor()
-    base_cache.ctor(self, "chat_cache", "channel")
+function ChatCache:ctor()
+    BaseCache.ctor(self, "ChatCache", "channel")
 end
 
-function chat_cache:get_channel_messages(channel_id, count)
+function ChatCache:get_channel_messages(channel_id, count)
     local obj = self:get(channel_id)
     if not obj then
         return nil, "Channel not found"
@@ -30,7 +30,7 @@ function chat_cache:get_channel_messages(channel_id, count)
 end
 
 -- 更新频道数据
-function chat_cache:update_message(channel_id, message)
+function ChatCache:update_message(channel_id, message)
     local obj = self:get(channel_id)
     if not obj then
         return false, "Channel not found"
@@ -47,9 +47,9 @@ function chat_cache:update_message(channel_id, message)
     return true
 end
 
-function chat_cache:new_item(channel_id)
-    local obj = chat_cache_item.new(channel_id)
+function ChatCache:new_item(channel_id)
+    local obj = ChatCacheItem.new(channel_id)
     return obj
 end
 
-return chat_cache 
+return ChatCache 

@@ -5,7 +5,7 @@ local common = require "utils.common"
 local table_schema = require "sql.table_schema"
 
 -- 基础缓存管理类
-local base_cache = class("base_cache")
+local BaseCache = class("BaseCache")
 
 local DB_OPTS = {
     INSERT = 1,
@@ -14,7 +14,7 @@ local DB_OPTS = {
 }
 
 -- 构造函数
-function base_cache:ctor(name, tbl_name, config)
+function BaseCache:ctor(name, tbl_name, config)
     self.name = name
     self.tbl_name = tbl_name
     self.config = {
@@ -75,7 +75,7 @@ function base_cache:ctor(name, tbl_name, config)
 end
 
 -- 获取加载锁
-function base_cache:acquire_load(key, no_wait)
+function BaseCache:acquire_load(key, no_wait)
     if not self.loading[key] then
         self.loading[key] = {
             waiting = {},
@@ -95,7 +95,7 @@ function base_cache:acquire_load(key, no_wait)
 end
 
 -- 处理加载超时
-function base_cache:handle_load_timeout(key)
+function BaseCache:handle_load_timeout(key)
     log.error("[%s] load_timeout for key: %s", self.name, key)
     local loading_info = self.loading[key]
     if loading_info then
@@ -109,7 +109,7 @@ function base_cache:handle_load_timeout(key)
 end
 
 -- 释放加载锁
-function base_cache:release_load(key)
+function BaseCache:release_load(key)
     local loading_info = self.loading[key]
     if loading_info then
         -- 取消超时定时器
@@ -126,7 +126,7 @@ function base_cache:release_load(key)
 end
 
 -- 获取当前压力等级和衰减倍数
-function base_cache:get_pressure_level(memory_pressure)
+function BaseCache:get_pressure_level(memory_pressure)
     local current_level = 0
     local multiplier = 1
     
@@ -164,7 +164,7 @@ function base_cache:get_pressure_level(memory_pressure)
 end
 
 -- 更新访问统计
-function base_cache:update_access_stats(count)
+function BaseCache:update_access_stats(count)
     local now = os.time()
     local window_size = self.config.stats_window
     self.access_stats.window_access_count = self.access_stats.window_access_count + count
@@ -191,7 +191,7 @@ function base_cache:update_access_stats(count)
 end
 
 -- 计算基础衰减速率
-function base_cache:calculate_base_decay_rate()
+function BaseCache:calculate_base_decay_rate()
     -- 根据当前访问率动态调整衰减速率
     local rate = self.access_stats.last_window_rate
     if rate <= 0 then
@@ -212,7 +212,7 @@ function base_cache:calculate_base_decay_rate()
 end
 
 -- 更新全局衰减
-function base_cache:update_decay()
+function BaseCache:update_decay()
     local now = os.time()
     local elapsed = now - self.last_decay_time
     if elapsed <= 0 then
@@ -240,7 +240,7 @@ function base_cache:update_decay()
 end
 
 -- 获取缓存项
-function base_cache:get(key)
+function BaseCache:get(key)
     -- 更新访问统计
     self:update_access_stats(1)
     
@@ -280,7 +280,7 @@ function base_cache:get(key)
     return result
 end
 
-function base_cache:get_from_redis(key)
+function BaseCache:get_from_redis(key)
     local redis = skynet.localname(".redis")
     if redis then
         local redis_key = self.name .. ":" .. key
@@ -296,7 +296,7 @@ function base_cache:get_from_redis(key)
     return self:load_item({key})[key]
 end
 
-function base_cache:set_to_redis(key, obj)
+function BaseCache:set_to_redis(key, obj)
     local redis = skynet.localname(".redis")
     if not redis then
         log.error("[%s] redis is not running", self.name)
@@ -307,11 +307,11 @@ function base_cache:set_to_redis(key, obj)
 end 
 
 --override
-function base_cache:new_item(key)
+function BaseCache:new_item(key)
     return nil
 end
 
-function base_cache:load_item(keys)
+function BaseCache:load_item(keys)
     local datas = self:batch_load(keys)
     local results = {}
     for _, key in pairs(keys) do
@@ -332,7 +332,7 @@ function base_cache:load_item(keys)
 end
 
 -- 设置缓存项
-function base_cache:set(key, value)
+function BaseCache:set(key, value)
     self.cache[key] = {
         obj = value,
         score = self.config.base_score,  -- 初始分数
@@ -342,7 +342,7 @@ function base_cache:set(key, value)
 end
 
 -- 从缓存中批量获取数据
-function base_cache:get_from_cache(keys)
+function BaseCache:get_from_cache(keys)
     local results = {}
     local miss_keys = {}
     
@@ -369,7 +369,7 @@ function base_cache:get_from_cache(keys)
 end
 
 -- 获取加载锁并分类keys
-function base_cache:classify_keys(keys)
+function BaseCache:classify_keys(keys)
     local loading_keys = {}     -- 记录获取到加载锁的key
     local waiting_keys = {}     -- 记录需要等待的key
     
@@ -392,7 +392,7 @@ function base_cache:classify_keys(keys)
 end
 
 -- 从Redis批量加载数据
-function base_cache:batch_load_from_redis(loading_keys)
+function BaseCache:batch_load_from_redis(loading_keys)
     local results = {}
     local unloaded_keys = {}  -- 记录Redis未命中需要从DB加载的key
     
@@ -449,7 +449,7 @@ function base_cache:batch_load_from_redis(loading_keys)
 end
 
 -- 从DB批量加载数据
-function base_cache:batch_load_from_db(keys)
+function BaseCache:batch_load_from_db(keys)
     local results = {}
     local loaded = {}
     
@@ -471,7 +471,7 @@ function base_cache:batch_load_from_db(keys)
 end
 
 -- 等待其他协程加载完成
-function base_cache:wait_for_loading(waiting_keys, results)
+function BaseCache:wait_for_loading(waiting_keys, results)
     for _, key in ipairs(waiting_keys) do
         local co = coroutine.running()
         if self.loading[key] then
@@ -493,7 +493,7 @@ function base_cache:wait_for_loading(waiting_keys, results)
 end
 
 -- 批量获取缓存项
-function base_cache:batch_get(keys)
+function BaseCache:batch_get(keys)
     if not keys or type(keys) ~= "table" or #keys == 0 then
         return {}
     end
@@ -545,7 +545,7 @@ function base_cache:batch_get(keys)
 end
 
 -- 批量设置缓存项
-function base_cache:batch_set(items)
+function BaseCache:batch_set(items)
     if not items or type(items) ~= "table" then
         return false
     end
@@ -579,16 +579,16 @@ function base_cache:batch_set(items)
     return true
 end
 
-function base_cache:mark_dirty(key)
+function BaseCache:mark_dirty(key)
     local num = self.dirty_keys[key] or 0
     self.dirty_keys[key] = num + 1
 end
 
-function base_cache:is_dirty(key)
+function BaseCache:is_dirty(key)
     return self.dirty_keys[key] or not self.insert_keys[key]
 end
 
-function base_cache:save_all()
+function BaseCache:save_all()
     local objs = {}
     for key, item in pairs(self.cache) do
         if self:is_dirty(key) then
@@ -607,7 +607,7 @@ function base_cache:save_all()
     end
 end
 
-function base_cache:batch_save(objs)
+function BaseCache:batch_save(objs)
     local insert_objs = {}
     local update_objs = {}
     for key, obj in pairs(objs) do
@@ -644,7 +644,7 @@ function base_cache:batch_save(objs)
 end
 
 --override
-function base_cache:batch_load(keys)
+function BaseCache:batch_load(keys)
     local dbS = skynet.localname(".db")
     local struct = table_schema[self.tbl_name]
     local primary_key = struct.primary_keys[1]
@@ -665,7 +665,7 @@ function base_cache:batch_load(keys)
 end
 
 --override
-function base_cache:batch_update(objs)
+function BaseCache:batch_update(objs)
     local dbS = skynet.localname(".db")
     local data_list = {}
     for _, obj in pairs(objs) do
@@ -677,7 +677,7 @@ function base_cache:batch_update(objs)
 end
 
 --override
-function base_cache:batch_insert(objs)
+function BaseCache:batch_insert(objs)
     local dbS = skynet.localname(".db")
     local data_list = {}
     for _, obj in pairs(objs) do
@@ -688,13 +688,13 @@ function base_cache:batch_insert(objs)
     return ret
 end
 
-function base_cache:tick()
+function BaseCache:tick()
     self:save_all()
     self:cleanup()
 end
 
 -- 清理过期数据
-function base_cache:cleanup()
+function BaseCache:cleanup()
     if self.cleanup_running then
         return
     end
@@ -738,7 +738,7 @@ function base_cache:cleanup()
 end
 
 -- 删除缓存项
-function base_cache:remove(key)
+function BaseCache:remove(key)
     local item = self.cache[key]
     if item then
         self:set_to_redis(key, item.obj)
@@ -748,7 +748,7 @@ function base_cache:remove(key)
 end
 
 -- 清空缓存
-function base_cache:clear()
+function BaseCache:clear()
     self.cache = {}
     self.size = 0
     self.hit_count = 0
@@ -756,7 +756,7 @@ function base_cache:clear()
 end
 
 -- 获取缓存统计信息
-function base_cache:get_stats()
+function BaseCache:get_stats()
     local stats = {
         size = self.size,
         max_size = self.config.max_size,
@@ -783,4 +783,4 @@ function base_cache:get_stats()
     return stats
 end
 
-return base_cache 
+return BaseCache 

@@ -3,12 +3,12 @@ local class = require "utils.class"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
 
-local rank_base = class("rank_base")
+local Rank = class("Rank")
 --[[
-    rank_base 是一个基类，用于实现排行榜的基本功能。
+    Rank 是一个基类，用于实现排行榜的基本功能。
     它提供了加载、保存、添加数据等方法。
 ]]
-function rank_base:ctor(_name)
+function Rank:ctor(_name)
     self.name_ = _name or "noname" -- 排行榜名称
     self.loaded_ = false           -- 是否已加载数据
     self.inserted_ = false         -- 是否已插入数据
@@ -18,18 +18,18 @@ function rank_base:ctor(_name)
     self.k2pos_ = {}               -- key到位置的映射
 end
 
-function rank_base:update(_data)
+function Rank:update(_data)
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
     if not _data or type(_data) ~= "table" then
-        log.error(string.format("[rank_base] Invalid data for rank: %s", self.name_))
+        log.error(string.format("[Rank] Invalid data for rank: %s", self.name_))
         return false
     end
     local key = self:rkey(_data)
     if not key then
-        log.error(string.format("[rank_base] Invalid key for rank: %s", self.name_))
+        log.error(string.format("[Rank] Invalid key for rank: %s", self.name_))
         return false
     end
     
@@ -67,12 +67,12 @@ function rank_base:update(_data)
     return true
 end
 
-function rank_base:update_irank(_data)
+function Rank:update_irank(_data)
     local key = self:rkey(_data)
     local opos = self.k2pos_[key]
     if opos then
         if _data.key == "name4" then 
-            log.error("[rank_base] update_irank: key = name4, opos = " .. opos)
+            log.error("[Rank] update_irank: key = name4, opos = " .. opos)
         end 
         -- 跟榜内的自己比, 就不需要对比时间了
         local dir = self:conpare_func_with_time(_data, self.irank_[opos])
@@ -91,7 +91,7 @@ function rank_base:update_irank(_data)
                 return false
             end
             if _data.key == "name4" then 
-                log.error("[rank_base] update_irank: key = name4, offset = " .. offset)
+                log.error("[Rank] update_irank: key = name4, offset = " .. offset)
             end 
             npos = opos - 1 + offset
 
@@ -158,22 +158,22 @@ function rank_base:update_irank(_data)
 end 
 
 --子类重写
-function rank_base:check_data(_data)
+function Rank:check_data(_data)
     local key = self:rkey(_data)
     if not key then
-        log.error(string.format("[rank_base] Invalid key for rank: %s", self.name_))
+        log.error(string.format("[Rank] Invalid key for rank: %s", self.name_))
         return false
     end
     return true
 end
 
-function rank_base:rerank()
+function Rank:rerank()
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
     if #self.irank_ == 0 then
-        log.error(string.format("[rank_base] No data to rerank for rank: %s", self.name_))
+        log.error(string.format("[Rank] No data to rerank for rank: %s", self.name_))
         return false
     end
     table.sort(self.irank_, self.conpare_func_with_time)
@@ -186,25 +186,25 @@ function rank_base:rerank()
     return true
 end
 
-function rank_base:print()
+function Rank:print()
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
-    log.debug(string.format("[rank_base] Rank data for %s:", self.name_))
+    log.debug(string.format("[Rank] Rank data for %s:", self.name_))
     for i, data in ipairs(self.irank_) do
         log.debug(string.format("Rank %d: %s", i, tableUtils.serialize_table(data)))
     end
-    log.debug(string.format("[rank_base] k2pos: %s", tableUtils.serialize_table(self.k2pos_)))
+    log.debug(string.format("[Rank] k2pos: %s", tableUtils.serialize_table(self.k2pos_)))
 end
 
-function rank_base:merge_orank()
+function Rank:merge_orank()
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
     if not next(self.orank_) then
-        log.error(string.format("[rank_base] No data to merge for rank: %s", self.name_))
+        log.error(string.format("[Rank] No data to merge for rank: %s", self.name_))
         return false
     end
     for key, data in pairs(self.orank_) do
@@ -212,9 +212,9 @@ function rank_base:merge_orank()
     end
 end 
 
-function rank_base:slice_irank(_start, _end)
+function Rank:slice_irank(_start, _end)
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return {}
     end
     if _start < 1 or _end < 1 or _start > _end then
@@ -227,11 +227,11 @@ function rank_base:slice_irank(_start, _end)
     return result
 end
 
-function rank_base:max_rank()
+function Rank:max_rank()
     return 100
 end 
 
-function rank_base:conpare_func_with_time(_a, _b)
+function Rank:conpare_func_with_time(_a, _b)
     if not _b then 
         return -1
     end
@@ -266,26 +266,27 @@ function rank_base:conpare_func_with_time(_a, _b)
     return ret
 end 
 
-function rank_base:compare_func(_a, _b)
-    log.error(string.format("[rank_base] compare_func not implemented for rank: %s", self.name_))
+function Rank:compare_func(_a, _b)
+    log.error(string.format("[Rank] compare_func not implemented for rank: %s", self.name_))
 end
 
-function rank_base:is_realtime_update()
+function Rank:is_realtime_update()
     return false
 end
 
 --子类重写
-function rank_base:rkey(_data)
+function Rank:rkey(_data)
     return _data.key 
 end 
 
-function rank_base:onsave()
+function Rank:onsave()
     local data = {}
     data.name = self.name_
     data.irank = self.irank_
     return data
 end
-function rank_base:onload(_datas)
+
+function Rank:onload(_datas)
     self.irank_ = _datas.irank
     for i, data in ipairs(self.irank_) do
         local key = self:rkey(data)
@@ -295,9 +296,9 @@ function rank_base:onload(_datas)
     end
 end
 
-function rank_base:load(_loaded_cb)
+function Rank:load(_loaded_cb)
     if self.loaded_ then
-        log.error(string.format("[rank_base] Data already loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data already loaded for rank: %s", self.name_))
         return
     end
     skynet.fork(function()
@@ -309,7 +310,7 @@ function rank_base:load(_loaded_cb)
     end)
 end
 
-function rank_base:doload()
+function Rank:doload()
     local dbc = skynet.localname(".db")
     local cond = {name = self.name_}
     local ret = skynet.call(dbc, "lua", "select", "ranking", cond)
@@ -318,18 +319,18 @@ function rank_base:doload()
         local data = ret[1].data
         self:onload(data)
         self.inserted_ = true 
-        log.debug(string.format("[rank_base] Rank data loaded successfully for rank: %s", self.name_))
+        log.debug(string.format("[Rank] Rank data loaded successfully for rank: %s", self.name_))
     end
 end
 
-function rank_base:save()
+function Rank:save()
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
     local data = self:onsave()
     if not data then
-        log.error(string.format("[rank_base] No data to save for rank: %s", self.name_))
+        log.error(string.format("[Rank] No data to save for rank: %s", self.name_))
         return false
     end
     local dbc = skynet.localname(".db")
@@ -340,27 +341,27 @@ function rank_base:save()
             if ret then
                 self.dirty_ = false
             else
-                log.error(string.format("[rank_base] Failed to update rank data for rank: %s", self.name_))
+                log.error(string.format("[Rank] Failed to update rank data for rank: %s", self.name_))
             end
         else
             local ret = skynet.call(dbc, "lua", "insert", "ranking", values)
             if ret then
                 self.inserted_ = true
             else
-                log.error(string.format("[rank_base] Failed to insert rank data for rank: %s", self.name_))
+                log.error(string.format("[Rank] Failed to insert rank data for rank: %s", self.name_))
             end
         end
     end)
 end
 
-function rank_base:batch_update(_datas)
+function Rank:batch_update(_datas)
     if not self.loaded_ then
-        log.error(string.format("[rank_base] Data not loaded for rank: %s", self.name_))
+        log.error(string.format("[Rank] Data not loaded for rank: %s", self.name_))
         return false
     end
     
     if not _datas or type(_datas) ~= "table" or #_datas == 0 then
-        log.error(string.format("[rank_base] Invalid batch data for rank: %s", self.name_))
+        log.error(string.format("[Rank] Invalid batch data for rank: %s", self.name_))
         return false
     end
 
@@ -377,7 +378,7 @@ function rank_base:batch_update(_datas)
     for _, data in ipairs(_datas) do
         local key = self:rkey(data)
         if not key then
-            log.error(string.format("[rank_base] Invalid key in batch data for rank: %s", self.name_))
+            log.error(string.format("[Rank] Invalid key in batch data for rank: %s", self.name_))
             goto continue
         end
         
@@ -487,4 +488,4 @@ function rank_base:batch_update(_datas)
     return true
 end
 
-return rank_base-- end
+return Rank-- end
