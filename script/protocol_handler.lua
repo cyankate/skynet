@@ -74,4 +74,13 @@ function protocol_handler.broadcast(name, data)
     return skynet.call(gate, "lua", "broadcast_message", name, data)
 end
 
+function protocol_handler.rpc_response(fd, session, data)
+    local gate = skynet.localname(".gate")
+    if not gate then
+        log.error("Gate service not available")
+        return false
+    end
+    return skynet.call(gate, "lua", "rpc_response", fd, session, data)
+end
+
 return protocol_handler 

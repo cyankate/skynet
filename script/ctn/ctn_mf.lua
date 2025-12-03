@@ -76,9 +76,6 @@ function CtnMf:dosave()
     
     -- 获取数据库连接
     local dbc = skynet.localname(".db")
-    if not dbc then
-        log.error(">>>>>>>>>>>>>>>>>>>>>>> dbc not found")
-    end 
     -- 遍历所有数据行
     for _, data in pairs(datas) do
         -- 提取有效字段值

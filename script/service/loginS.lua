@@ -63,7 +63,7 @@ end
 local function init_agent_pool()
     log.info("Initializing agent pool with %d agents", INIT_AGENT_COUNT)
     for i = 1, INIT_AGENT_COUNT do
-        local agent = skynet.newservice("agentS")
+        local agent = skynet.newservice("agentS", i)
         table.insert(agent_pool, agent)
         agent_to_accounts[agent] = {}
     end
@@ -107,7 +107,7 @@ local function remove_account_from_agent(agent, account_key)
     end
 end
 
-function CLIENT.login(fd, msg)
+function CLIENT.login(fd, msg, session)
     local account_key = msg.account_id
     local ip = msg.ip
     local device_id = msg.device_id
@@ -115,8 +115,12 @@ function CLIENT.login(fd, msg)
     local is_safe, message = check_security(ip, account_key)
     if not is_safe then
         log.warning("Login rejected due to security concerns: %s, account_key: %s", message, account_key)
-        return false
+        protocol_handler.rpc_response(fd, session, {success = false, player_id = 0, player_name = ""})
+        return
     end
+
+    protocol_handler.rpc_response(fd, session, {success = true, player_id = 0, player_name = "test"})
+
     local gateS = skynet.localname(".gate")
     -- 尝试查找账号信息
     local ainfo = account_info[account_key]
@@ -413,10 +417,10 @@ skynet.register_protocol {
 	unpack = function (msg, sz)
 		return skynet.unpack(msg, sz)
 	end,
-	dispatch = function (fd, _, name, args)
+	dispatch = function (fd, _, name, args, session)
         skynet.ignoreret()
 		if CLIENT[name] then
-			local ok, result = pcall(CLIENT[name], fd, args)
+            local ok, result = pcall(CLIENT[name], fd, args, session)
 			if not ok then
 				log.error(string.format("Error handling message %s from fd: %s", name, fd))
 			end

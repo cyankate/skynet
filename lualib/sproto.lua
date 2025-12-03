@@ -184,11 +184,6 @@ local function gen_response(self, response, session)
 		header_tmp.type = nil
 		header_tmp.session = session
 		header_tmp.ud = ud
-		if log then 
-			log.debug("gen_response >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s, args = %s", session, tableUtils.serialize_table(args))
-		else 
-			print("gen_response >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s, response = %s", session, response)
-		end 
 		local header = core.encode(self.__package, header_tmp)
 		if response then
 			local content = core.encode(response, args)
@@ -206,6 +201,7 @@ function host:dispatch(...)
 	header_tmp.ud = nil
 	local header, size = core.decode(self.__package, bin, header_tmp)
 	local content = bin:sub(size + 1)
+
 	if header.type then
 		-- request
 		local proto = queryproto(self.__proto, header.type)
@@ -219,9 +215,6 @@ function host:dispatch(...)
 			return "REQUEST", proto.name, result, nil, header.ud
 		end
 	else
-		if not self.__session[header_tmp.session] then 
-			print("session not found >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  session = %s", header_tmp.session)
-		end 
 		-- response
 		local session = assert(header_tmp.session, "session not found")
 		local response = assert(self.__session[session], "Unknown session")

@@ -21,7 +21,7 @@ local function new_connection()
         auth = config.auth
     })
     if not db then
-        skynet.error("Failed to connect to Redis")
+        log.error("Failed to connect to Redis: %s", config.host)
         return nil
     end
     return db
@@ -71,7 +71,7 @@ local function do_command(cmd, ...)
             return result
         end
         
-        skynet.error("Redis command failed:", result)
+        log.error("Redis command failed: %s", result)
         retry = retry + 1
         skynet.sleep(100)
         ::continue::
@@ -94,7 +94,7 @@ function CMD.init(conf)
         end
     end
     
-    skynet.error("Redis service initialized with pool size:", #pool)
+    log.info("Redis service initialized with pool size: %d", #pool)
 end
 
 -- String 操作
@@ -267,7 +267,7 @@ skynet.start(function()
         if f then
             skynet.ret(skynet.pack(f(...)))
         else
-            skynet.error("Unknown redis command:", cmd)
+            log.error("Unknown redis command: %s", cmd)
             skynet.ret(skynet.pack(nil, "Unknown command"))
         end
     end)

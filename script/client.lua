@@ -25,7 +25,8 @@ local ClientState = {
 	host = nil,
 	request = nil,
 	is_connected = false,
-	reconnect_attempts = 0
+	reconnect_attempts = 0,
+	pending_responses = {}  -- session => callback function
 }
 
 -- 定义所有模块
@@ -100,11 +101,22 @@ function NetworkManager.reconnect()
 	NetworkManager.connect()
 end
 
-function NetworkManager.send_request(name, args)
+-- 发送请求（支持回调函数）
+-- callback: function(args) - 收到响应时调用的回调函数，args 是响应数据
+function NetworkManager.send_request(name, args, callback)
 	ClientState.session = ClientState.session + 1
-	local str = ClientState.request(name, args, ClientState.session)
+	local session = ClientState.session
+	
+	-- 如果有回调函数，保存起来
+	if callback then
+		ClientState.pending_responses[session] = callback
+	end
+	
+	local str = ClientState.request(name, args, session)
 	ProtocolHandler.send_package(ClientState.fd, str)
-	print("Request:", ClientState.session)
+	print(string.format("Request: %s, session: %d", name, session))
+	
+	return session
 end
 
 -- 消息处理
@@ -118,11 +130,29 @@ function MessageHandler.print_request(name, args)
 end
 
 function MessageHandler.print_response(session, args)
-	print("RESPONSE", session)
+	print(string.format("RESPONSE session: %d", session))
 	if args then
 		for k,v in pairs(args) do
-			print(k,v)
+			print(string.format("  %s: %s", k, tostring(v)))
 		end
+	else
+		print("  (no data)")
+	end
+end
+
+-- 处理响应消息（带回调支持）
+function MessageHandler.handle_response(session, args)
+	-- 查找并调用对应的回调函数
+	local callback = ClientState.pending_responses[session]
+	if callback then
+		ClientState.pending_responses[session] = nil
+		local ok, err = pcall(callback, args)
+		if not ok then
+			print(string.format("Response callback error for session %d: %s", session, tostring(err)))
+		end
+	else
+		-- 没有回调函数，使用默认打印
+		MessageHandler.print_response(session, args)
 	end
 end
 
@@ -167,7 +197,15 @@ function CommandHandler.process_command(cmd)
 		end
 		
 		if cmd == "login" then
-			NetworkManager.send_request(cmd, { account_id = args[1] })
+			-- 示例：使用回调函数处理登录响应
+			NetworkManager.send_request(cmd, { account_id = args[1] }, function(response)
+				if response and response.success then
+					print(string.format("登录成功！玩家ID: %s, 玩家名: %s", 
+						tostring(response.player_id), response.player_name or "未知"))
+				else
+					print(string.format("登录失败: %s", response and response.reason or "未知错误"))
+				end
+			end)
 		elseif cmd == "chat" then 
 			NetworkManager.send_request("send_channel_message", { channel_id = 1, content = args[1] })
 		elseif cmd == "private" then
@@ -185,7 +223,18 @@ function CommandHandler.process_command(cmd)
 		elseif cmd == "reject_apply" then
 			NetworkManager.send_request("reject_apply", { player_id = args[1] })
 		elseif cmd == "get_friend_list" then
-			NetworkManager.send_request("get_friend_list")
+			-- 示例：使用回调函数处理好友列表响应
+			NetworkManager.send_request("get_friend_list", {}, function(response)
+				if response and response.friends then
+					print(string.format("好友列表（共 %d 人）:", #response.friends))
+					for i, friend in ipairs(response.friends) do
+						print(string.format("  %d. ID: %s, 名称: %s", i, 
+							tostring(friend.player_id), friend.name or "未知"))
+					end
+				else
+					print("获取好友列表失败")
+				end
+			end)
 		else 
 			ProtocolHandler.send_package(ClientState.fd, cmd)
 		end 
@@ -197,16 +246,19 @@ local function main_loop()
 	NetworkManager.init()
 	NetworkManager.connect()
 	
-	while true do
+		while true do
 		-- 处理接收到的数据包
 		local v
 		v, ClientState.last = ProtocolHandler.recv_package(ClientState.last)
 		if v then
-			local t, name, args, session = ClientState.host:dispatch(v)
+			local t, name_or_session, args = ClientState.host:dispatch(v)
 			if t == "REQUEST" then
-				MessageHandler.handle_server_message(name, args)
-			else
-				MessageHandler.print_response(session, args)
+				-- 服务器主动推送的消息（如 chat_message, kicked_out 等）
+				MessageHandler.handle_server_message(name_or_session, args)
+			elseif t == "RESPONSE" then
+				-- 响应消息（对应之前发送的请求）
+				local session = name_or_session  -- RESPONSE 时第一个返回值是 session
+				MessageHandler.handle_response(session, args)
 			end
 		end
 		

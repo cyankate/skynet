@@ -60,7 +60,7 @@ skynet.register_protocol {
 					send_package(result)
 				end
 			else
-				skynet.error(result)
+				log.error("%s", result)
 			end
 		else
 			assert(type == "RESPONSE")

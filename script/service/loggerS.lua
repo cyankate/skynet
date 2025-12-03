@@ -7,6 +7,8 @@ local log_file  = nil
 local log_group = skynet.getenv("loggroup")
 local is_daemon = skynet.getenv("daemon") ~= nil
 
+local service_name_map = {}
+
 local function check_exists(path)
 	if not os.rename(path, path) then
 		os.execute("mkdir " .. path)
@@ -45,7 +47,11 @@ local CMD = {}
 
 function CMD.logging(source, type, str)
 	local date = os.date("*t")
-	str = string.format("[:%08x][%s][%s]%s", source, type, log_time(date), str)
+	local service_name = service_name_map[source]
+	if not service_name then
+		service_name = string.format(":%08x", source)
+	end
+	str = string.format("[%s][%s][%s]%s", service_name, type, log_time(date), str)
 	
 	if not log_file or date.hour ~= last_hour then
 		open_file(date)
@@ -59,12 +65,16 @@ function CMD.logging(source, type, str)
 	end
 end
 
+function CMD.register_name(source, name)
+	service_name_map[source] = name
+end
+
 skynet.register_protocol {
 	name = "text",
 	id = skynet.PTYPE_TEXT,
 	unpack = skynet.tostring,
 	dispatch = function(_, source, msg)
-		CMD.logging(source, "DEBUG", msg)
+		log.system("%s", msg)
 	end
 }
 
@@ -74,8 +84,7 @@ skynet.register_protocol {
 	unpack = function(...) return ... end,
 	dispatch = function(_, source)
 		-- reopen signal
-		print("SIGHUP")
-		CMD.logging(source, "FATAL", "SIGHUP")
+		log.fatal("SIGHUP")
 	end
 }
 

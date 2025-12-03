@@ -6,26 +6,25 @@ local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
 local user_mgr = require "user_mgr"
 
+local agent_id = tonumber(...)
 -- 多账号支持
 local accounts = {}  -- account_key => {account_data, player_id}
 local logout_timers = {} -- account_key => timer_function
 
 -- 定时器函数
 local function start_timer()
-    local interval = 180 * 100 -- 3 分钟，单位是 0.01 秒
+    local interval = 180 * 100
     local function timer_loop()
-        skynet.timeout(interval, timer_loop) -- 设置下一次定时器
+        skynet.timeout(interval, timer_loop)
         
-        -- 遍历所有账号，执行定时任务
         for account_key, account in pairs(accounts) do
             if account.player and account.player.loaded_ then
-                -- 在这里添加需要轮询的逻辑
                 account.player:save_to_db()
             end
         end
     end
     local date = os.date("*t")
-    skynet.timeout((60 - date.sec) * 100, timer_loop) -- 启动定时器
+    skynet.timeout((60 - date.sec) * 100, timer_loop)
 end
 
 function CMD.start(account_key, account_data, args)
@@ -169,12 +168,6 @@ function on_player_loaded(player_id)
 end
 
 function send_player_data(player)
-    protocol_handler.send_to_player(player.player_id_, "login_response", {
-        success = true,
-        player_id = player.player_id_,
-        player_name = player.player_name_,
-    })
-    
     protocol_handler.send_to_player(player.player_id_, "player_data", {
             player_id = player.player_id_,
             player_name = player.player_name_,
@@ -391,10 +384,10 @@ skynet.register_protocol {
 	unpack = function (msg, sz)
 		return skynet.unpack(msg, sz)
 	end,
-	dispatch = function (fd, _, player_id, name, args)
+	dispatch = function (fd, _, player_id, name, args, session)
         skynet.ignoreret()
 		if msg_handle[name] then
-			local ok, result = pcall(msg_handle[name], player_id, args)
+			local ok, result = pcall(msg_handle[name], player_id, args, session)
 			if not ok then
 				log.error(string.format("Error handling message %s for player %s: %s", name, player_id, result))
 			end
@@ -412,4 +405,5 @@ end
 -- 使用service_wrapper包装服务
 service_wrapper.create_service(main, {
     register_hotfix = false,
+    logging_name = "agent." .. agent_id,
 })

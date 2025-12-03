@@ -258,7 +258,7 @@ function channel_mgr.init()
     if max_channel_id then  
         channel_mgr.gen_id = max_channel_id + 1
     end
-    log.error("channel_mgr.gen_id = %d", channel_mgr.gen_id)
+    log.warning("channel_mgr.gen_id = %d", channel_mgr.gen_id)
     return true
 end
 
