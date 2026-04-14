@@ -61,10 +61,8 @@ local function send_log(level, ...)
 
     -- 加上 ANSI 颜色
     local color = LOG_LEVEL_COLOR[level] or ""
-    local reset = color ~= "" and "\27[0m" or ""
-    local colored_str = color .. str .. reset
 
-    skynet.send(".logger", "lua", "logging", LOG_LEVEL_DESC[level], colored_str)
+    skynet.send(".logger", "lua", "logging", LOG_LEVEL_DESC[level], color, str)
 end
 
 function log.debug(fmt, ...)

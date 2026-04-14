@@ -39,20 +39,22 @@ local function open_file(date)
 end
 
 local function log_time(date)
-	return string.format("%02d:%02d:%02d.%02d", date.hour, date.min, date.sec, 
+	return string.format("%04d-%02d-%02d %02d:%02d:%02d.%02d", date.year, date.month, date.day, date.hour, date.min, date.sec, 
 		math.floor(skynet.time()*100%100))
 end
 
 local CMD = {}
 
-function CMD.logging(source, type, str)
+function CMD.logging(source, type, color, str)
 	local date = os.date("*t")
 	local service_name = service_name_map[source]
 	if not service_name then
 		service_name = string.format(":%08x", source)
 	end
-	str = string.format("[%s][%s][%s]%s", service_name, type, log_time(date), str)
-	
+	str = string.format("[%s][%s][%s]%s", log_time(date), type, service_name, str)
+	if color ~= "" then
+		str = color .. str .. "\27[0m"
+	end
 	if not log_file or date.hour ~= last_hour then
 		open_file(date)
 	end

@@ -32,7 +32,7 @@ function protocol_handler.send_to_players(player_ids, name, data)
     end
     
     -- 直接通过gate服务批量发送消息
-    return skynet.call(gate, "lua", "send_to_players", player_ids, name, data)
+    return skynet.send(gate, "lua", "send_to_players", player_ids, name, data)
 end
 
 function protocol_handler.call_agent(player_id, name, data)

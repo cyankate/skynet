@@ -182,11 +182,13 @@ function channel_mgr.send_private_channel_message(player_id, to_player_id, conte
     if not channel_id then
         channel_id = channel_mgr.create_private_channel(player_id, to_player_id)
     end
+
     local channel = channel_mgr.channels[channel_id]
     if not channel then
         log.error("Channel not found %d", channel_id)
         return false
     end
+    
     channel_mgr.join_channel(channel_id, player_id, player_name)
     channel_mgr.join_channel(channel_id, to_player_id, to_player_name)
 

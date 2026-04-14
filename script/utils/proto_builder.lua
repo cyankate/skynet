@@ -131,13 +131,18 @@ function proto_builder:protocol(name, tag, def)
 end
 
 -- 从字段定义中提取验证 schema
-local function extract_validation_schema(fields)
+local function extract_validation_schema(fields, types)
     if not fields then
         return nil
     end
     
     if type(fields) == "string" then
-        return {_ref_type = fields}
+        -- 引用类型：尝试在 types 中找到对应的定义，并递归提取 schema
+        if types and types[fields] then
+            return extract_validation_schema(types[fields], types)
+        end
+        -- 找不到定义时，不做验证（返回 nil）
+        return nil
     end
     
     if type(fields) ~= "table" or #fields == 0 then
@@ -165,8 +170,8 @@ function proto_builder:register_schema(direction)
     for protocol_name, protocol_def in pairs(self.protocols) do
         local schema_data = {
             direction = direction,
-            request = extract_validation_schema(protocol_def.request),
-            response = extract_validation_schema(protocol_def.response),
+            request = extract_validation_schema(protocol_def.request, self.types),
+            response = extract_validation_schema(protocol_def.response, self.types),
         }
         schemas[protocol_name] = schema_data
     end

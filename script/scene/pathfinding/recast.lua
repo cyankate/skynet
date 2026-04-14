@@ -36,13 +36,7 @@ local path_cache = {}
 -- 初始化系统
 function RecastAPI.init()
     local result = recast_c.init()
-    if result then
-        log.info("RecastNavigation系统初始化成功")
-        return true
-    else
-        log.error("RecastNavigation系统初始化失败")
-        return false
-    end
+    return result
 end
 
 -- 从高度图创建导航网格
