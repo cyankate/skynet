@@ -1,4 +1,5 @@
 local skynet = require "skynet"
+local class = require "utils.class"
 local InstanceBase = require "instance.instance_base"
 
 local InstanceSingle = class("InstanceSingle", InstanceBase)

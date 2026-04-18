@@ -1,7 +1,8 @@
 local skynet = require "skynet"
 local log = require "log"
 local class = require "utils.class"
-local inst_def = require "script.define.inst_def"
+local inst_def = require "define.inst_def"
+local InstanceStatus = inst_def.InstanceStatus
 
 -- 副本基类
 local InstanceBase = class("InstanceBase")
@@ -9,7 +10,7 @@ local InstanceBase = class("InstanceBase")
 function InstanceBase:ctor(inst_id, inst_no, args)
     self.inst_id_ = inst_id
     self.inst_no_ = inst_no
-    self.args_ = args_ or {}
+    self.args_ = args or {}
     self.status_ = InstanceStatus.CREATING
     self.create_time_ = os.time()
     self.start_time_ = nil
@@ -38,18 +39,22 @@ function InstanceBase:join(player_id, data_)
     log.info("InstanceBase: 玩家 %s 加入副本 %s", player_id, self.inst_id_)
     if self.pjoins_[player_id] then
         log.warn("InstanceBase: 玩家 %s 已加入副本 %s", player_id, self.inst_id_)
-        return
+        return false, "玩家已加入副本"
     end
     
     -- 检查副本状态，只有等待中的副本才允许加入
     if self.status_ ~= InstanceStatus.WAITING then
         log.warn("InstanceBase: 副本 %s 状态不允许加入，当前状态: %d", self.inst_id_, self.status_)
-        return
+        return false, "副本状态不允许加入"
     end
     
     self.pjoins_[player_id] = data_
     self:on_join(player_id, data_)
-    intance_mgr.on_player_join(self.inst_id_, player_id, data_)
+    local instance_mgr = require "instance.instance_mgr"
+    if instance_mgr and instance_mgr.on_player_join then
+        instance_mgr.on_player_join(self.inst_id_, player_id, data_)
+    end
+    return true
 end
 
 function InstanceBase:on_join(player_id, data_)
@@ -60,12 +65,23 @@ function InstanceBase:leave(player_id)
     log.info("InstanceBase: 玩家 %s 离开副本 %s", player_id, self.inst_id_)
     if not self.pjoins_[player_id] then
         log.warn("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
-        return
+        return false, "玩家未加入副本"
     end
-    self:exit(player_id)
+
+    if self.penters_[player_id] then
+        local ok, err = self:exit(player_id)
+        if not ok then
+            return false, err
+        end
+    end
+
     self.pjoins_[player_id] = nil
     self:on_leave(player_id)
-    intance_mgr.on_player_leave(self.inst_id_, player_id)
+    local instance_mgr = require "instance.instance_mgr"
+    if instance_mgr and instance_mgr.on_player_leave then
+        instance_mgr.on_player_leave(self.inst_id_, player_id)
+    end
+    return true
 end
 
 function InstanceBase:on_leave(player_id)
@@ -73,12 +89,17 @@ function InstanceBase:on_leave(player_id)
 end
 
 function InstanceBase:enter(player_id)
+    if not self.pjoins_[player_id] then
+        log.warn("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
+        return false, "玩家未加入副本"
+    end
     if self.penters_[player_id] then
         log.warn("InstanceBase: 玩家 %s 已进入副本 %s", player_id, self.inst_id_)
-        return
+        return false, "玩家已进入副本"
     end
     self.penters_[player_id] = true
     self:on_enter(player_id)
+    return true
 end 
 
 function InstanceBase:on_enter(player_id)
@@ -89,10 +110,11 @@ function InstanceBase:exit(player_id)
     log.info("InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
     if not self.penters_[player_id] then
         log.warn("InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
-        return
+        return false, "玩家未进入副本"
     end
     self.penters_[player_id] = nil
     self:on_exit(player_id)
+    return true
 end
 
 function InstanceBase:on_exit(player_id)

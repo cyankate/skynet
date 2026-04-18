@@ -3,21 +3,21 @@ local config = {
     ["account"] = {
         table_name = "account",
         fields = {
-            ["account_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = true,
-                default = "nil",
-                comment = "",
-            },
             ["account_key"] = {
                 type = "varchar(20)",
                 is_required = true,
                 is_primary = true,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "账号标识",
+            },
+            ["account_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "账号ID",
             },
             ["players"] = {
                 type = "text",
@@ -25,7 +25,7 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "玩家列表数据",
             },
             ["last_login_ip"] = {
                 type = "varchar(16)",
@@ -93,73 +93,6 @@ local config = {
             ["players"] = true,
             ["register_ip"] = true,
             ["register_time"] = true,
-        },
-    },
-    ["bag"] = {
-        table_name = "bag",
-        fields = {
-            ["player_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["idx"] = {
-                type = "varchar(32)",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "子索引",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "player_id",
-            "idx",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-        },
-    },
-    ["base"] = {
-        table_name = "base",
-        fields = {
-            ["player_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "player_id",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
         },
     },
     ["channel"] = {
@@ -547,75 +480,258 @@ local config = {
             ["title"] = true,
         },
     },
-    ["player"] = {
-        table_name = "player",
+    ["payment"] = {
+        table_name = "payment",
         fields = {
-            ["player_id"] = {
-                type = "int unsigned",
+            ["id"] = {
+                type = "bigint",
                 is_required = true,
                 is_primary = true,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "支付记录ID",
+            },
+            ["order_id"] = {
+                type = "varchar(64)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "订单ID",
+            },
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
                 comment = "玩家ID",
             },
-            ["player_name"] = {
-                type = "varchar(20)",
+            ["account_id"] = {
+                type = "int",
                 is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "账号ID",
+            },
+            ["product_id"] = {
+                type = "varchar(32)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "商品ID",
+            },
+            ["amount"] = {
+                type = "decimal(10,2)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0.00",
+                comment = "支付金额",
+            },
+            ["currency"] = {
+                type = "varchar(8)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CNY",
+                comment = "货币类型",
+            },
+            ["channel"] = {
+                type = "varchar(16)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "支付渠道",
+            },
+            ["channel_order_id"] = {
+                type = "varchar(64)",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "渠道订单ID",
+            },
+            ["status"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "0",
+                comment = "支付状态:0=创建,1=处理中,2=成功,3=失败,4=退款",
             },
             ["create_time"] = {
-                type = "timestamp",
-                is_required = false,
+                type = "datetime",
+                is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "CURRENT_TIMESTAMP",
-                comment = "",
+                comment = "创建时间",
             },
-            ["update_time"] = {
-                type = "timestamp",
+            ["pay_time"] = {
+                type = "datetime",
                 is_required = false,
                 is_primary = false,
                 is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "",
+                default = "nil",
+                comment = "支付时间",
             },
-            ["info"] = {
+            ["ip_address"] = {
+                type = "varchar(16)",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "支付IP",
+            },
+            ["device_id"] = {
+                type = "varchar(32)",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "设备ID",
+            },
+            ["extra_data"] = {
                 type = "text",
                 is_required = false,
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
-            },
-            ["account_key"] = {
-                type = "varchar(20)",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
+                comment = "额外数据",
             },
         },
         primary_keys = {
-            "player_id",
+            "id",
         },
         indexes = {
-            ["fk_account_key"] = {
+            ["idx_account_id"] = {
                 unique = false,
                 columns = {
-                    "account_key",
+                    "account_id",
+                },
+            },
+            ["idx_channel_order"] = {
+                unique = false,
+                columns = {
+                    "channel",
+                    "channel_order_id",
+                },
+            },
+            ["idx_create_time"] = {
+                unique = false,
+                columns = {
+                    "create_time",
+                },
+            },
+            ["idx_order_id"] = {
+                unique = true,
+                columns = {
+                    "order_id",
+                },
+            },
+            ["idx_player_id"] = {
+                unique = false,
+                columns = {
+                    "player_id",
                 },
             },
         },
         non_primary_fields = {
-            ["account_key"] = true,
+            ["account_id"] = true,
+            ["amount"] = true,
+            ["channel"] = true,
+            ["channel_order_id"] = true,
             ["create_time"] = true,
-            ["info"] = true,
-            ["player_name"] = true,
-            ["update_time"] = true,
+            ["currency"] = true,
+            ["device_id"] = true,
+            ["extra_data"] = true,
+            ["ip_address"] = true,
+            ["order_id"] = true,
+            ["pay_time"] = true,
+            ["player_id"] = true,
+            ["product_id"] = true,
+            ["status"] = true,
+        },
+    },
+    ["payment_log"] = {
+        table_name = "payment_log",
+        fields = {
+            ["id"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "日志ID",
+            },
+            ["order_id"] = {
+                type = "varchar(64)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "订单ID",
+            },
+            ["status"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "状态变更",
+            },
+            ["log_time"] = {
+                type = "datetime",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "日志时间",
+            },
+            ["log_content"] = {
+                type = "text",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "日志内容",
+            },
+            ["operator"] = {
+                type = "varchar(32)",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "操作人/系统",
+            },
+        },
+        primary_keys = {
+            "id",
+        },
+        indexes = {
+            ["idx_log_time"] = {
+                unique = false,
+                columns = {
+                    "log_time",
+                },
+            },
+            ["idx_order_id"] = {
+                unique = false,
+                columns = {
+                    "order_id",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["log_content"] = true,
+            ["log_time"] = true,
+            ["operator"] = true,
+            ["order_id"] = true,
+            ["status"] = true,
         },
     },
     ["player_odb"] = {
@@ -740,7 +856,7 @@ local config = {
                 },
             },
             ["idx_players"] = {
-                unique = true,
+                unique = false,
                 columns = {
                     "player1_id",
                     "player2_id",

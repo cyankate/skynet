@@ -1,3 +1,15 @@
 [submodule "3rd/jemalloc"]
 	path = 3rd/jemalloc
 	url = https://github.com/jemalloc/jemalloc.git
+
+[submodule "3rd/recastnavigation"]
+	path = 3rd/recastnavigation
+	url = https://github.com/recastnavigation/recastnavigation.git
+
+[submodule "3rd/lua-cjson"]
+	path = 3rd/lua-cjson
+	url = https://github.com/mpx/lua-cjson.git
+
+[submodule "3rd/luasocket"]
+	path = 3rd/luasocket
+	url = https://github.com/lunarmodules/luasocket.git

@@ -235,6 +235,46 @@ function CommandHandler.process_command(cmd)
 					print("获取好友列表失败")
 				end
 			end)
+		elseif cmd == "instance_create" then
+			args = args or {}
+			local create_params = {}
+			for i = 2, #args do
+				table.insert(create_params, tostring(args[i]))
+			end
+			NetworkManager.send_request("instance_create", {
+				type_name = args[1] or "single",
+				params = create_params,
+			})
+		elseif cmd == "instance_enter" then
+			NetworkManager.send_request("instance_enter", {
+				inst_id = tostring(args[1] or ""),
+			})
+		elseif cmd == "instance_leave" then
+			NetworkManager.send_request("instance_leave", {
+				inst_id = tostring(args[1] or ""),
+			})
+		elseif cmd == "instance_quit" then
+			NetworkManager.send_request("instance_quit", {
+				inst_id = tostring(args[1] or ""),
+			})
+		elseif cmd == "instance_ready" then
+			NetworkManager.send_request("instance_ready", {
+				inst_id = tostring(args[1] or ""),
+			})
+		elseif cmd == "instance_match_start" then
+			NetworkManager.send_request("instance_match_start", {
+				type_name = tostring(args[1] or "multi"),
+			})
+		elseif cmd == "instance_play_start" then
+			NetworkManager.send_request("instance_play_start", {
+				type_name = tostring(args[1] or "single"),
+			})
+		elseif cmd == "instance_match_confirm" then
+			NetworkManager.send_request("instance_match_confirm", {
+				accept = (tonumber(args[1]) or 1) ~= 0,
+			})
+		elseif cmd == "instance_match_cancel" then
+			NetworkManager.send_request("instance_match_cancel", {})
 		else 
 			ProtocolHandler.send_package(ClientState.fd, cmd)
 		end 

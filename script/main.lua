@@ -38,6 +38,8 @@ skynet.start(function()
 
     local match = skynet.newservice("matchS")
 
+    local instance = skynet.newservice("instanceS")
+
     local pathfinding = skynet.newservice("pathfindingS")
 
     local scene = skynet.newservice("sceneS")

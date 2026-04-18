@@ -186,109 +186,58 @@ local c2s_builder = builder.new()
         request = {}
     })
     
-    -- 斗地主协议 (300-349)
-    :protocol("landlord_create_room", 300, {
+    -- 副本协议 (500-519)
+    :protocol("instance_create", 500, {
+        request = {
+            type_name = "string",     -- 玩法类型
+            params = "*string",       -- 参数列表，格式建议 key=value
+        }
+    })
+
+    :protocol("instance_enter", 502, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_leave", 503, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_quit", 504, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_ready", 505, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_match_start", 506, {
+        request = {
+            type_name = "string",      -- 玩法类型（匹配规则由服务端决定）
+        }
+    })
+
+    :protocol("instance_match_cancel", 507, {
         request = {}
     })
-    
-    :protocol("landlord_join_room", 301, {
+
+    :protocol("instance_match_confirm", 509, {
         request = {
-            room_id = "integer",
+            accept = "boolean",         -- true确认，false拒绝
         }
     })
-    
-    :protocol("landlord_leave_room", 302, {
-        request = {}
-    })
-    
-    :protocol("landlord_ready", 303, {
-        request = {}
-    })
-    
-    :protocol("landlord_play_cards", 304, {
+
+    :protocol("instance_play_start", 522, {
         request = {
-            cards = "*string",
+            type_name = "string",       -- 统一玩法入口（单人/多人）
         }
-    })
-    
-    :protocol("landlord_quick_match", 305, {
-        request = {}
-    })
-    
-    :protocol("landlord_cancel_match", 306, {
-        request = {}
-    })
-    
-    -- 麻将协议 (350-399)
-    :protocol("mahjong_create_room", 350, {
-        request = {
-            mode = "integer",        -- 游戏模式
-            base_score = "integer", -- 底分
-        }
-    })
-    
-    :protocol("mahjong_join_room", 351, {
-        request = {
-            room_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_leave_room", 352, {
-        request = {
-            room_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_ready", 353, {
-        request = {
-            room_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_play_tile", 354, {
-        request = {
-            room_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-        }
-    })
-    
-    :protocol("mahjong_chi_tile", 355, {
-        request = {
-            room_id = "integer",
-            tiles = "*integer",
-        }
-    })
-    
-    :protocol("mahjong_peng_tile", 356, {
-        request = {
-            room_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_gang_tile", 357, {
-        request = {
-            room_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-        }
-    })
-    
-    :protocol("mahjong_hu_tile", 358, {
-        request = {
-            room_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_quick_match", 359, {
-        request = {
-            mode = "integer",        -- 游戏模式
-            base_score = "integer", -- 底分
-        }
-    })
-    
-    :protocol("mahjong_cancel_match", 360, {
-        request = {}
     })
     
     -- 邮件系统
@@ -529,178 +478,94 @@ local s2c_builder = builder.new()
         }
     })
     
-    -- 房间相关类型
-    :type("player_info", {
+    -- 副本响应协议
+    :protocol("instance_create_response", 510, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_enter_response", 512, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+            scene_id = "integer",
+        }
+    })
+
+    :protocol("instance_leave_response", 513, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_quit_response", 514, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+        }
+    })
+
+    :protocol("instance_ready_response", 515, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+        }
+    })
+
+    :type("instance_match_member_confirm_info", {
         player_id = "integer",
-        ready = "boolean",
-        seat = "integer",
-        cards_count = "integer",
+        confirmed = "boolean",
     })
-    
-    :type("room_info", {
-        room_id = "integer",
-        creator_id = "integer",
-        game_type = "integer",      -- 1:斗地主 2:麻将
-        player_count = "integer",
-        status = "integer",         -- 0:等待开始 1:游戏中
-        players = "*player_info",
-    })
-    
-    -- 斗地主协议
-    :protocol("landlord_game_start_notify", 307, {
+
+    :protocol("instance_match_success_notify", 519, {
         request = {
-            room_id = "integer",
-            players = "*player_info",
-            cards = "*string",          -- 自己的手牌
-            landlord_id = "integer",    -- 地主ID
-            bottom_cards = "*string",   -- 地主牌
-            current_player = "integer", -- 当前出牌玩家
+            inst_id = "string",
+            team_size = "integer",
         }
     })
-    
-    :protocol("landlord_play_cards_notify", 308, {
+
+    :protocol("instance_match_confirm_notify", 520, {
         request = {
-            room_id = "integer",
-            player_id = "integer",
-            cards = "*string",
-            next_player_id = "integer",
+            match_id = "string",
+            members = "*instance_match_member_confirm_info",
+            confirm_deadline = "integer",
         }
     })
-    
-    :protocol("landlord_game_over_notify", 309, {
+
+    :protocol("instance_play_start_response", 523, {
         request = {
-            room_id = "integer",
-            winner_id = "integer",
-            players = "*player_info",
-            score = "integer",
+            result = "integer",
+            message = "string",
+            mode = "string",            -- direct/match
+            matched = "boolean",
+            pending_confirm = "boolean",
+            match_id = "string",
+            inst_id = "string",
+            scene_id = "integer",
+            queue_size = "integer",
+            team_size = "integer",
+            confirm_deadline = "integer",
         }
     })
-    
-    :protocol("landlord_join_notify", 320, {
+
+    :protocol("instance_play_data_notify", 524, {
         request = {
-            room_id = "integer",
-            player_id = "integer",
-            players = "*player_info",
+            inst_id = "string",
+            data = "binary",
         }
     })
-    
-    :protocol("landlord_leave_notify", 321, {
+
+    :protocol("instance_match_tip_notify", 525, {
         request = {
-            room_id = "integer",
-            player_id = "integer",
-            players = "*player_info",
-        }
-    })
-    
-    :protocol("landlord_ready_notify", 322, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            players = "*player_info",
-        }
-    })
-    
-    :protocol("landlord_player_offline_notify", 315, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            players = "*player_info",
-        }
-    })
-    
-    :protocol("landlord_player_reconnect_notify", 316, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            players = "*player_info",
-        }
-    })
-    
-    :protocol("landlord_game_state_notify", 317, {
-        request = {
-            room_id = "integer",
-            status = "integer",
-            players = "*player_info",
-            cards = "*string",          -- 自己的手牌
-            landlord_id = "integer",    -- 地主ID
-            bottom_cards = "*string",   -- 地主牌
-            current_player = "integer", -- 当前出牌玩家
-            last_cards = "*string",     -- 上一次出的牌
-            last_player = "integer",    -- 上一次出牌的玩家
-        }
-    })
-    
-    -- 麻将协议
-    :protocol("mahjong_game_start_notify", 361, {
-        request = {
-            room_id = "integer",
-            players = "*player_info",
-        }
-    })
-    
-    :protocol("mahjong_draw_tile_notify", 362, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-            remaining_count = "integer",
-        }
-    })
-    
-    :protocol("mahjong_play_tile_notify", 363, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-            next_player_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_chi_tile_notify", 364, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            tiles = "*integer",
-            next_player_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_peng_tile_notify", 365, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-            next_player_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_gang_tile_notify", 366, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            tile_type = "integer",
-            tile_value = "integer",
-            next_player_id = "integer",
-        }
-    })
-    
-    :protocol("mahjong_hu_tile_notify", 367, {
-        request = {
-            room_id = "integer",
-            player_id = "integer",
-            win_type = "integer",
-            score = "integer",
-        }
-    })
-    
-    :protocol("mahjong_game_over_notify", 368, {
-        request = {
-            room_id = "integer",
-            winner_id = "integer",
-            players = "*player_info",
+            message = "string",
         }
     })
     

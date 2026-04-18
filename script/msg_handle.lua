@@ -2,6 +2,9 @@ local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local user_mgr = require "user_mgr"
+local protocol_handler = require "protocol_handler"
+local match_rules = require "match.match_rules"
+local instance_rules = require "match.instance_rules"
 
 function on_add_item(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
@@ -277,211 +280,280 @@ function on_get_black_list(_player_id, _msg)
     return true
 end
 
--- 麻将相关消息处理
-function on_mahjong_create_room(_player_id, _msg)
-    if not _msg.mode or not _msg.base_score then
-        log.error("Invalid create room format")
-        return false, "Invalid message format"
+local function send_instance_result(player_id, protocol_name, result, message, payload)
+    local data = {
+        result = result and 0 or 1,
+        message = message or (result and "ok" or "failed"),
+    }
+    if payload then
+        for k, v in pairs(payload) do
+            data[k] = v
+        end
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "create_room", _player_id, 2, _msg)  -- 2表示麻将游戏
+    protocol_handler.send_to_player(player_id, protocol_name, data)
 end
 
-function on_mahjong_join_room(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid join room format")
+function on_instance_create(_player_id, _msg)
+    if not _msg.type_name then
+        send_instance_result(_player_id, "instance_create_response", false, "参数错误")
         return false, "Invalid message format"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "join_room", _player_id, _msg.room_id)
-end
 
-function on_mahjong_leave_room(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid leave room format")
-        return false, "Invalid message format"
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_create_response", false, "副本服务不可用")
+        return false, "Instance service not available"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "leave_room", _player_id)
-end
 
-function on_mahjong_ready(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid ready format")
-        return false, "Invalid message format"
+    local args = {
+        params = _msg.params or {},
+        creator_id = _player_id,
+    }
+    for _, item in ipairs(args.params) do
+        local key, value = string.match(item, "^([^=]+)=(.+)$")
+        if key and value then
+            if value == "true" then
+                args[key] = true
+            elseif value == "false" then
+                args[key] = false
+            else
+                local num = tonumber(value)
+                args[key] = num or value
+            end
+        end
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "ready", _player_id)
-end
 
-function on_mahjong_play_tile(_player_id, _msg)
-    if not _msg.room_id or not _msg.tile_type or not _msg.tile_value then
-        log.error("Invalid play tile format")
-        return false, "Invalid message format"
+    local ok, inst_id_or_err = skynet.call(instanceS, "lua", "create_instance", _msg.type_name, args)
+    if not ok then
+        send_instance_result(_player_id, "instance_create_response", false, inst_id_or_err or "创建副本失败")
+        return false, inst_id_or_err
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+
+    local join_ok, join_err = skynet.call(instanceS, "lua", "join_instance", inst_id_or_err, _player_id, {})
+    if not join_ok then
+        send_instance_result(_player_id, "instance_create_response", false, join_err or "加入新副本失败")
+        return false, join_err
     end
-    
-    return skynet.send(matchS, "lua", "play_tile", _msg.room_id, _player_id, {
-        type = _msg.tile_type,
-        value = _msg.tile_value
+
+    send_instance_result(_player_id, "instance_create_response", true, "创建成功", {
+        inst_id = inst_id_or_err,
     })
+    return true
 end
 
-function on_mahjong_chi_tile(_player_id, _msg)
-    if not _msg.room_id or not _msg.tiles then
-        log.error("Invalid chi tile format")
+function on_instance_enter(_player_id, _msg)
+    if not _msg.inst_id then
+        send_instance_result(_player_id, "instance_enter_response", false, "参数错误")
         return false, "Invalid message format"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "chi_tile", _msg.room_id, _player_id, _msg.tiles)
-end
 
-function on_mahjong_peng_tile(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid peng tile format")
-        return false, "Invalid message format"
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_enter_response", false, "副本服务不可用")
+        return false, "Instance service not available"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "peng_tile", _msg.room_id, _player_id)
-end
 
-function on_mahjong_gang_tile(_player_id, _msg)
-    if not _msg.room_id or not _msg.tile_type or not _msg.tile_value then
-        log.error("Invalid gang tile format")
-        return false, "Invalid message format"
+    local ok, err = skynet.call(instanceS, "lua", "enter_instance", _msg.inst_id, _player_id)
+    if not ok then
+        send_instance_result(_player_id, "instance_enter_response", false, err or "进入失败", {
+            inst_id = _msg.inst_id,
+            scene_id = 0,
+        })
+        return false, err
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "gang_tile", _msg.room_id, _player_id, {
-        type = _msg.tile_type,
-        value = _msg.tile_value
+
+    local info_ok, info = skynet.call(instanceS, "lua", "get_instance_info", _msg.inst_id)
+    send_instance_result(_player_id, "instance_enter_response", true, "进入成功", {
+        inst_id = _msg.inst_id,
+        scene_id = (info_ok and type(info) == "table" and info.scene_id) or 0,
     })
+    return true
 end
 
-function on_mahjong_hu_tile(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid hu tile format")
+function on_instance_leave(_player_id, _msg)
+    if not _msg.inst_id then
+        send_instance_result(_player_id, "instance_leave_response", false, "参数错误")
         return false, "Invalid message format"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_leave_response", false, "副本服务不可用")
+        return false, "Instance service not available"
     end
-    
-    return skynet.send(matchS, "lua", "hu_tile", _msg.room_id, _player_id)
+
+    local ok, err = skynet.call(instanceS, "lua", "leave_instance", _msg.inst_id, _player_id)
+    if not ok then
+        send_instance_result(_player_id, "instance_leave_response", false, err or "离开失败", {
+            inst_id = _msg.inst_id,
+        })
+        return false, err
+    end
+
+    send_instance_result(_player_id, "instance_leave_response", true, "离开成功", {
+        inst_id = _msg.inst_id,
+    })
+    return true
 end
 
--- 斗地主相关消息处理
-function on_landlord_create_room(_player_id, _msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "create_room", _player_id, 1)  -- 1表示斗地主游戏
-end
-
-function on_landlord_join_room(_player_id, _msg)
-    if not _msg.room_id then
-        log.error("Invalid join room format")
+function on_instance_quit(_player_id, _msg)
+    if not _msg.inst_id then
+        send_instance_result(_player_id, "instance_quit_response", false, "参数错误")
         return false, "Invalid message format"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_quit_response", false, "副本服务不可用")
+        return false, "Instance service not available"
     end
-    
-    return skynet.send(matchS, "lua", "join_room", _player_id, _msg.room_id)
+
+    local ok, err = skynet.call(instanceS, "lua", "quit_instance", _msg.inst_id, _player_id)
+    if not ok then
+        send_instance_result(_player_id, "instance_quit_response", false, err or "退出失败", {
+            inst_id = _msg.inst_id,
+        })
+        return false, err
+    end
+
+    send_instance_result(_player_id, "instance_quit_response", true, "退出成功", {
+        inst_id = _msg.inst_id,
+    })
+    return true
 end
 
-function on_landlord_leave_room(_player_id, _msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "leave_room", _player_id)
-end
-
-function on_landlord_ready(_player_id, _msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    
-    return skynet.send(matchS, "lua", "ready", _player_id)
-end
-
-function on_landlord_play_cards(_player_id, _msg)
-    if not _msg.cards then
-        log.error("Invalid play cards format")
+function on_instance_ready(_player_id, _msg)
+    if not _msg.inst_id then
+        send_instance_result(_player_id, "instance_ready_response", false, "参数错误")
         return false, "Invalid message format"
     end
-    
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_ready_response", false, "副本服务不可用", {
+            inst_id = _msg.inst_id,
+        })
+        return false, "Instance service not available"
     end
-    
-    return skynet.send(matchS, "lua", "play_cards", _player_id, _msg.cards)
+
+    local ok, ready_result = skynet.call(instanceS, "lua", "ready_instance", _msg.inst_id, _player_id)
+    if not ok then
+        send_instance_result(_player_id, "instance_ready_response", false, ready_result or "准备失败", {
+            inst_id = _msg.inst_id,
+        })
+        return false, ready_result
+    end
+
+    send_instance_result(_player_id, "instance_ready_response", true, ready_result or "准备成功", {
+        inst_id = _msg.inst_id,
+    })
+    return true
 end
 
-function on_landlord_quick_match(_player_id, _msg)
+function on_instance_match_start(_player_id, _msg)
     local matchS = skynet.localname(".match")
     if not matchS then
         return false, "Match service not available"
     end
-    
-    return skynet.send(matchS, "lua", "quick_match", _player_id, 1)  -- 1表示斗地主游戏
+    skynet.send(matchS, "lua", "start_match", _player_id, {
+        type_name = _msg.type_name,
+    })
+    return true
 end
 
-function on_landlord_cancel_match(_player_id, _msg)
+function on_instance_match_confirm(_player_id, _msg)
     local matchS = skynet.localname(".match")
     if not matchS then
         return false, "Match service not available"
     end
-    
-    return skynet.send(matchS, "lua", "cancel_match", _player_id)
+
+    skynet.send(matchS, "lua", "confirm_match", _player_id, _msg.accept ~= false)
+    return true
+end
+
+function on_instance_play_start(_player_id, _msg)
+    local type_name = _msg.type_name or "single"
+    local match_rule = match_rules[type_name]
+    local instance_rule = instance_rules[type_name]
+    if not match_rule or not instance_rule then
+        send_instance_result(_player_id, "instance_play_start_response", false, "不支持的玩法类型")
+        return false, "Unsupported type_name"
+    end
+
+    local entry = match_rule.entry or "match"
+    if entry == "direct" then
+        local instanceS = skynet.localname(".instance")
+        if not instanceS then
+            send_instance_result(_player_id, "instance_play_start_response", false, "副本服务不可用")
+            return false, "Instance service not available"
+        end
+
+        local create_ok, result_or_err, _err_info = skynet.call(
+            instanceS,
+            "lua",
+            "play_start_direct",
+            _player_id,
+            type_name,
+            {
+                instance_type_name = instance_rule.instance_type_name,
+                inst_no = instance_rule.default_inst_no,
+                ready_mode = instance_rule.ready_mode,
+                result_source = instance_rule.result_source,
+            }
+        )
+        if not create_ok then
+            send_instance_result(_player_id, "instance_play_start_response", false, result_or_err or "进入副本失败", {
+                mode = "direct",
+            })
+            return false, result_or_err
+        end
+
+        send_instance_result(_player_id, "instance_play_start_response", true, "进入副本成功", {
+            mode = "direct",
+            inst_id = result_or_err.inst_id or "",
+            scene_id = result_or_err.scene_id or 0,
+            team_size = 1,
+        })
+        return true
+    end
+
+    local matchS = skynet.localname(".match")
+    if not matchS then
+        send_instance_result(_player_id, "instance_play_start_response", false, "匹配服务不可用")
+        return false, "Match service not available"
+    end
+
+    local ok, result_or_err = skynet.call(matchS, "lua", "start_match", _player_id, {
+        type_name = type_name,
+    })
+    if not ok then
+        send_instance_result(_player_id, "instance_play_start_response", false, result_or_err or "开始匹配失败", {
+            mode = "match",
+        })
+        return false, result_or_err
+    end
+
+    send_instance_result(_player_id, "instance_play_start_response", true, result_or_err.message or "匹配中", {
+        mode = "match",
+        matched = result_or_err.matched or false,
+        pending_confirm = result_or_err.pending_confirm or false,
+        match_id = result_or_err.match_id or "",
+        inst_id = result_or_err.inst_id or "",
+        queue_size = result_or_err.queue_size or 0,
+        team_size = result_or_err.team_size or 0,
+        confirm_deadline = result_or_err.confirm_deadline or 0,
+    })
+    return true
+end
+
+function on_instance_match_cancel(_player_id, _msg)
+    local matchS = skynet.localname(".match")
+    if not matchS then
+        return false, "Match service not available"
+    end
+
+    skynet.send(matchS, "lua", "cancel_match", _player_id)
+    return true
 end
 
 -- 处理创建公会请求
@@ -724,24 +796,16 @@ local handle = {
     ["add_blacklist"] = on_add_blacklist,
     ["remove_blacklist"] = on_remove_blacklist,
     ["get_black_list"] = on_get_black_list,
-    -- 麻将相关消息处理
-    ["mahjong_create_room"] = on_mahjong_create_room,
-    ["mahjong_join_room"] = on_mahjong_join_room,
-    ["mahjong_leave_room"] = on_mahjong_leave_room,
-    ["mahjong_ready"] = on_mahjong_ready,
-    ["mahjong_play_tile"] = on_mahjong_play_tile,
-    ["mahjong_chi_tile"] = on_mahjong_chi_tile,
-    ["mahjong_peng_tile"] = on_mahjong_peng_tile,
-    ["mahjong_gang_tile"] = on_mahjong_gang_tile,
-    ["mahjong_hu_tile"] = on_mahjong_hu_tile,
-    -- 斗地主相关消息处理
-    ["landlord_create_room"] = on_landlord_create_room,
-    ["landlord_join_room"] = on_landlord_join_room,
-    ["landlord_leave_room"] = on_landlord_leave_room,
-    ["landlord_ready"] = on_landlord_ready,
-    ["landlord_play_cards"] = on_landlord_play_cards,
-    ["landlord_quick_match"] = on_landlord_quick_match,
-    ["landlord_cancel_match"] = on_landlord_cancel_match,
+    -- 副本相关消息处理
+    ["instance_create"] = on_instance_create,
+    ["instance_enter"] = on_instance_enter,
+    ["instance_leave"] = on_instance_leave,
+    ["instance_quit"] = on_instance_quit,
+    ["instance_ready"] = on_instance_ready,
+    ["instance_match_start"] = on_instance_match_start,
+    ["instance_play_start"] = on_instance_play_start,
+    ["instance_match_confirm"] = on_instance_match_confirm,
+    ["instance_match_cancel"] = on_instance_match_cancel,
     -- 公会相关消息处理
     ["create_guild"] = on_create_guild,
     ["disband_guild"] = on_disband_guild,
