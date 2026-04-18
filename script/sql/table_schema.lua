@@ -3,21 +3,21 @@ local config = {
     ["account"] = {
         table_name = "account",
         fields = {
-            ["account_key"] = {
-                type = "varchar(20)",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "账号标识",
-            },
             ["account_id"] = {
                 type = "int",
                 is_required = true,
                 is_primary = false,
                 is_auto_increment = true,
                 default = "nil",
-                comment = "账号ID",
+                comment = "",
+            },
+            ["account_key"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
             },
             ["players"] = {
                 type = "text",
@@ -25,7 +25,7 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "玩家列表数据",
+                comment = "",
             },
             ["last_login_ip"] = {
                 type = "varchar(16)",
@@ -93,6 +93,73 @@ local config = {
             ["players"] = true,
             ["register_ip"] = true,
             ["register_time"] = true,
+        },
+    },
+    ["bag"] = {
+        table_name = "bag",
+        fields = {
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["idx"] = {
+                type = "varchar(32)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "子索引",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "player_id",
+            "idx",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
+    ["base"] = {
+        table_name = "base",
+        fields = {
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
         },
     },
     ["channel"] = {
@@ -734,6 +801,77 @@ local config = {
             ["status"] = true,
         },
     },
+    ["player"] = {
+        table_name = "player",
+        fields = {
+            ["player_id"] = {
+                type = "int unsigned",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+            ["player_name"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["create_time"] = {
+                type = "timestamp",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "",
+            },
+            ["update_time"] = {
+                type = "timestamp",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "",
+            },
+            ["info"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+            ["account_key"] = {
+                type = "varchar(20)",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+            ["fk_account_key"] = {
+                unique = false,
+                columns = {
+                    "account_key",
+                },
+            },
+        },
+        non_primary_fields = {
+            ["account_key"] = true,
+            ["create_time"] = true,
+            ["info"] = true,
+            ["player_name"] = true,
+            ["update_time"] = true,
+        },
+    },
     ["player_odb"] = {
         table_name = "player_odb",
         fields = {
@@ -856,7 +994,7 @@ local config = {
                 },
             },
             ["idx_players"] = {
-                unique = false,
+                unique = true,
                 columns = {
                     "player1_id",
                     "player2_id",

@@ -8,6 +8,7 @@ local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local common = require "utils.common"
 local attack_protection = require "security.attack_protection"
+local table_schema = require "sql.table_schema"
 --local jwt = require "resty.jwt"  -- 添加 JWT 库
 require "skynet.manager"
 
@@ -671,6 +672,55 @@ local function register_auth_routes()
     end)
 end
 
+-- Web：filters -> dbS select 的 cond（与 Web DB_FILTER_OPS 对齐；字段需在 table_schema 中）
+local function web_filters_to_cond(tbl_name, filters)
+    local struct = table_schema[tbl_name]
+    if not struct then
+        return nil, "unknown table: " .. tostring(tbl_name)
+    end
+    local cond = {}
+    for _, f in ipairs(filters or {}) do
+        local field = f.field
+        if type(field) ~= "string" or field == "" then
+            return nil, "each filter needs a non-empty field"
+        end
+        if not struct.fields[field] then
+            return nil, "unknown field: " .. field
+        end
+        local op = tostring(f.operator or "="):match("^%s*(.-)%s*$") or "="
+        local opu = op:upper()
+        local val = f.value
+
+        if opu == "=" or op == "==" then
+            cond[field] = val
+        elseif opu == "!=" or opu == "<>" then
+            cond[field] = { ["!="] = val }
+        elseif opu == ">" or opu == "<" or opu == ">=" or opu == "<=" then
+            cond[field] = { [op] = val }
+        elseif opu == "LIKE" then
+            if val == nil then
+                return nil, "LIKE requires value"
+            end
+            cond[field] = { __like = tostring(val) }
+        elseif opu == "IN" then
+            if type(val) ~= "table" then
+                return nil, "IN requires value to be a non-empty array"
+            end
+            if #val == 0 then
+                return nil, "IN requires a non-empty array"
+            end
+            cond[field] = val
+        elseif opu == "IS NULL" then
+            cond[field] = { __is_null = true }
+        elseif opu == "IS NOT NULL" then
+            cond[field] = { __is_not_null = true }
+        else
+            return nil, "unsupported operator: " .. op
+        end
+    end
+    return cond
+end
+
 -- 注册默认路由
 local function register_default_routes()
     register_auth_routes()  -- 添加认证路由
@@ -685,242 +735,97 @@ local function register_default_routes()
         }
     end)
 
-    register_route("GET", "/api/games/servers/", function(fd, method, url, headers, body, interface)
-        local servers = {}
-        for i = 1, 21 do 
-            table.insert(servers, {
-                server_id = i,
-                name = "server" .. i,
-                status = "online",
-                cur_num = 100,
-                max_num = 1000,
-                ip = "127.0.0.1",
-                port = 8889,
-                create_time = os.time(),
-            })
-        end 
-        return {servers = servers}
-    end)
-    
-    -- 注册白名单查询接口
-    register_param_route("GET", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params, query_params)
-        local server_id = tonumber(params.server_id)
-        local page = tonumber(query_params.page) or 1
-        local page_size = tonumber(query_params.page_size) or 10
-        local search = query_params.search or ""
-        -- 验证参数
-        if not server_id or server_id <= 0 then
-            error_response(fd, interface, 400, "Invalid server ID")
+    -- Web 后台：数据库（action: tables | columns | query）
+    register_route("POST", "/api/web/db/query", function(fd, method, url, headers, body, interface)
+        local ok, data = pcall(cjson.decode, body or "")
+        if not ok or type(data) ~= "table" then
+            error_response(fd, interface, 400, "Invalid JSON body")
             return
         end
-        if page < 1 then
-            error_response(fd, interface, 400, "Page must be greater than 0")
-            return
-        end
-        if page_size < 1 or page_size > 100 then
-            error_response(fd, interface, 400, "Page size must be between 1 and 100")
-            return
-        end
-        -- 模拟白名单数据
-        local whitelist_data = {}
-        local total_count = 50  -- 模拟总数据量
-        
-        -- 生成模拟数据
-        for i = 1, math.min(page_size, total_count - (page - 1) * page_size) do
-            local index = (page - 1) * page_size + i
-            if index <= total_count then
-                table.insert(whitelist_data, {
-                    id = index,
-                    accountId = 10000 + index,
-                    added_time = os.time() - (index * 3600),
-                })
-            end
-        end
-        -- 如果有搜索条件，过滤数据
-        if search and search ~= "" then
-            local filtered_data = {}
-            for _, item in ipairs(whitelist_data) do
-                if string.find(string.lower(item.player_name), string.lower(search), 1, true) or
-                   string.find(item.ip_address, search, 1, true) then
-                    table.insert(filtered_data, item)
-                end
-            end
-            whitelist_data = filtered_data
-        end
-        return {
-            server_id = server_id,
-            whitelist = whitelist_data,
-            total = total_count,
-            pagination = {
-                page = page,
-                page_size = page_size,
-                total_count = total_count,
-                total_pages = math.ceil(total_count / page_size)
-            },
-            search = search
-        }
-    end)
-    
-    -- 添加白名单接口
-    register_param_route("POST", "/api/servers/{server_id}/whitelist", function(fd, method, url, headers, body, interface, params, query_params)
-        local server_id = tonumber(params.server_id)
-        if not server_id or server_id <= 0 then
-            error_response(fd, interface, 400, "Invalid server ID")
+        local db = skynet.localname(".db")
+        if not db then
+            error_response(fd, interface, 503, "Database service unavailable")
             return
         end
 
-        -- 解析请求体
-        local data = cjson.decode(body)
-        if not data then
-            error_response(fd, interface, 400, "Invalid JSON data")
+        if not data.action or data.action == "" then
+            error_response(fd, interface, 400, "Missing field: action")
             return
         end
-        -- 验证必需参数
-        local valid, err = validate_params(data, {"accountId"})
-        if not valid then
-            error_response(fd, interface, 400, err)
-            return
-        end
-        -- 模拟添加白名单
-        local whitelist_item = {
-            id = os.time(),  -- 使用时间戳作为ID
-            accountId = data.accountId,
-            added_time = os.time(),
-        }
-        log.error("add_whitelist", {whitelist_item = whitelist_item})
-        return {
-            success = true,
-            message = "Whitelist item added successfully",
-            data = whitelist_item
-        }
-    end)
-    
-    -- 删除白名单接口
-    register_param_route("DELETE", "/api/servers/{server_id}/whitelist/{whitelist_id}", function(fd, method, url, headers, body, interface, params, query_params)
-        local server_id = tonumber(params.server_id)
-        local whitelist_id = tonumber(params.whitelist_id)
-        
-        if not server_id or server_id <= 0 then
-            error_response(fd, interface, 400, "Invalid server ID")
-            return
-        end
-        
-        if not whitelist_id or whitelist_id <= 0 then
-            error_response(fd, interface, 400, "Invalid whitelist ID")
-            return
-        end
-        
-        -- 模拟删除操作
-        return {
-            success = true,
-            message = "Whitelist item deleted successfully",
-            deleted_id = whitelist_id
-        }
-    end)
 
-    -- 添加处理命令接口
-    register_route("POST", "/api/servers/command", function(fd, method, url, headers, body, interface)
-        -- 解析请求体
-        local data = cjson.decode(body)
-        if not data then
-            error_response(fd, interface, 400, "Invalid JSON data")
-            return
-        end
-        -- 验证必需参数
-        local valid, err = validate_params(data, {"server_ids", "command"})
-        if not valid then
-            error_response(fd, interface, 400, err)
-            return
-        end
-        -- 验证server_ids格式
-        if type(data.server_ids) ~= "table" or #data.server_ids == 0 then
-            error_response(fd, interface, 400, "server_ids must be a non-empty array")
-            return
-        end
-        
-        -- 验证每个server_id
-        local server_ids = {}
-        for i, server_id in ipairs(data.server_ids) do
-            local id = tonumber(server_id)
-            if not id or id <= 0 then
-                error_response(fd, interface, 400, string.format("Invalid server ID at index %d: %s", i, tostring(server_id)))
+        local act = data.action
+        if act == "tables" then
+            local names = skynet.call(db, "lua", "web_list_tables")
+            if not names then
+                error_response(fd, interface, 500, "Failed to list tables")
                 return
             end
-            table.insert(server_ids, id)
-        end
-        
-        -- 验证命令
-        local command = data.command
-        if type(command) ~= "string" or command == "" then
-            error_response(fd, interface, 400, "command must be a non-empty string")
+            return { tables = names }
+        elseif act == "columns" then
+            local tbl = data.table
+            if type(tbl) ~= "string" or tbl == "" then
+                error_response(fd, interface, 400, "Missing or invalid field: table")
+                return
+            end
+            local cols = skynet.call(db, "lua", "web_list_columns", tbl)
+            if not cols then
+                error_response(fd, interface, 400, "Failed to load columns (check table name)")
+                return
+            end
+            return { columns = cols }
+        elseif act == "query" then
+            local tbl = data.table
+            if type(tbl) ~= "string" or tbl == "" then
+                error_response(fd, interface, 400, "Missing or invalid field: table")
+                return
+            end
+            local sql = data.sql
+            if type(sql) == "string" and sql:gsub("%s+", "") ~= "" then
+                local rows, err = skynet.call(db, "lua", "web_select_sql", sql)
+                if rows == nil then
+                    error_response(fd, interface, 400, err or "SQL query failed")
+                    return
+                end
+                return { rows = rows }
+            end
+            local cond, ferr = web_filters_to_cond(tbl, data.filters)
+            if not cond then
+                error_response(fd, interface, 400, ferr or "invalid filters")
+                return
+            end
+            local limit = tonumber(data.limit) or 100
+            if limit > 5000 then
+                limit = 5000
+            end
+            if limit < 1 then
+                limit = 1
+            end
+            local offset = tonumber(data.offset) or 0
+            if offset < 0 then
+                offset = 0
+            end
+            local options = { limit = limit, offset = offset }
+            local cok, rows = pcall(function()
+                return skynet.call(db, "lua", "select", tbl, cond, options)
+            end)
+            if not cok then
+                log.error("web db query select failed: %s", tostring(rows))
+                error_response(fd, interface, 500, tostring(rows))
+                return
+            end
+            return { rows = rows }
+        else
+            error_response(fd, interface, 400, "Unknown action: " .. tostring(act))
             return
         end
-        
-        -- 获取可选参数
-        local timeout = tonumber(data.timeout) or 30  -- 默认30秒超时
-        
-        -- 记录命令执行请求
-        log.info("Server command request", {
-            server_ids = server_ids,
-            command = command,
-            timeout = timeout,
-            user_id = headers["x-user-id"] or "anonymous"
-        })
-        
-        -- 模拟命令执行结果
-        local results = {}
-        local success_count = 0
-        local failed_count = 0
-        
-        for _, server_id in ipairs(server_ids) do
-            -- 模拟服务器状态检查
-            local server_online = server_id % 3 ~= 0  -- 模拟某些服务器离线
-            
-            if server_online then
-                -- 模拟命令执行成功
-                table.insert(results, {
-                    server_id = server_id,
-                    status = "success",
-                    message = "Command executed successfully",
-                    output = string.format("Command '%s' executed on server %d", command, server_id),
-                    execution_time = math.random(100, 2000) / 1000,  -- 0.1-2秒
-                    timestamp = os.time()
-                })
-                success_count = success_count + 1
-            else
-                -- 模拟命令执行失败
-                table.insert(results, {
-                    server_id = server_id,
-                    status = "failed",
-                    message = "Server is offline",
-                    error = "Connection timeout",
-                    execution_time = 0,
-                    timestamp = os.time()
-                })
-                failed_count = failed_count + 1
-            end
-        end
-        
-        -- 构建响应
-        local response_data = {
-            command = command,
-            server_ids = server_ids,
-            total_servers = #server_ids,
-            success_count = success_count,
-            failed_count = failed_count,
-            results = results,
-            request_time = os.time()
-        }
-        
-        log.info("Server command completed", {
-            command = command,
-            total_servers = #server_ids,
-            success_count = success_count,
-            failed_count = failed_count
-        })
-        
-        return response_data
     end)
+
+    -- Web 后台：下发命令（占位，后续实现业务）
+    register_route("POST", "/api/web/command", function(fd, method, url, headers, body, interface)
+        error_response(fd, interface, 501, "Web command API not implemented yet")
+    end)
+
+    
 end
 
 -- 检查数据访问权限

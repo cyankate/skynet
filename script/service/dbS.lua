@@ -90,8 +90,15 @@ function CMD.select(_tbl, _cond, _options)
                 goto continue
             end
             local field_type = struct.fields[k].type
+            -- Web filters：LIKE / IS NULL / IS NOT NULL（__* 避免与普通 IN 数组混淆）
+            if type(v) == "table" and v.__like ~= nil then
+                table.insert(cond_list, string.format("`%s` LIKE %s", k, mysql.quote_sql_str(tostring(v.__like))))
+            elseif type(v) == "table" and v.__is_null then
+                table.insert(cond_list, string.format("`%s` IS NULL", k))
+            elseif type(v) == "table" and v.__is_not_null then
+                table.insert(cond_list, string.format("`%s` IS NOT NULL", k))
             -- 处理IN查询
-            if type(v) == "table" and #v > 0 then
+            elseif type(v) == "table" and #v > 0 then
                 local values = {}
                 for _, item in ipairs(v) do
                     if field_type:find("varchar") or field_type == "text" then
@@ -760,6 +767,99 @@ end
 function CMD.create_private_channel(data)
     local ret = CMD.insert("private_channel", data)
     return ret
+end
+
+-- Web 后台：合法表名（防注入）
+local function valid_web_table_name(name)
+    return type(name) == "string" and name:match("^[%a_][%w_]*$") ~= nil and #name <= 64
+end
+
+-- Web 后台：仅允许单条只读 SELECT
+local function web_safe_select_sql(sql)
+    if type(sql) ~= "string" then
+        return false
+    end
+    local s = sql:match("^%s*(.-)%s*$") or ""
+    if s == "" then
+        return false
+    end
+    local low = s:lower()
+    if not low:match("^select%s+") then
+        return false
+    end
+    if s:find(";") then
+        return false
+    end
+    if low:match("into%s+outfile") or low:match("into%s+dumpfile") then
+        return false
+    end
+    return true
+end
+
+function CMD.web_list_tables()
+    local db = get_connection(0)
+    if not db then
+        return nil
+    end
+    local sql = string.format("SHOW TABLES FROM `%s`", DB_CONNECTION.database)
+    local result = db:query(sql)
+    release(db)
+    if not result then
+        return nil
+    end
+    if result.badresult then
+        log.error("web_list_tables err: %s", tostring(result.err))
+        return nil
+    end
+    local key = "Tables_in_" .. DB_CONNECTION.database
+    local names = {}
+    for _, row in ipairs(result) do
+        table.insert(names, row[key])
+    end
+    table.sort(names)
+    return names
+end
+
+function CMD.web_list_columns(table_name)
+    if not valid_web_table_name(table_name) then
+        log.warning("web_list_columns invalid table: %s", tostring(table_name))
+        return nil
+    end
+    local db = get_connection(0)
+    if not db then
+        return nil
+    end
+    local sql = string.format("SHOW FULL COLUMNS FROM `%s`", table_name)
+    local result = db:query(sql)
+    release(db)
+    if not result then
+        return nil
+    end
+    if result.badresult then
+        log.error("web_list_columns err: %s", tostring(result.err))
+        return nil
+    end
+    return result
+end
+
+function CMD.web_select_sql(sql)
+    if not web_safe_select_sql(sql) then
+        return nil, "only single SELECT queries are allowed"
+    end
+    local db = get_connection(0)
+    if not db then
+        return nil
+    end
+    local result = db:query(sql)
+    release(db)
+    if not result then
+        return nil
+    end
+    if result.badresult then
+        log.error("web_select_sql err: %s", tostring(result.err))
+        return nil, result.err
+    end
+    return result
 end
 
 -- 表结构导出相关逻辑
