@@ -465,6 +465,7 @@ skynet.register_protocol {
 			if not ok then
 				log.error(string.format("Error handling message %s for player %s: %s", name, player_id, result))
 			end
+        elseif name == "login" then
 		else
 			log.error(string.format("Unknown message type: %s for player %s", name, player_id))
 		end

@@ -408,11 +408,11 @@ function proto_builder.validate(protocol_name, data, schema)
         
         local value = data[field_name]
         
-        if required and is_empty(value) then
+        if required and value == nil then
             table.insert(errors, string.format("字段 '%s' 不能为空", field_name))
         end
-        
-        if not is_empty(value) then
+
+        if value ~= nil then
             local ok, err_msg = validate_type(value, field_type)
             if not ok then
                 table.insert(errors, string.format("字段 '%s' %s", field_name, err_msg))

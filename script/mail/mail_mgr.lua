@@ -280,7 +280,7 @@ function mail_mgr.send_global_mail(title, content, items, expire_days)
         items = items and tableUtils.serialize_table(items) or "",
         create_time = os.time(),
         expire_time = os.time() + expire_days * 86400,
-        status = 1
+        --status = 1
     }
     
     -- 保存全局邮件模板

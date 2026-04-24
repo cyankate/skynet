@@ -517,10 +517,8 @@ function CMD.clear_match_flow(player_ids)
 end
 
 function CMD.sync_player_instance_state(player_id)
-    log.info("instance.sync_state request player=%s", tostring(player_id))
     local in_inst, inst_id_or_err = instance_mgr.get_player_instance(player_id)
     if not in_inst then
-        log.info("instance.sync_state skip player=%s reason=no_instance", tostring(player_id))
         return true
     end
     local inst_id = inst_id_or_err
@@ -538,7 +536,6 @@ function CMD.sync_player_instance_state(player_id)
             inst_id = inst_id,
             data = inst:pack_data_to_client(),
         })
-        log.info("instance.sync_state pushed player=%s inst_id=%s", tostring(player_id), tostring(inst_id))
     end
     return true
 end

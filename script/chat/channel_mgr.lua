@@ -220,7 +220,7 @@ function channel_mgr.send_channel_message(channel_id, player_id, content)
         sender_id = player_id,
         sender_name = channel.members[player_id].player_name,
         content = content,
-        time = os.time()
+        timestamp = os.time()
     }
     
     -- 广播消息

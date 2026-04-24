@@ -106,7 +106,7 @@ function ChannelBase:broadcast_system_message(content)
         channel_id = self.channel_id,
         channel_name = self.channel_name,
         content = content,
-        time = os.time()
+        timestamp = os.time()
     }
     
     self:broadcast_message(msg)

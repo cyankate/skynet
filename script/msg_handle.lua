@@ -83,7 +83,7 @@ function on_get_channel_list(_player_id, _msg)
         return nil, "Chat service not available"
     end
     
-    local channels = skynet.send(chatS, "lua", "get_channel_list")
+    local channels = skynet.send(chatS, "lua", "get_channel_list", _player_id)
     return {
         channels = channels
     }
@@ -458,6 +458,8 @@ function on_instance_play_start(_player_id, _msg)
             mode = "",
             matched = false,
             pending_confirm = false,
+            inst_id = "",
+            scene_id = 0,
         })
         return false, "Unsupported type_name"
     end
@@ -470,6 +472,8 @@ function on_instance_play_start(_player_id, _msg)
                 mode = "direct",
                 matched = false,
                 pending_confirm = false,
+                inst_id = "",
+                scene_id = 0,
             })
             return false, "Instance service not available"
         end
@@ -494,6 +498,8 @@ function on_instance_play_start(_player_id, _msg)
                 mode = "direct",
                 matched = false,
                 pending_confirm = false,
+                inst_id = "",
+                scene_id = 0,
             })
             return false, result_or_err
         end

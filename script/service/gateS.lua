@@ -395,7 +395,7 @@ function handler.disconnect(fd)
 end
 
 function handler.error(fd, msg)
-    --log.error(string.format("Client error: fd=%d, msg=%s", fd, msg))
+    log.error(string.format("Client error: fd=%d, msg=%s", fd, msg))
     local c = connection[fd]
     if c then
         -- 通知agent
