@@ -11,6 +11,8 @@ function Player:ctor(_player_id, _player_data)
     self.ctns_ = {} -- 存储容器对象
     self.ctn_loading_ = {} -- 正在加载的容器
     self.loaded_ = false 
+    self.flow_state_ = "idle"
+    self.flow_version_ = 0
 end
 
 function Player:on_loaded()
@@ -85,6 +87,33 @@ function Player:get_score()
         return 0
     end
     return ctn:get("score")
+end
+
+function Player:get_flow_state()
+    return self.flow_state_ or "idle", self.flow_version_ or 0
+end
+
+function Player:set_flow_state(new_state)
+    local old_state = self.flow_state_ or "idle"
+    self.flow_state_ = new_state or "idle"
+    self.flow_version_ = (self.flow_version_ or 0) + 1
+    return old_state, self.flow_state_, self.flow_version_
+end
+
+function Player:try_set_flow_state(expected_states, new_state)
+    local current = self.flow_state_ or "idle"
+    local allowed = false
+    for _, state in ipairs(expected_states or {}) do
+        if state == current then
+            allowed = true
+            break
+        end
+    end
+    if not allowed then
+        return false, current
+    end
+    self:set_flow_state(new_state)
+    return true, self.flow_state_
 end
 
 return Player

@@ -163,7 +163,68 @@ function MessageHandler.handle_server_message(name, args)
 		print("消息:", args.message)
 		os.exit(0)
 	end
-	
+
+	if name == "instance_match_queue_notify" then
+		print(string.format(
+			"[匹配排队] 玩法=%s 进度=%d/%d",
+			tostring(args and args.type_name or ""),
+			tonumber(args and args.queue_size or 0) or 0,
+			tonumber(args and args.team_size or 0) or 0
+		))
+		return
+	end
+
+	if name == "instance_match_confirm_notify" then
+		local total = 0
+		local confirmed = 0
+		for _, member in ipairs((args and args.members) or {}) do
+			total = total + 1
+			if member and member.confirmed then
+				confirmed = confirmed + 1
+			end
+		end
+		print(string.format(
+			"[匹配确认] 玩法=%s match_id=%s 已确认=%d/%d 截止=%s",
+			tostring(args and args.type_name or ""),
+			tostring(args and args.match_id or ""),
+			confirmed,
+			total,
+			tostring(args and args.confirm_deadline or 0)
+		))
+		return
+	end
+
+	if name == "instance_match_success_notify" then
+		print(string.format(
+			"[匹配成功] 玩法=%s inst_id=%s 队伍人数=%d",
+			tostring(args and args.type_name or ""),
+			tostring(args and args.inst_id or ""),
+			tonumber(args and args.team_size or 0) or 0
+		))
+		return
+	end
+
+	if name == "instance_match_tip_notify" then
+		print(string.format(
+			"[匹配提示] 玩法=%s %s",
+			tostring(args and args.type_name or ""),
+			tostring(args and args.message or "")
+		))
+		return
+	end
+
+	if name == "instance_result_notify" then
+		print(string.format(
+			"[副本结算] inst_id=%s success=%s end_type=%s end_reason=%s duration=%s",
+			tostring(args and args.inst_id or ""),
+			tostring(args and args.success or false),
+			tostring(args and args.end_type or 0),
+			tostring(args and args.end_reason or 0),
+			tostring(args and args.duration or 0)
+		))
+		return
+	end
+
 	-- 处理其他消息类型...
 	print("收到服务器消息:", name)
 	if args then
@@ -235,22 +296,12 @@ function CommandHandler.process_command(cmd)
 					print("获取好友列表失败")
 				end
 			end)
-		elseif cmd == "instance_create" then
-			args = args or {}
-			local create_params = {}
-			for i = 2, #args do
-				table.insert(create_params, tostring(args[i]))
-			end
-			NetworkManager.send_request("instance_create", {
-				type_name = args[1] or "single",
-				params = create_params,
-			})
 		elseif cmd == "instance_enter" then
 			NetworkManager.send_request("instance_enter", {
 				inst_id = tostring(args[1] or ""),
 			})
-		elseif cmd == "instance_leave" then
-			NetworkManager.send_request("instance_leave", {
+		elseif cmd == "instance_exit" then
+			NetworkManager.send_request("instance_exit", {
 				inst_id = tostring(args[1] or ""),
 			})
 		elseif cmd == "instance_quit" then
@@ -260,10 +311,6 @@ function CommandHandler.process_command(cmd)
 		elseif cmd == "instance_ready" then
 			NetworkManager.send_request("instance_ready", {
 				inst_id = tostring(args[1] or ""),
-			})
-		elseif cmd == "instance_match_start" then
-			NetworkManager.send_request("instance_match_start", {
-				type_name = tostring(args[1] or "multi"),
 			})
 		elseif cmd == "instance_play_start" then
 			NetworkManager.send_request("instance_play_start", {
@@ -275,6 +322,13 @@ function CommandHandler.process_command(cmd)
 			})
 		elseif cmd == "instance_match_cancel" then
 			NetworkManager.send_request("instance_match_cancel", {})
+		elseif cmd == "instance_mode_event" then
+			NetworkManager.send_request("instance_mode_event", {
+				inst_id = tostring(args[1] or ""),
+				event_type = tostring(args[2] or ""),
+				event_value = tonumber(args[3]) or 0,
+				target_id = tonumber(args[4]) or 0,
+			})
 		else 
 			ProtocolHandler.send_package(ClientState.fd, cmd)
 		end 

@@ -1,11 +1,31 @@
 local skynet = require "skynet"
 local log = require "log"
+local cjson = require "cjson.safe"
+local protocol_handler = require "protocol_handler"
 local class = require "utils.class"
 local inst_def = require "define.inst_def"
 local InstanceStatus = inst_def.InstanceStatus
+local InstanceEndType = inst_def.InstanceEndType
+local InstanceEndReason = inst_def.InstanceEndReason
+local instance_mgr = require "instance.instance_mgr"
 
 -- 副本基类
 local InstanceBase = class("InstanceBase")
+
+local function collect_member_ids(inst)
+    local ids = {}
+    for player_id in pairs(inst.pjoins_ or {}) do
+        ids[player_id] = true
+    end
+    for player_id in pairs(inst.penters_ or {}) do
+        ids[player_id] = true
+    end
+    local members = {}
+    for player_id in pairs(ids) do
+        table.insert(members, player_id)
+    end
+    return members
+end
 
 function InstanceBase:ctor(inst_id, inst_no, args)
     self.inst_id_ = inst_id
@@ -38,22 +58,19 @@ end
 function InstanceBase:join(player_id, data_)
     log.info("InstanceBase: 玩家 %s 加入副本 %s", player_id, self.inst_id_)
     if self.pjoins_[player_id] then
-        log.warn("InstanceBase: 玩家 %s 已加入副本 %s", player_id, self.inst_id_)
+        log.warning("InstanceBase: 玩家 %s 已加入副本 %s", player_id, self.inst_id_)
         return false, "玩家已加入副本"
     end
     
     -- 检查副本状态，只有等待中的副本才允许加入
     if self.status_ ~= InstanceStatus.WAITING then
-        log.warn("InstanceBase: 副本 %s 状态不允许加入，当前状态: %d", self.inst_id_, self.status_)
+        log.warning("InstanceBase: 副本 %s 状态不允许加入，当前状态: %d", self.inst_id_, self.status_)
         return false, "副本状态不允许加入"
     end
     
     self.pjoins_[player_id] = data_
     self:on_join(player_id, data_)
-    local instance_mgr = require "instance.instance_mgr"
-    if instance_mgr and instance_mgr.on_player_join then
-        instance_mgr.on_player_join(self.inst_id_, player_id, data_)
-    end
+    instance_mgr.on_player_join(self.inst_id_, player_id, data_)
     return true
 end
 
@@ -61,10 +78,10 @@ function InstanceBase:on_join(player_id, data_)
     -- 子类重写
 end
 
-function InstanceBase:leave(player_id)
-    log.info("InstanceBase: 玩家 %s 离开副本 %s", player_id, self.inst_id_)
+function InstanceBase:quit(player_id)
+    log.info("InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
     if not self.pjoins_[player_id] then
-        log.warn("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
+        log.warning("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
     end
 
@@ -76,25 +93,22 @@ function InstanceBase:leave(player_id)
     end
 
     self.pjoins_[player_id] = nil
-    self:on_leave(player_id)
-    local instance_mgr = require "instance.instance_mgr"
-    if instance_mgr and instance_mgr.on_player_leave then
-        instance_mgr.on_player_leave(self.inst_id_, player_id)
-    end
+    self:on_quit(player_id)
+    instance_mgr.on_player_leave(self.inst_id_, player_id)
     return true
 end
 
-function InstanceBase:on_leave(player_id)
+function InstanceBase:on_quit(player_id)
     -- 子类重写
 end
 
 function InstanceBase:enter(player_id)
     if not self.pjoins_[player_id] then
-        log.warn("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
+        log.warning("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
     end
     if self.penters_[player_id] then
-        log.warn("InstanceBase: 玩家 %s 已进入副本 %s", player_id, self.inst_id_)
+        log.warning("InstanceBase: 玩家 %s 已进入副本 %s", player_id, self.inst_id_)
         return false, "玩家已进入副本"
     end
     self.penters_[player_id] = true
@@ -109,7 +123,7 @@ end
 function InstanceBase:exit(player_id)
     log.info("InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
     if not self.penters_[player_id] then
-        log.warn("InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
+        log.warning("InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
         return false, "玩家未进入副本"
     end
     self.penters_[player_id] = nil
@@ -133,7 +147,7 @@ function InstanceBase:kick_all()
         end
     end
     for player_id, _ in pairs(self.pjoins_) do
-        self:leave(player_id)
+        self:quit(player_id)
     end
     self.penters_ = {}
     self.pjoins_ = {}
@@ -142,7 +156,7 @@ end
 -- 启动副本
 function InstanceBase:start()
     if self.status_ ~= InstanceStatus.WAITING then
-        log.warn("InstanceBase: 副本 %s 状态错误，无法启动", self.inst_id_)
+        log.warning("InstanceBase: 副本 %s 状态错误，无法启动", self.inst_id_)
         return false
     end
     
@@ -180,7 +194,13 @@ end
 
 -- 副本结束
 function InstanceBase:complete(success, data_)
+    if self.status_ == InstanceStatus.COMPLETED then
+        -- 幂等：重复结算直接视为成功，避免重复下发结果
+        log.warning("InstanceBase: 重复结算被忽略 inst_id=%s", tostring(self.inst_id_))
+        return true
+    end
     if self.status_ ~= InstanceStatus.RUNNING and self.status_ ~= InstanceStatus.PAUSED then
+        log.warning("InstanceBase: 非法结算状态 inst_id=%s status=%s", tostring(self.inst_id_), tostring(self.status_))
         return false
     end
     
@@ -189,6 +209,29 @@ function InstanceBase:complete(success, data_)
     self.duration_ = self.end_time_ - (self.start_time_ or self.create_time_)
     
     self:on_complete(success, data_)
+    local detail = type(data_) == "table" and data_ or {}
+    local end_type = tonumber(detail.end_type)
+    local end_reason = tonumber(detail.end_reason)
+    if not end_type then
+        end_type = success and InstanceEndType.NORMAL or InstanceEndType.ERROR
+    end
+    if not end_reason then
+        end_reason = success and InstanceEndReason.NORMAL_WIN or InstanceEndReason.ERROR_EXCEPTION
+    end
+    local encoded = cjson.encode(data_ or {})
+    local payload = {
+        inst_id = self.inst_id_,
+        success = success and true or false,
+        end_type = end_type,
+        end_reason = end_reason,
+        duration = self.duration_ or 0,
+        data = encoded or "{}",
+    }
+    log.info("InstanceBase: 副本结算 inst_id=%s success=%s end_type=%s end_reason=%s duration=%s members=%d",
+        tostring(self.inst_id_), tostring(payload.success), tostring(end_type), tostring(end_reason), tostring(self.duration_ or 0), #collect_member_ids(self))
+    for _, player_id in ipairs(collect_member_ids(self)) do
+        protocol_handler.send_to_player(player_id, "instance_result_notify", payload)
+    end
     return true
 end
 
@@ -221,6 +264,21 @@ function InstanceBase:get_data(key, default_value)
     return self.data_[key] or default_value
 end
 
+function InstanceBase:build_client_payload_base()
+    return {
+        inst_id = self.inst_id_,
+        inst_no = self.inst_no_ or 0,
+        status = self.status_,
+        create_time = self.create_time_ or 0,
+        start_time = self.start_time_ or 0,
+        end_time = self.end_time_ or 0,
+        duration = self.duration_ or 0,
+        complete_success = self.complete_success_,
+        fail_reason = self.fail_reason_,
+        complete_data = self.complete_data_,
+    }
+end
+
 -- 注册事件处理器
 function InstanceBase:register_event(event_type, handler)
     if not self.event_handlers_[event_type] then
@@ -240,6 +298,24 @@ function InstanceBase:trigger_event(event_type, ...)
             end
         end
     end
+end
+
+function InstanceBase:emit_mode_event(event_type, payload)
+    if not event_type or event_type == "" then
+        return false, "事件类型不能为空"
+    end
+    if not self.mode_ or not self.mode_.on_event then
+        log.warning("InstanceBase: 模式事件无处理器 inst_id=%s event=%s", tostring(self.inst_id_), tostring(event_type))
+        return false, "当前副本模式不支持事件驱动"
+    end
+    if self.status_ ~= InstanceStatus.RUNNING and self.status_ ~= InstanceStatus.PAUSED then
+        log.warning("InstanceBase: 模式事件状态非法 inst_id=%s status=%s event=%s", tostring(self.inst_id_), tostring(self.status_), tostring(event_type))
+        return false, "副本状态不允许处理模式事件"
+    end
+    log.info("InstanceBase: 模式事件执行 inst_id=%s mode=%s event=%s value=%s target=%s",
+        tostring(self.inst_id_), tostring(self.mode_type_), tostring(event_type), tostring(payload and payload.event_value), tostring(payload and payload.target_id))
+    self.mode_:on_event(self, event_type, payload or {})
+    return true
 end
 
 -- 添加定时器

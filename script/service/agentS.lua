@@ -165,6 +165,12 @@ function on_player_loaded(player_id)
     handle_login(player)
     -- 下发玩家数据
     send_player_data(player)
+    -- 恢复副本态快照（重连/重登后一致体验）
+    local instanceS = skynet.localname(".instance")
+    if instanceS then
+        skynet.send(instanceS, "lua", "sync_player_instance_state", player_id)
+        log.info("agent.sync_instance_state_on_load player=%s", tostring(player_id))
+    end
 end
 
 function send_player_data(player)
@@ -233,6 +239,12 @@ function CMD.reconnect(account_key, fd)
     if player and player.loaded_ then
         send_player_data(player)
     end
+    -- 重连后补发副本态快照
+    local instanceS = skynet.localname(".instance")
+    if instanceS then
+        skynet.send(instanceS, "lua", "sync_player_instance_state", account.player_id)
+        log.info("agent.sync_instance_state_on_reconnect player=%s", tostring(account.player_id))
+    end
     
     log.info(string.format("Player %s reconnected", account.player_id))
     return true
@@ -289,6 +301,25 @@ function CMD.disconnect(account_key)
     if not player then
         return false, "Player not found"
     end
+
+    -- 离线即清理匹配/副本占用，避免脏状态残留
+    local matchS = skynet.localname(".match")
+    if matchS then
+        skynet.send(matchS, "lua", "cancel_match", account.player_id)
+        log.info("agent.disconnect cleanup cancel_match player=%s", tostring(account.player_id))
+    end
+    local instanceS = skynet.localname(".instance")
+    if instanceS then
+        local in_inst, inst_id_or_err = skynet.call(instanceS, "lua", "get_player_instance", account.player_id)
+        if in_inst then
+            skynet.send(instanceS, "lua", "quit_instance", inst_id_or_err, account.player_id)
+            log.info("agent.disconnect cleanup quit_instance player=%s inst_id=%s", tostring(account.player_id), tostring(inst_id_or_err))
+        end
+    end
+    local old_state = select(1, player:get_flow_state())
+    local _, new_state = player:set_flow_state("idle")
+    log.info("agent.player_flow transition player=%s from=%s to=%s reason=disconnect_cleanup request_id=",
+        tostring(account.player_id), tostring(old_state), tostring(new_state))
 
     -- 触发登出事件
     local eventS = skynet.localname(".event")
@@ -348,6 +379,49 @@ function CMD.get_managed_accounts()
         })
     end
     return result
+end
+
+local function get_player_or_err(player_id)
+    local player = user_mgr.get_player_obj(player_id)
+    if not player then
+        return nil, "Player not found"
+    end
+    return player
+end
+
+function CMD.get_player_flow(data)
+    local player_id = data and data.player_id
+    local player, err = get_player_or_err(player_id)
+    if not player then
+        return false, err
+    end
+    local flow_state, flow_version = player:get_flow_state()
+    return true, {
+        flow_state = flow_state,
+        flow_version = flow_version,
+    }
+end
+
+function CMD.try_set_player_flow(data)
+    local player_id = data and data.player_id
+    local expected_states = (data and data.expected_states) or {}
+    local new_state = data and data.new_state or "idle"
+    local reason = data and data.reason or ""
+    local request_id = data and data.request_id or ""
+    local player, err = get_player_or_err(player_id)
+    if not player then
+        return false, err
+    end
+    local before_state = select(1, player:get_flow_state())
+    local ok, current = player:try_set_flow_state(expected_states, new_state)
+    if not ok then
+        log.warning("agent.player_flow mismatch player=%s from=%s to=%s expected=%s reason=%s request_id=%s",
+            tostring(player_id), tostring(before_state), tostring(new_state), tableUtils.serialize_table(expected_states), tostring(reason), tostring(request_id))
+        return false, string.format("flow state mismatch: current=%s", tostring(current)), current
+    end
+    log.info("agent.player_flow transition player=%s from=%s to=%s reason=%s request_id=%s",
+        tostring(player_id), tostring(before_state), tostring(new_state), tostring(reason), tostring(request_id))
+    return true, new_state
 end
 
 -- 在停止服务前确保所有数据都已保存

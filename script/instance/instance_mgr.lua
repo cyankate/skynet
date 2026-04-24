@@ -78,8 +78,9 @@ end
 
 function instance_mgr.destroy_instance(inst_id)
     local data = instance_mgr.instances[inst_id]
-    if not data then 
-        return false 
+    if not data then
+        -- 幂等：重复销毁视为成功
+        return true
     end
     if data.inst then
         for player_id in pairs(data.inst.pjoins_ or {}) do
@@ -118,6 +119,11 @@ function instance_mgr.join_instance(inst_id, player_id, data_)
     if not data or not data.inst then
         return false, "副本不存在"
     end
+    local mapped_inst_id = instance_mgr.player_instance_map[player_id]
+    if mapped_inst_id and mapped_inst_id ~= inst_id then
+        log.warning("instance_mgr: 玩家%s已在副本%s中，拒绝加入副本%s", tostring(player_id), tostring(mapped_inst_id), tostring(inst_id))
+        return false, "玩家已在其他副本中"
+    end
     local join_ok, join_err = data.inst:join(player_id, data_)
     if not join_ok then
         return false, join_err or "加入副本失败"
@@ -137,14 +143,14 @@ function instance_mgr.exit_instance(inst_id, player_id)
     return data.inst:exit(player_id)
 end
 
-function instance_mgr.leave_instance(inst_id, player_id)
+function instance_mgr.quit_instance(inst_id, player_id)
     local data = instance_mgr.instances[inst_id]
     if not data or not data.inst then
         return false, "副本不存在"
     end
-    local leave_ok, leave_err = data.inst:leave(player_id)
-    if not leave_ok then
-        return false, leave_err or "离开副本失败"
+    local quit_ok, quit_err = data.inst:quit(player_id)
+    if not quit_ok then
+        return false, quit_err or "退出副本失败"
     end
     instance_mgr.player_instance_map[player_id] = nil
     data.ready_players[player_id] = nil

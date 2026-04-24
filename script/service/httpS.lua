@@ -317,6 +317,66 @@ local function create_response(code, data, message)
     return data 
 end
 
+local function sanitize_for_json(value, seen)
+    if type(value) ~= "table" then
+        return value
+    end
+    seen = seen or {}
+    if seen[value] then
+        return "<circular>"
+    end
+    seen[value] = true
+
+    local max_index = 0
+    local int_count = 0
+    local has_non_int_key = false
+    for k, _ in pairs(value) do
+        if type(k) == "number" and k > 0 and math.floor(k) == k then
+            int_count = int_count + 1
+            if k > max_index then
+                max_index = k
+            end
+        else
+            has_non_int_key = true
+        end
+    end
+
+    local out = {}
+    if not has_non_int_key and max_index > 0 then
+        local has_hole = (int_count ~= max_index)
+        if has_hole then
+            -- 稀疏数组转对象，避免 cjson 抛错
+            for k, v in pairs(value) do
+                out[tostring(k)] = sanitize_for_json(v, seen)
+            end
+        else
+            for i = 1, max_index do
+                out[i] = sanitize_for_json(value[i], seen)
+            end
+        end
+    else
+        for k, v in pairs(value) do
+            out[k] = sanitize_for_json(v, seen)
+        end
+    end
+
+    seen[value] = nil
+    return out
+end
+
+local function encode_json_payload(payload)
+    local ok, encoded = pcall(cjson.encode, payload)
+    if ok then
+        return true, encoded
+    end
+    local sanitized = sanitize_for_json(payload)
+    local ok2, encoded2 = pcall(cjson.encode, sanitized)
+    if ok2 then
+        return true, encoded2
+    end
+    return false, encoded2
+end
+
 -- 统一的成功响应
 local function success_response(fd, interface, data, headers)
     -- 创建新的响应headers，而不是直接使用原始headers
@@ -355,7 +415,13 @@ local function success_response(fd, interface, data, headers)
         end
     end
     
-    response(fd, interface, 200, cjson.encode(create_response(200, data)), response_headers)
+    local ok, payload = encode_json_payload(create_response(200, data))
+    if not ok then
+        log.error("success_response encode failed: %s", tostring(payload))
+        error_response(fd, interface, 500, "Response serialization failed")
+        return
+    end
+    response(fd, interface, 200, payload, response_headers)
 end
 
 -- 统一的错误响应
@@ -721,6 +787,82 @@ local function web_filters_to_cond(tbl_name, filters)
     return cond
 end
 
+-- 策划配置目录（相对 skynet 工作目录，与 dbS 写 table_schema 路径一致）
+local SETTING_DIR = "script/setting"
+
+local function safe_setting_basename(name)
+    if type(name) ~= "string" or name == "" or #name > 160 then
+        return false
+    end
+    if name:find("%.%.") or name:find("/", 1, true) or name:find("\\", 1, true) then
+        return false
+    end
+    return name:match("^[%w_%+%-%.]+$") ~= nil
+end
+
+local function list_setting_dir()
+    local p = io.popen('ls -1 "' .. SETTING_DIR .. '" 2>/dev/null')
+    if not p then
+        return nil
+    end
+    local files = {}
+    for line in p:lines() do
+        line = line:match("^%s*(.-)%s*$") or ""
+        if line ~= "" and line:sub(1, 1) ~= "." and safe_setting_basename(line) then
+            table.insert(files, line)
+        end
+    end
+    p:close()
+    table.sort(files)
+    return files
+end
+
+local function read_setting_file(name)
+    if not safe_setting_basename(name) then
+        return nil, "invalid name"
+    end
+    local path = SETTING_DIR .. "/" .. name
+    local f, err = io.open(path, "rb")
+    if not f then
+        return nil, err or "open failed"
+    end
+    local content = f:read("*a")
+    f:close()
+    return content
+end
+
+local function write_setting_file(name, content)
+    if not safe_setting_basename(name) then
+        return false, "invalid name"
+    end
+    if type(content) ~= "string" then
+        return false, "content must be string"
+    end
+    local path = SETTING_DIR .. "/" .. name
+    local f, err = io.open(path, "wb")
+    if not f then
+        return false, err or "open failed"
+    end
+    local ok, werr = f:write(content)
+    f:close()
+    if not ok then
+        return false, werr or "write failed"
+    end
+    return true
+end
+
+local function trigger_setting_hotreload()
+    local hotfix = skynet.localname(".hotfix")
+    if not hotfix then
+        return false, "hotfix service unavailable"
+    end
+    local ok, result = skynet.call(hotfix, "lua", "batch_update", {"all"}, "setting_reload")
+    if not ok then
+        return false, result
+    end
+    return true, result
+end
+
 -- 注册默认路由
 local function register_default_routes()
     register_auth_routes()  -- 添加认证路由
@@ -814,6 +956,69 @@ local function register_default_routes()
                 return
             end
             return { rows = rows }
+        else
+            error_response(fd, interface, 400, "Unknown action: " .. tostring(act))
+            return
+        end
+    end)
+
+    -- Web：热更配置 — 读取 script/setting 下数据文件（仅 POST + JSON）
+    register_route("POST", "/api/web/hotreload", function(fd, method, url, headers, body, interface)
+        local ok, data = pcall(cjson.decode, body or "")
+        if not ok or type(data) ~= "table" then
+            error_response(fd, interface, 400, "Invalid JSON body")
+            return
+        end
+        if not data.action or data.action == "" then
+            error_response(fd, interface, 400, "Missing field: action")
+            return
+        end
+        local act = data.action
+        if act == "list" then
+            local files = list_setting_dir()
+            if not files then
+                error_response(fd, interface, 500, "Failed to list setting directory")
+                return
+            end
+            return { files = files, dir = SETTING_DIR }
+        elseif act == "get" then
+            local name = data.name
+            if type(name) ~= "string" or name == "" then
+                error_response(fd, interface, 400, "Missing or invalid field: name")
+                return
+            end
+            local content, err = read_setting_file(name)
+            if content == nil then
+                error_response(fd, interface, 404, tostring(err or "file not found"))
+                return
+            end
+            return { name = name, content = content }
+        elseif act == "upload" then
+            local name = data.name
+            if type(name) ~= "string" or name == "" then
+                error_response(fd, interface, 400, "Missing or invalid field: name")
+                return
+            end
+            if type(data.content) ~= "string" then
+                error_response(fd, interface, 400, "Missing or invalid field: content")
+                return
+            end
+            local wok, werr = write_setting_file(name, data.content)
+            if not wok then
+                error_response(fd, interface, 400, tostring(werr or "write failed"))
+                return
+            end
+            local hok, hres = trigger_setting_hotreload()
+            if not hok then
+                error_response(fd, interface, 500, "hotreload failed: " .. tostring(hres))
+                return
+            end
+            return {
+                updated = true,
+                name = name,
+                size = #data.content,
+                hotreload = hres,
+            }
         else
             error_response(fd, interface, 400, "Unknown action: " .. tostring(act))
             return

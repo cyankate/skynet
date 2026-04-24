@@ -376,6 +376,10 @@ function match_mgr.poll_expired_pending_matches()
     return expired
 end
 
+function match_mgr.requeue_matched_group(options, players)
+    return requeue_players(options or {}, players or {})
+end
+
 function match_mgr.shutdown()
     match_mgr.match_queues = {}
     match_mgr.player_match_map = {}

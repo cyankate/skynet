@@ -10,7 +10,7 @@ return {
     -- 基础多人玩法：固定5人
     multi = {
         entry = "match",
-        max_team_size = 5,
+        max_team_size = 2,
     },
     -- 小队副本：固定5人，队长开本
     raid_5 = {

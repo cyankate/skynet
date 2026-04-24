@@ -187,20 +187,13 @@ local c2s_builder = builder.new()
     })
     
     -- 副本协议 (500-519)
-    :protocol("instance_create", 500, {
-        request = {
-            type_name = "string",     -- 玩法类型
-            params = "*string",       -- 参数列表，格式建议 key=value
-        }
-    })
-
     :protocol("instance_enter", 502, {
         request = {
             inst_id = "string",
         }
     })
 
-    :protocol("instance_leave", 503, {
+    :protocol("instance_exit", 503, {
         request = {
             inst_id = "string",
         }
@@ -218,14 +211,17 @@ local c2s_builder = builder.new()
         }
     })
 
-    :protocol("instance_match_start", 506, {
-        request = {
-            type_name = "string",      -- 玩法类型（匹配规则由服务端决定）
-        }
-    })
-
     :protocol("instance_match_cancel", 507, {
         request = {}
+    })
+
+    :protocol("instance_mode_event", 508, {
+        request = {
+            inst_id = "string",
+            event_type = "string",
+            event_value = "integer",
+            target_id = "integer",
+        }
     })
 
     :protocol("instance_match_confirm", 509, {
@@ -479,14 +475,6 @@ local s2c_builder = builder.new()
     })
     
     -- 副本响应协议
-    :protocol("instance_create_response", 510, {
-        request = {
-            result = "integer",
-            message = "string",
-            inst_id = "string",
-        }
-    })
-
     :protocol("instance_enter_response", 512, {
         request = {
             result = "integer",
@@ -496,7 +484,7 @@ local s2c_builder = builder.new()
         }
     })
 
-    :protocol("instance_leave_response", 513, {
+    :protocol("instance_exit_response", 513, {
         request = {
             result = "integer",
             message = "string",
@@ -520,6 +508,15 @@ local s2c_builder = builder.new()
         }
     })
 
+    :protocol("instance_mode_event_response", 516, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+            event_type = "string",
+        }
+    })
+
     :type("instance_match_member_confirm_info", {
         player_id = "integer",
         confirmed = "boolean",
@@ -527,6 +524,7 @@ local s2c_builder = builder.new()
 
     :protocol("instance_match_success_notify", 519, {
         request = {
+            type_name = "string",
             inst_id = "string",
             team_size = "integer",
         }
@@ -534,6 +532,7 @@ local s2c_builder = builder.new()
 
     :protocol("instance_match_confirm_notify", 520, {
         request = {
+            type_name = "string",
             match_id = "string",
             members = "*instance_match_member_confirm_info",
             confirm_deadline = "integer",
@@ -547,12 +546,8 @@ local s2c_builder = builder.new()
             mode = "string",            -- direct/match
             matched = "boolean",
             pending_confirm = "boolean",
-            match_id = "string",
             inst_id = "string",
             scene_id = "integer",
-            queue_size = "integer",
-            team_size = "integer",
-            confirm_deadline = "integer",
         }
     })
 
@@ -565,7 +560,27 @@ local s2c_builder = builder.new()
 
     :protocol("instance_match_tip_notify", 525, {
         request = {
+            type_name = "string",
             message = "string",
+        }
+    })
+
+    :protocol("instance_match_queue_notify", 526, {
+        request = {
+            type_name = "string",
+            queue_size = "integer",
+            team_size = "integer",
+        }
+    })
+
+    :protocol("instance_result_notify", 527, {
+        request = {
+            inst_id = "string",
+            success = "boolean",
+            end_type = "integer",
+            end_reason = "integer",
+            duration = "integer",
+            data = "binary",
         }
     })
     
@@ -643,6 +658,12 @@ local s2c_builder = builder.new()
     :protocol("mail_expired_notify", 337, {
         request = {
             mail_ids = "*string",
+        }
+    })
+
+    :protocol("system_notify", 338, {
+        request = {
+            message = "string",
         }
     })
 

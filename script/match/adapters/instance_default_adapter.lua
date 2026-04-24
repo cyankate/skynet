@@ -37,6 +37,8 @@ function adapter.on_all_confirmed(players, options)
         scene_config = options.scene_config,
         spawn_x = options.spawn_x,
         spawn_y = options.spawn_y,
+        mode_type = options.mode_type,
+        mode_config = options.mode_config,
         creator_id = players[1],
     }
     local batch_ok, batch_result_or_err, err_info = skynet.call(

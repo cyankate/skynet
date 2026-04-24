@@ -293,54 +293,6 @@ local function send_instance_result(player_id, protocol_name, result, message, p
     protocol_handler.send_to_player(player_id, protocol_name, data)
 end
 
-function on_instance_create(_player_id, _msg)
-    if not _msg.type_name then
-        send_instance_result(_player_id, "instance_create_response", false, "参数错误")
-        return false, "Invalid message format"
-    end
-
-    local instanceS = skynet.localname(".instance")
-    if not instanceS then
-        send_instance_result(_player_id, "instance_create_response", false, "副本服务不可用")
-        return false, "Instance service not available"
-    end
-
-    local args = {
-        params = _msg.params or {},
-        creator_id = _player_id,
-    }
-    for _, item in ipairs(args.params) do
-        local key, value = string.match(item, "^([^=]+)=(.+)$")
-        if key and value then
-            if value == "true" then
-                args[key] = true
-            elseif value == "false" then
-                args[key] = false
-            else
-                local num = tonumber(value)
-                args[key] = num or value
-            end
-        end
-    end
-
-    local ok, inst_id_or_err = skynet.call(instanceS, "lua", "create_instance", _msg.type_name, args)
-    if not ok then
-        send_instance_result(_player_id, "instance_create_response", false, inst_id_or_err or "创建副本失败")
-        return false, inst_id_or_err
-    end
-
-    local join_ok, join_err = skynet.call(instanceS, "lua", "join_instance", inst_id_or_err, _player_id, {})
-    if not join_ok then
-        send_instance_result(_player_id, "instance_create_response", false, join_err or "加入新副本失败")
-        return false, join_err
-    end
-
-    send_instance_result(_player_id, "instance_create_response", true, "创建成功", {
-        inst_id = inst_id_or_err,
-    })
-    return true
-end
-
 function on_instance_enter(_player_id, _msg)
     if not _msg.inst_id then
         send_instance_result(_player_id, "instance_enter_response", false, "参数错误")
@@ -370,27 +322,27 @@ function on_instance_enter(_player_id, _msg)
     return true
 end
 
-function on_instance_leave(_player_id, _msg)
+function on_instance_exit(_player_id, _msg)
     if not _msg.inst_id then
-        send_instance_result(_player_id, "instance_leave_response", false, "参数错误")
+        send_instance_result(_player_id, "instance_exit_response", false, "参数错误")
         return false, "Invalid message format"
     end
 
     local instanceS = skynet.localname(".instance")
     if not instanceS then
-        send_instance_result(_player_id, "instance_leave_response", false, "副本服务不可用")
+        send_instance_result(_player_id, "instance_exit_response", false, "副本服务不可用")
         return false, "Instance service not available"
     end
 
-    local ok, err = skynet.call(instanceS, "lua", "leave_instance", _msg.inst_id, _player_id)
+    local ok, err = skynet.call(instanceS, "lua", "exit_instance", _msg.inst_id, _player_id)
     if not ok then
-        send_instance_result(_player_id, "instance_leave_response", false, err or "离开失败", {
+        send_instance_result(_player_id, "instance_exit_response", false, err or "暂离失败", {
             inst_id = _msg.inst_id,
         })
         return false, err
     end
 
-    send_instance_result(_player_id, "instance_leave_response", true, "离开成功", {
+    send_instance_result(_player_id, "instance_exit_response", true, "暂离成功", {
         inst_id = _msg.inst_id,
     })
     return true
@@ -450,13 +402,39 @@ function on_instance_ready(_player_id, _msg)
     return true
 end
 
-function on_instance_match_start(_player_id, _msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+function on_instance_mode_event(_player_id, _msg)
+    if not _msg.inst_id or not _msg.event_type then
+        send_instance_result(_player_id, "instance_mode_event_response", false, "参数错误", {
+            inst_id = _msg.inst_id or "",
+            event_type = _msg.event_type or "",
+        })
+        return false, "Invalid message format"
     end
-    skynet.send(matchS, "lua", "start_match", _player_id, {
-        type_name = _msg.type_name,
+
+    local instanceS = skynet.localname(".instance")
+    if not instanceS then
+        send_instance_result(_player_id, "instance_mode_event_response", false, "副本服务不可用", {
+            inst_id = _msg.inst_id,
+            event_type = _msg.event_type,
+        })
+        return false, "Instance service not available"
+    end
+
+    local ok, err = skynet.call(instanceS, "lua", "instance_mode_event", _msg.inst_id, _player_id, _msg.event_type, {
+        event_value = tonumber(_msg.event_value) or 0,
+        target_id = tonumber(_msg.target_id) or 0,
+    })
+    if not ok then
+        send_instance_result(_player_id, "instance_mode_event_response", false, err or "模式事件执行失败", {
+            inst_id = _msg.inst_id,
+            event_type = _msg.event_type,
+        })
+        return false, err
+    end
+
+    send_instance_result(_player_id, "instance_mode_event_response", true, "模式事件已受理", {
+        inst_id = _msg.inst_id,
+        event_type = _msg.event_type,
     })
     return true
 end
@@ -476,7 +454,11 @@ function on_instance_play_start(_player_id, _msg)
     local match_rule = match_rules[type_name]
     local instance_rule = instance_rules[type_name]
     if not match_rule or not instance_rule then
-        send_instance_result(_player_id, "instance_play_start_response", false, "不支持的玩法类型")
+        send_instance_result(_player_id, "instance_play_start_response", false, "不支持的玩法类型", {
+            mode = "",
+            matched = false,
+            pending_confirm = false,
+        })
         return false, "Unsupported type_name"
     end
 
@@ -484,7 +466,11 @@ function on_instance_play_start(_player_id, _msg)
     if entry == "direct" then
         local instanceS = skynet.localname(".instance")
         if not instanceS then
-            send_instance_result(_player_id, "instance_play_start_response", false, "副本服务不可用")
+            send_instance_result(_player_id, "instance_play_start_response", false, "副本服务不可用", {
+                mode = "direct",
+                matched = false,
+                pending_confirm = false,
+            })
             return false, "Instance service not available"
         end
 
@@ -499,11 +485,15 @@ function on_instance_play_start(_player_id, _msg)
                 inst_no = instance_rule.default_inst_no,
                 ready_mode = instance_rule.ready_mode,
                 result_source = instance_rule.result_source,
+                mode_type = instance_rule.mode_type,
+                mode_config = instance_rule.mode_config,
             }
         )
         if not create_ok then
             send_instance_result(_player_id, "instance_play_start_response", false, result_or_err or "进入副本失败", {
                 mode = "direct",
+                matched = false,
+                pending_confirm = false,
             })
             return false, result_or_err
         end
@@ -512,36 +502,21 @@ function on_instance_play_start(_player_id, _msg)
             mode = "direct",
             inst_id = result_or_err.inst_id or "",
             scene_id = result_or_err.scene_id or 0,
-            team_size = 1,
+            matched = true,
+            pending_confirm = false,
         })
         return true
     end
 
     local matchS = skynet.localname(".match")
     if not matchS then
-        send_instance_result(_player_id, "instance_play_start_response", false, "匹配服务不可用")
         return false, "Match service not available"
     end
 
-    local ok, result_or_err = skynet.call(matchS, "lua", "start_match", _player_id, {
+    -- 匹配玩法入口只负责触发，不等待匹配阶段结果。
+    -- 后续状态通过 instance_match_* notify 推送。
+    skynet.send(matchS, "lua", "start_match", _player_id, {
         type_name = type_name,
-    })
-    if not ok then
-        send_instance_result(_player_id, "instance_play_start_response", false, result_or_err or "开始匹配失败", {
-            mode = "match",
-        })
-        return false, result_or_err
-    end
-
-    send_instance_result(_player_id, "instance_play_start_response", true, result_or_err.message or "匹配中", {
-        mode = "match",
-        matched = result_or_err.matched or false,
-        pending_confirm = result_or_err.pending_confirm or false,
-        match_id = result_or_err.match_id or "",
-        inst_id = result_or_err.inst_id or "",
-        queue_size = result_or_err.queue_size or 0,
-        team_size = result_or_err.team_size or 0,
-        confirm_deadline = result_or_err.confirm_deadline or 0,
     })
     return true
 end
@@ -797,12 +772,11 @@ local handle = {
     ["remove_blacklist"] = on_remove_blacklist,
     ["get_black_list"] = on_get_black_list,
     -- 副本相关消息处理
-    ["instance_create"] = on_instance_create,
     ["instance_enter"] = on_instance_enter,
-    ["instance_leave"] = on_instance_leave,
+    ["instance_exit"] = on_instance_exit,
     ["instance_quit"] = on_instance_quit,
     ["instance_ready"] = on_instance_ready,
-    ["instance_match_start"] = on_instance_match_start,
+    ["instance_mode_event"] = on_instance_mode_event,
     ["instance_play_start"] = on_instance_play_start,
     ["instance_match_confirm"] = on_instance_match_confirm,
     ["instance_match_cancel"] = on_instance_match_cancel,
