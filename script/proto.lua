@@ -694,6 +694,12 @@ local s2c_builder = builder.new()
         }
     })
 
+    :protocol("tilent_info_notify", 542, {
+        request = {
+            tilents = "*integer",
+        }
+    })
+
 proto.s2c = sprotoparser.parse(s2c_builder:to_string())
 
 -- 注册 S2C 协议 schema（用于验证）

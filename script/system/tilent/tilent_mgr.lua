@@ -32,9 +32,13 @@ end
 function M.sync_to_client(player)
     local ctn = player:get_ctn("common")
     local activated = ctn:get_tilents()
-    protocol_handler.send_to_player(player.player_id_, "tilent_info_notify", {
-        activated = activated,
-    })
+    local data = {
+        tilents = {},
+    }
+    for tilent_id, _ in pairs(activated) do
+        table.insert(data.tilents, tilent_id)
+    end
+    protocol_handler.send_to_player(player.player_id_, "tilent_info_notify", data)
     return true
 end
 
