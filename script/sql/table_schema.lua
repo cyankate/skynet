@@ -3,21 +3,21 @@ local config = {
     ["account"] = {
         table_name = "account",
         fields = {
-            ["account_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = true,
-                default = "nil",
-                comment = "",
-            },
             ["account_key"] = {
                 type = "varchar(20)",
                 is_required = true,
                 is_primary = true,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "账号标识",
+            },
+            ["account_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = true,
+                default = "nil",
+                comment = "账号ID",
             },
             ["players"] = {
                 type = "text",
@@ -25,7 +25,7 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "玩家列表数据",
             },
             ["last_login_ip"] = {
                 type = "varchar(16)",
@@ -104,7 +104,7 @@ local config = {
                 is_primary = true,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "玩家ID",
             },
             ["idx"] = {
                 type = "varchar(32)",
@@ -120,41 +120,12 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "背包数据",
             },
         },
         primary_keys = {
             "player_id",
             "idx",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-        },
-    },
-    ["base"] = {
-        table_name = "base",
-        fields = {
-            ["player_id"] = {
-                type = "int",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "",
-            },
-        },
-        primary_keys = {
-            "player_id",
         },
         indexes = {
         },
@@ -200,6 +171,35 @@ local config = {
             ["update_time"] = true,
         },
     },
+    ["common"] = {
+        table_name = "common",
+        fields = {
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "公共数据",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
     ["friend"] = {
         table_name = "friend",
         fields = {
@@ -227,6 +227,44 @@ local config = {
         },
         non_primary_fields = {
             ["data"] = true,
+        },
+    },
+    ["global_data"] = {
+        table_name = "global_data",
+        fields = {
+            ["name"] = {
+                type = "varchar(64)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "全局模块名",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "全局数据",
+            },
+            ["update_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "更新时间",
+            },
+        },
+        primary_keys = {
+            "name",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+            ["update_time"] = true,
         },
     },
     ["global_mail"] = {
@@ -805,7 +843,7 @@ local config = {
         table_name = "player",
         fields = {
             ["player_id"] = {
-                type = "int unsigned",
+                type = "int",
                 is_required = true,
                 is_primary = true,
                 is_auto_increment = false,
@@ -818,23 +856,23 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "玩家名称",
             },
             ["create_time"] = {
-                type = "timestamp",
-                is_required = false,
+                type = "int",
+                is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "",
+                default = "nil",
+                comment = "创建时间",
             },
             ["update_time"] = {
-                type = "timestamp",
-                is_required = false,
+                type = "int",
+                is_required = true,
                 is_primary = false,
                 is_auto_increment = false,
-                default = "CURRENT_TIMESTAMP",
-                comment = "",
+                default = "nil",
+                comment = "更新时间",
             },
             ["info"] = {
                 type = "text",
@@ -842,7 +880,7 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "玩家信息",
             },
             ["account_key"] = {
                 type = "varchar(20)",
@@ -850,19 +888,13 @@ local config = {
                 is_primary = false,
                 is_auto_increment = false,
                 default = "nil",
-                comment = "",
+                comment = "账号标识",
             },
         },
         primary_keys = {
             "player_id",
         },
         indexes = {
-            ["fk_account_key"] = {
-                unique = false,
-                columns = {
-                    "account_key",
-                },
-            },
         },
         non_primary_fields = {
             ["account_key"] = true,
@@ -994,7 +1026,7 @@ local config = {
                 },
             },
             ["idx_players"] = {
-                unique = true,
+                unique = false,
                 columns = {
                     "player1_id",
                     "player2_id",
@@ -1006,44 +1038,6 @@ local config = {
             ["last_message_time"] = true,
             ["player1_id"] = true,
             ["player2_id"] = true,
-        },
-    },
-    ["global_data"] = {
-        table_name = "global_data",
-        fields = {
-            ["name"] = {
-                type = "varchar(64)",
-                is_required = true,
-                is_primary = true,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "全局模块名",
-            },
-            ["data"] = {
-                type = "text",
-                is_required = false,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "全局数据",
-            },
-            ["update_time"] = {
-                type = "int",
-                is_required = true,
-                is_primary = false,
-                is_auto_increment = false,
-                default = "nil",
-                comment = "更新时间",
-            },
-        },
-        primary_keys = {
-            "name",
-        },
-        indexes = {
-        },
-        non_primary_fields = {
-            ["data"] = true,
-            ["update_time"] = true,
         },
     },
     ["ranking"] = {
@@ -1073,6 +1067,44 @@ local config = {
         },
         non_primary_fields = {
             ["data"] = true,
+        },
+    },
+    ["schema_migration"] = {
+        table_name = "schema_migration",
+        fields = {
+            ["id"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "1",
+                comment = "固定为1，仅保留一行",
+            },
+            ["version"] = {
+                type = "bigint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "当前已执行到的迁移版本号",
+            },
+            ["executed_at"] = {
+                type = "datetime",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "更新时间",
+            },
+        },
+        primary_keys = {
+            "id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["executed_at"] = true,
+            ["version"] = true,
         },
     },
 }
