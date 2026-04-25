@@ -1,18 +1,15 @@
 local protocol_handler = require "protocol_handler"
 local TILENT_DATA = require "setting.tilent_data"
-
+local item_mgr = require "system.item_mgr"
 local M = {}
 
 function M.activate_tilent(player, tilent_id)
-    local ctn = player:get_ctn("tilent")
-    if not ctn then
-        return false, "天赋容器不存在"
-    end
+    local ctn = player:get_ctn("common")
     local cfg = TILENT_DATA[tilent_id]
     if not cfg then
         return false, "天赋配置不存在"
     end
-    local activated = ctn:get_activated()
+    local activated = ctn:get_tilents()
     if activated[tilent_id] then
         return false, "天赋已点亮"
     end
@@ -26,19 +23,15 @@ function M.activate_tilent(player, tilent_id)
     if not ok then
         return false, err
     end
-    activated[tilent_id] = 1
-    ctn:set_activated(activated)
+    ctn:set_tilent_activated(tilent_id)
     return true, {
         tilent_id = tilent_id,
     }
 end
 
 function M.sync_to_client(player)
-    local ctn = player:get_ctn("tilent")
-    if not ctn then
-        return false, "天赋容器不存在"
-    end
-    local activated = ctn:get_activated()
+    local ctn = player:get_ctn("common")
+    local activated = ctn:get_tilents()
     protocol_handler.send_to_player(player.player_id_, "tilent_info_notify", {
         activated = activated,
     })

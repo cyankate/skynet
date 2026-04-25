@@ -1,6 +1,7 @@
 local player_obj = require "player_obj"
 local CtnBag = require "ctn.ctn_bag"
 local CtnKv = require "ctn.ctn_kv"
+local CtnCommon = require "ctn.ctn_common"
 local common = require "utils.common"
 local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
@@ -110,7 +111,7 @@ end
 function load_player_data(player)
     player.ctns_  = {
         bag = CtnBag.new(player.player_id_, "bag", "bag"),
-        base = CtnKv.new(player.player_id_, "base", "base"),
+        common = CtnCommon.new(player.player_id_, "common", "common"),
     }
     player.ctn_loading_ = {}
     

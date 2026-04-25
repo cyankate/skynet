@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS `account` (
   UNIQUE KEY `uk_account_id` (`account_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账号表';
 
-CREATE TABLE `guild` (
+CREATE TABLE IF NOT EXISTS `guild` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '公会ID',
   `name` varchar(32) NOT NULL COMMENT '公会名称',
   `create_time` int NOT NULL COMMENT '创建时间',
@@ -156,3 +156,29 @@ CREATE TABLE IF NOT EXISTS `player_odb` (
     `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线玩家数据表';
+
+-- 背包表
+CREATE TABLE IF NOT EXISTS `bag` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `idx` varchar(32) NOT NULL COMMENT '子索引',
+    `data` text COMMENT '背包数据',
+    PRIMARY KEY (`player_id`, `idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='背包表';
+
+-- 公共数据表
+CREATE TABLE IF NOT EXISTS `common` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '公共数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公共数据表';
+
+-- 玩家表
+CREATE TABLE IF NOT EXISTS `player` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `player_name` varchar(20) NOT NULL COMMENT '玩家名称',
+    `create_time` int NOT NULL COMMENT '创建时间',
+    `update_time` int NOT NULL COMMENT '更新时间',
+    `info` text COMMENT '玩家信息',
+    `account_key` varchar(20) NOT NULL COMMENT '账号标识',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家表';
