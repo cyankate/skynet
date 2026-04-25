@@ -808,10 +808,13 @@ function CMD.query_player(player_id)
 end
 
 function CMD.create_player(player_id, player_data)
+    local now = os.time()
     local ret = CMD.insert("player", { 
         player_id = player_id,
         account_key = player_data.account_key, 
         player_name = player_data.player_name, 
+        create_time = now,
+        update_time = now,
         info = player_data.info 
     })
     return ret

@@ -69,6 +69,7 @@ function CMD.load(account_key)
             account.player_id = data.player_id
         else
             log.error(string.format("Failed to load player data for %s", player_info.player_id))
+            return false
         end
     else
         local db = skynet.localname(".db")
@@ -90,6 +91,7 @@ function CMD.load(account_key)
             skynet.send(login, "lua", "account_update", account_key, account.account_data)
         else
             log.error(string.format("Failed to create player data for %s", account_key))
+            return false
         end 
     end
     
@@ -102,8 +104,8 @@ function CMD.load(account_key)
         return false
     end
     
-    local player = player_obj.new(account.player_id, player_data)
-    user_mgr.add_player_obj(account.player_id, player)
+    local player = player_obj.new(player_data.player_id, player_data)
+    user_mgr.add_player_obj(player_data.player_id, player)
     load_player_data(player)
     return true
 end
