@@ -15,6 +15,7 @@ local BAG_CONFIG = {
 -- 特殊数据键名
 local SPECIAL_KEYS = {
     CONFIG = "bag_config",  -- 背包配置信息
+    VIRTUAL_ITEMS = "virtual_items",  -- 虚拟物品数据
 }
 
 function CtnBag:ctor(_player_id, _tbl, _name)
@@ -25,6 +26,7 @@ function CtnBag:ctor(_player_id, _tbl, _name)
         max_stack = BAG_CONFIG.MAX_STACK,
         batch_size = BAG_CONFIG.BATCH_SIZE,
     }
+    self.virtual_items_ = {}
 end
 
 -- 保存数据
@@ -32,7 +34,7 @@ function CtnBag:onsave()
     local datas = {}
     -- 保存配置信息
     datas[SPECIAL_KEYS.CONFIG] = self.config_
-
+    datas[SPECIAL_KEYS.VIRTUAL_ITEMS] = self.virtual_items_
     -- 将物品数据分批存储
     local batch_index = 1
     local current_batch = {}
@@ -74,13 +76,16 @@ function CtnBag:onload(_rows)
     if datas[SPECIAL_KEYS.CONFIG] then
         self.config_ = datas[SPECIAL_KEYS.CONFIG]
     end
+    if datas[SPECIAL_KEYS.VIRTUAL_ITEMS] then
+        self.virtual_items_ = datas[SPECIAL_KEYS.VIRTUAL_ITEMS]
+    end
     
     -- 加载所有物品数据
     self.slots_ = {}
     local batch_index = 1
     while true do
         local batch_key = string.format("items_batch_%d", batch_index)
-        local batch = _rows[batch_key]
+        local batch = datas[batch_key]
         if not batch then break end
         
         for slot, item in pairs(batch) do
@@ -88,11 +93,6 @@ function CtnBag:onload(_rows)
         end
         batch_index = batch_index + 1
     end
-end
-
--- 获取指定格子的物品
-function CtnBag:get_item(slot)
-    return self.slots_[slot]
 end
 
 -- 检查格子是否为空
@@ -129,64 +129,106 @@ function CtnBag:can_put_item(slot, item)
 end
 
 -- 添加物品
-function CtnBag:add_item(item)
-    if not item or not item.item_id or not item.count then
-        return false, "物品数据无效"
-    end
-    
+function CtnBag:add_item(item_id, count)
     -- 尝试堆叠到已有物品
-    if self:can_stack(item.item_id) then
+    if self:can_stack(item_id) then
         for slot, existing_item in pairs(self.slots_) do
-            if existing_item.item_id == item.item_id then
-                local can_add = math.min(self.config_.max_stack - existing_item.count, item.count)
+            if existing_item.item_id == item_id then
+                local can_add = math.min(self.config_.max_stack - existing_item.count, count)
                 if can_add > 0 then
                     existing_item.count = existing_item.count + can_add
-                    item.count = item.count - can_add
-                    if item.count == 0 then
-                        return true
+                    count = count - can_add
+                    if count == 0 then
+                        self:set_dirty()
+                        return true, slot
                     end
                 end
             end
         end
     end
-    --log.debug("CtnBag:add_item %s", tableUtils.serialize_table(self.config_))
     -- 寻找空格子
     for slot = 1, self.config_.max_slots do
         if self:is_slot_empty(slot) then
             self.slots_[slot] = {
-                item_id = item.item_id,
-                count = item.count,
-                bind = item.bind or false,
-                expire_time = item.expire_time or 0,
-                extra = item.extra or {},
+                item_id = item_id,
+                count = count,
             }
-            return true
+            self:set_dirty()
+            return true, slot
         end
     end
     
     return false, "背包已满"
 end
 
--- 删除物品
-function CtnBag:remove_item(slot, count)
-    if not self.slots_[slot] then
-        return false, "格子为空"
+function CtnBag:can_add_items(items)
+    local max_stack = tonumber((self.config_ or {}).max_stack) or BAG_CONFIG.MAX_STACK
+    local max_slots = tonumber((self.config_ or {}).max_slots) or BAG_CONFIG.MAX_SLOTS
+    local slots = self.slots_ or {}
+    local empty_slots = 0
+    local free_by_item = {}
+
+    for slot = 1, max_slots do
+        local it = slots[slot]
+        if not it then
+            empty_slots = empty_slots + 1
+        else
+            local item_id = tonumber(it.item_id) or 0
+            local free = math.max(0, max_stack - (tonumber(it.count) or 0))
+            if item_id > 0 and free > 0 then
+                free_by_item[item_id] = (free_by_item[item_id] or 0) + free
+            end
+        end
     end
-    
-    local item = self.slots_[slot]
-    if item.count < count then
-        return false, "物品数量不足"
+
+    local need_new_slots = 0
+    for _, row in ipairs(items or {}) do
+        local item_id = tonumber(row.item_id) or 0
+        local count = tonumber(row.count) or 0
+        if item_id > 0 and count > 0 then
+            local remain = count - (free_by_item[item_id] or 0)
+            if remain > 0 then
+                need_new_slots = need_new_slots + math.ceil(remain / max_stack)
+            end
+        end
     end
-    
-    item.count = item.count - count
-    if item.count == 0 then
-        self.slots_[slot] = nil
+
+    if need_new_slots > empty_slots then
+        return false, "背包空间不足"
     end
     return true
 end
 
+function CtnBag:cost_item(item_id, count)
+    local need = tonumber(count) or 0
+    if need <= 0 then
+        return true
+    end
+
+    for slot = 1, tonumber((self.config_ or {}).max_slots) or BAG_CONFIG.MAX_SLOTS do
+        local it = self.slots_[slot]
+        if it and (tonumber(it.item_id) or 0) == item_id then
+            local take = math.min(need, tonumber(it.count) or 0)
+            it.count = (tonumber(it.count) or 0) - take
+            need = need - take
+            if it.count <= 0 then
+                self.slots_[slot] = nil
+            end
+            if need <= 0 then
+                break
+            end
+        end
+    end
+
+    if need > 0 then
+        return false, "实体道具扣除失败"
+    end
+    self:set_dirty()
+    return true
+end
+
 -- 移动物品
-function CtnBag:move_item(from_slot, to_slot)
+function CtnBag:swap_item(from_slot, to_slot)
     if not self.slots_[from_slot] then
         return false, "源格子为空"
     end
@@ -252,6 +294,27 @@ end
 -- 检查是否有足够数量的物品
 function CtnBag:has_enough_items(item_id, count)
     return self:get_item_count(item_id) >= count
+end
+
+function CtnBag:get_virtual_item_count(item_id)
+    return self.virtual_items_[item_id] or 0
+end
+
+function CtnBag:add_virtual_item_count(item_id, count)
+    self.virtual_items_[item_id] = (self.virtual_items_[item_id] or 0) + count
+    self:set_dirty()
+    return true
+end
+
+function CtnBag:set_virtual_item_count(item_id, count)
+    local value = math.max(0, tonumber(count) or 0)
+    if value <= 0 then
+        self.virtual_items_[item_id] = nil
+    else
+        self.virtual_items_[item_id] = value
+    end
+    self:set_dirty()
+    return true
 end
 
 -- 获取物品所在批次的键名

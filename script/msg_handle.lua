@@ -5,14 +5,33 @@ local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
 local match_rules = require "match.match_rules"
 local instance_rules = require "match.instance_rules"
+local tilent_mgr = require "system.tilent.tilent_mgr"
+local item_mgr = require "system.item_mgr"
 
 function on_add_item(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
     if not player then
         return false, "Player not found"
     end
-    
-    player:add_item(_msg.item_id, _msg.count)
+
+    local ok, result_or_err = item_mgr.add_items(player, {
+        [_msg.item_id] = _msg.count,
+    }, "c2s_add_item")
+
+    if not ok then
+        protocol_handler.send_to_player(_player_id, "add_item_response", {
+            result = 1,
+            message = result_or_err or "add failed",
+            changes = {},
+        })
+        return false, result_or_err
+    end
+
+    protocol_handler.send_to_player(_player_id, "add_item_response", {
+        result = 0,
+        message = "ok",
+        changes = result_or_err,
+    })
     return true
 end 
 
@@ -756,6 +775,41 @@ function on_mark_mail_read(_player_id, _msg)
     return skynet.call(mailS, "lua", "mark_mail_read", _player_id, _msg.mail_id)
 end
 
+
+function on_tilent_activate(_player_id, _msg)
+    local player = user_mgr.get_player_obj(_player_id)
+    if not player then
+        protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+            result = 1,
+            message = "Player not found",
+            tilent_id = tonumber(_msg.tilent_id) or 0,
+            level = 0,
+        })
+        return false, "Player not found"
+    end
+
+    tilent_mgr.init_player(player)
+    local ok, result_or_err = tilent_mgr.activate_tilent(player, _msg.tilent_id)
+    if not ok then
+        protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+            result = 1,
+            message = result_or_err or "点亮失败",
+            tilent_id = tonumber(_msg.tilent_id) or 0,
+            level = 0,
+        })
+        return false, result_or_err
+    end
+
+    protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+        result = 0,
+        message = "ok",
+        tilent_id = result_or_err.id or (tonumber(_msg.tilent_id) or 0),
+        level = result_or_err.level or 1,
+    })
+    tilent_mgr.sync_to_client(player, "activate")
+    return true
+end
+
 local handle = {
     ["add_item"] = on_add_item,
     ["change_name"] = on_change_name,
@@ -805,6 +859,7 @@ local handle = {
     ["delete_mail"] = on_delete_mail,
     ["send_player_mail"] = on_send_player_mail,
     ["mark_mail_read"] = on_mark_mail_read,
+    ["tilent_activate"] = on_tilent_activate,
 }
 
 return handle

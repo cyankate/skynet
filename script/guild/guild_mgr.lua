@@ -349,4 +349,44 @@ function guild_mgr.get_guild_list(_page, _page_size)
     return guilds, math.ceil(count / _page_size)
 end
 
+function guild_mgr.get_player_guild_point(_player_id)
+    local guild_id = guild_mgr.player_guilds_[_player_id]
+    if not guild_id then
+        return false, "玩家不在公会中", 0
+    end
+    local guild = guild_mgr.guilds_[guild_id]
+    if not guild then
+        return false, "公会不存在", 0
+    end
+    local value = guild:get_contribution(_player_id)
+    if value == nil then
+        return false, "成员不存在", 0
+    end
+    return true, "ok", value
+end
+
+function guild_mgr.add_player_guild_point(_player_id, _delta)
+    local guild_id = guild_mgr.player_guilds_[_player_id]
+    if not guild_id then
+        return false, "玩家不在公会中", 0
+    end
+    local guild = guild_mgr.guilds_[guild_id]
+    if not guild then
+        return false, "公会不存在", 0
+    end
+    local old_value = guild:get_contribution(_player_id)
+    if old_value == nil then
+        return false, "成员不存在", 0
+    end
+    local new_value = old_value + math.floor(tonumber(_delta) or 0)
+    if new_value < 0 then
+        return false, "公会积分不足", old_value
+    end
+    local ok = guild:add_contribution(_player_id, new_value - old_value)
+    if not ok then
+        return false, "公会积分更新失败", old_value
+    end
+    return true, "ok", new_value
+end
+
 return guild_mgr 

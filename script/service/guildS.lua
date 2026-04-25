@@ -90,6 +90,14 @@ function CMD.get_guild_list(page, page_size)
     return guild_mgr.get_guild_list(page, page_size)
 end
 
+function CMD.get_player_guild_point(player_id)
+    return guild_mgr.get_player_guild_point(player_id)
+end
+
+function CMD.add_player_guild_point(player_id, delta)
+    return guild_mgr.add_player_guild_point(player_id, delta)
+end
+
 local function main()
     -- 可选：服务启动逻辑
     guild_mgr.init()

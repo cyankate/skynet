@@ -2,6 +2,7 @@
 local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
+local item_mgr = require "system.item_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -39,14 +40,9 @@ function Player:save_to_db()
 end
 
 function Player:add_item(_item_id, _count)
-    local ctn = self:get_ctn("bag")
-    if not ctn then
-        return false, "Bag not found"
-    end
-    ctn:add_item({
-        item_id = _item_id,
-        count = _count,
-    })
+    return item_mgr.add_items(self, {
+        [_item_id] = _count,
+    }, "player_add_item")
 end
 
 function Player:change_name(_name)

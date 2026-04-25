@@ -22,6 +22,127 @@ local DB_CONNECTION = {
 
 local id_generator
 
+local function read_text_file(path)
+    local f = io.open(path, "r")
+    if not f then
+        return nil
+    end
+    local content = f:read("*a")
+    f:close()
+    return content
+end
+
+local function split_sql_statements(sql_text)
+    local statements = {}
+    local cleaned_lines = {}
+    for line in string.gmatch(sql_text or "", "[^\r\n]+") do
+        -- 去掉行注释（-- 注释）
+        local pure = string.gsub(line, "%s*%-%-.*$", "")
+        if pure and pure ~= "" then
+            table.insert(cleaned_lines, pure)
+        end
+    end
+    local merged = table.concat(cleaned_lines, "\n")
+    for stmt in string.gmatch(merged, "([^;]+);") do
+        local sql = stmt:match("^%s*(.-)%s*$")
+        if sql and sql ~= "" then
+            table.insert(statements, sql)
+        end
+    end
+    return statements
+end
+
+local function parse_update_versions(sql_text)
+    local blocks = {}
+    local current_version = nil
+    for line in string.gmatch((sql_text or "") .. "\n", "([^\n]*)\n") do
+        local version = string.match(line, "^%s*%[%#(%d+)%]%s*$")
+        if version then
+            current_version = tonumber(version)
+            blocks[current_version] = blocks[current_version] or {}
+        elseif current_version then
+            table.insert(blocks[current_version], line)
+        end
+    end
+    local versions = {}
+    for v in pairs(blocks) do
+        table.insert(versions, v)
+    end
+    table.sort(versions)
+    return versions, blocks
+end
+
+local function get_base_schema_version()
+    local all_sql = read_text_file("script/sql/all.sql") or ""
+    local v = string.match(all_sql, "BASE_SCHEMA_VERSION%s*:%s*(%d+)")
+    return tonumber(v) or 0
+end
+
+local function get_current_migration_version(db)
+    local ret = db:query("SELECT `version` FROM `schema_migration` WHERE `id`=1 LIMIT 1")
+    if not ret then
+        return nil, "query schema_migration failed"
+    end
+    if ret.badresult then
+        return nil, ret.err or "query schema_migration failed"
+    end
+    if #ret > 0 and ret[1] and ret[1].version then
+        return tonumber(ret[1].version) or 0
+    end
+    return get_base_schema_version()
+end
+
+local function set_current_migration_version(db, version)
+    local sql = string.format(
+        "REPLACE INTO `schema_migration` (`id`, `version`) VALUES (1, %s)",
+        tostring(version or 0)
+    )
+    local ret = db:query(sql)
+    if ret and ret.badresult then
+        return false, ret.err or "update schema_migration failed"
+    end
+    return true
+end
+
+local function apply_migrations()
+    local db = get_connection(0)
+    if not db then
+        return false, "No available database connections"
+    end
+
+    local current_version, applied_err = get_current_migration_version(db)
+    if current_version == nil then
+        return false, applied_err
+    end
+
+    local update_sql_path = "script/sql/update.sql"
+    local update_sql_text = read_text_file(update_sql_path)
+    if not update_sql_text then
+        return false, "update.sql not found"
+    end
+    local versions, blocks = parse_update_versions(update_sql_text)
+
+    for _, version in ipairs(versions) do
+        if version > current_version then
+            local sql_text = table.concat(blocks[version] or {}, "\n")
+            local statements = split_sql_statements(sql_text)
+            for _, sql in ipairs(statements) do
+                local ret = db:query(sql)
+                if ret and ret.badresult then
+                    return false, string.format("migration version %s failed: %s", tostring(version), tostring(ret.err))
+                end
+            end
+            local ok, err = set_current_migration_version(db, version)
+            if not ok then
+                return false, string.format("record migration version %s failed: %s", tostring(version), tostring(err))
+            end
+            current_version = version
+            log.info("dbS migration applied: version=%s", tostring(version))
+        end
+    end
+    return true
+end
+
 function connect()
     for i = 1, POOL_SIZE do 
         local db = mysql.connect(DB_CONNECTION)
@@ -1040,6 +1161,10 @@ end
 service_wrapper.create_service(function()
     skynet.name(".db", skynet.self())
     connect()
+    local ok, err = apply_migrations()
+    if not ok then
+        error("apply_migrations failed: " .. tostring(err))
+    end
     export_all_table_schema()
     if not id_generator then
         id_generator = IDGenerator.new()

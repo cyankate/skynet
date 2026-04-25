@@ -1,3 +1,12 @@
+-- BASE_SCHEMA_VERSION: 0
+
+CREATE TABLE IF NOT EXISTS `schema_migration` (
+    `id` tinyint NOT NULL DEFAULT 1 COMMENT '固定为1，仅保留一行',
+    `version` bigint NOT NULL COMMENT '当前已执行到的迁移版本号',
+    `executed_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据库迁移版本记录';
+
 CREATE TABLE `mail` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '自增ID',
   `mail_id` varchar(20) NOT NULL COMMENT '邮件ID',

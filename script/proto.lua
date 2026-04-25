@@ -85,6 +85,12 @@ local c2s_builder = builder.new()
         content = "string",
         timestamp = "integer",
     })
+
+    :type("item_change_info", {
+        item_id = "integer",
+        delta = "integer",
+        count = "integer",
+    })
     
     :protocol("send_channel_message", 7, {
         request = {
@@ -233,6 +239,12 @@ local c2s_builder = builder.new()
     :protocol("instance_play_start", 522, {
         request = {
             type_name = "string",       -- 统一玩法入口（单人/多人）
+        }
+    })
+
+    :protocol("tilent_activate", 541, {
+        request = {
+            tilent_id = "integer",
         }
     })
     
@@ -581,6 +593,21 @@ local s2c_builder = builder.new()
             end_reason = "integer",
             duration = "integer",
             data = "binary",
+        }
+    })
+
+    :protocol("add_item_response", 650, {
+        request = {
+            result = "integer",
+            message = "string",
+            changes = "*item_change_info",
+        }
+    })
+
+    :protocol("item_update_notify", 651, {
+        request = {
+            reason = "string",
+            changes = "*item_change_info",
         }
     })
     

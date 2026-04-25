@@ -68,8 +68,12 @@ function Guild:add_member(_player_id, _player_name, _position, _data)
     self.members_[_player_id] = member
     if _data then
         member.last_online_time = _data[MEMBER_DATA_KEYS.LAST_ONLINE_TIME]
+        member.contribution = tonumber(_data.contribution) or 0
+        member.daily_contribution = tonumber(_data.daily_contribution) or 0
     else
         member.last_online_time = os.time()
+        member.contribution = 0
+        member.daily_contribution = 0
         self:dirty()
     end 
     if _position == GUILD_POSITION.LEADER then
@@ -122,10 +126,18 @@ function Guild:add_contribution(_player_id, _amount)
         return false
     end
     
-    member.contribution = member.contribution + _amount
-    member.daily_contribution = member.daily_contribution + _amount
+    member.contribution = (tonumber(member.contribution) or 0) + _amount
+    member.daily_contribution = (tonumber(member.daily_contribution) or 0) + _amount
     self:dirty()
     return true
+end
+
+function Guild:get_contribution(_player_id)
+    local member = self.members_[_player_id]
+    if not member then
+        return nil
+    end
+    return tonumber(member.contribution) or 0
 end
 
 -- 添加经验

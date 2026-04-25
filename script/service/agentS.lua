@@ -5,6 +5,7 @@ local common = require "utils.common"
 local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
 local user_mgr = require "user_mgr"
+local tilent_mgr = require "system.tilent.tilent_mgr"
 
 local agent_id = tonumber(...)
 -- 多账号支持
@@ -178,6 +179,7 @@ function send_player_data(player)
             player_name = player.player_name_,
         }
     )
+    tilent_mgr.sync_to_client(player, "login")
 end
 
 function handle_login(player)
