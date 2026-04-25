@@ -33,6 +33,29 @@ local message_count = {}
 -- 指令处理
 local CMD = {}
 
+function CMD.reload_proto()
+    proto_builder.clear_schemas()
+
+    local ok1, proto_or_err = pcall(sprotoloader.load, 1)
+    if not ok1 or not proto_or_err then
+        log.error("reload_proto failed on c2s: %s", tostring(proto_or_err))
+        return false, tostring(proto_or_err)
+    end
+
+    local ok2, s2c_or_err = pcall(sprotoloader.load, 2)
+    if not ok2 or not s2c_or_err then
+        log.error("reload_proto failed on s2c: %s", tostring(s2c_or_err))
+        return false, tostring(s2c_or_err)
+    end
+
+    local new_host = proto_or_err:host "package"
+    local new_sender = new_host:attach(s2c_or_err)
+    host = new_host
+    sender = new_sender
+    log.info("gate proto reloaded")
+    return true
+end
+
 -- 向客户端发送消息
 function CMD.send_message(fd, name, data)
     local c = connection[fd]
@@ -276,10 +299,10 @@ function CMD.get_online_count()
 end
 
 function handler.open(conf)
-    -- 加载协议
-    local proto = sprotoloader.load(1)
-    host = proto:host "package"
-    sender = host:attach(sprotoloader.load(2))
+    local ok, err = CMD.reload_proto()
+    if not ok then
+        error("gate init proto failed: " .. tostring(err))
+    end
     
     log.info("Gate service opened")
 end 

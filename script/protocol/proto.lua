@@ -1,5 +1,5 @@
 local sprotoparser = require "sprotoparser"
-local builder = require "utils.proto_builder"
+local builder = require "protocol.proto_builder"
 
 local proto = {}
 

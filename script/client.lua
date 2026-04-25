@@ -6,7 +6,7 @@ if _VERSION ~= "Lua 5.4" then
 end
 
 local socket = require "client.socket"
-local proto = require "proto"
+local proto = require "protocol.proto"
 local sproto = require "sproto"
 
 -- 客户端配置
