@@ -1008,6 +1008,44 @@ local config = {
             ["player2_id"] = true,
         },
     },
+    ["global_data"] = {
+        table_name = "global_data",
+        fields = {
+            ["name"] = {
+                type = "varchar(64)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "全局模块名",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "全局数据",
+            },
+            ["update_time"] = {
+                type = "int",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "更新时间",
+            },
+        },
+        primary_keys = {
+            "name",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+            ["update_time"] = true,
+        },
+    },
     ["ranking"] = {
         table_name = "ranking",
         fields = {

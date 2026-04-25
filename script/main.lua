@@ -23,6 +23,8 @@ skynet.start(function()
     local rank = skynet.newservice("rankS")
 
     local guild = skynet.newservice("guildS")
+
+    local global = skynet.newservice("globalS")
     
     local chat = skynet.newservice("chatS")
 

@@ -28,7 +28,7 @@ function M.activate_tilent(player, tilent_id)
         tilent_id = tilent_id,
     }
 end
-
+ 
 function M.sync_to_client(player)
     local ctn = player:get_ctn("common")
     local activated = ctn:get_tilents()

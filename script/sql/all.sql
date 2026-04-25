@@ -42,6 +42,14 @@ CREATE TABLE `global_mail` (
   KEY `idx_expire_time` (`expire_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全局邮件表';
 
+-- 全局数据表
+CREATE TABLE IF NOT EXISTS `global_data` (
+  `name` varchar(64) NOT NULL COMMENT '全局模块名',
+  `data` text COMMENT '全局数据',
+  `update_time` int NOT NULL COMMENT '更新时间',
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全局数据表';
+
 -- 账号表
 CREATE TABLE IF NOT EXISTS `account` (
   `account_key` varchar(20) NOT NULL COMMENT '账号标识',
