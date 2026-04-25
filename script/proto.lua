@@ -86,12 +86,6 @@ local c2s_builder = builder.new()
         timestamp = "integer",
     })
 
-    :type("item_change_info", {
-        item_id = "integer",
-        delta = "integer",
-        count = "integer",
-    })
-    
     :protocol("send_channel_message", 7, {
         request = {
             channel_id = "integer",
@@ -594,6 +588,12 @@ local s2c_builder = builder.new()
             duration = "integer",
             data = "binary",
         }
+    })
+
+    :type("item_change_info", {
+        item_id = "integer",
+        delta = "integer",
+        count = "integer",
     })
 
     :protocol("add_item_response", 650, {
