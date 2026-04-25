@@ -431,8 +431,9 @@ function CMD.batch_update(_tbl, _data_list, _options)
     local non_primary_fields = table_schema[_tbl].non_primary_fields
 
     -- 开始事务
-    local _, err = db:query("START TRANSACTION")
-    if err then
+    local tx_result = db:query("START TRANSACTION")
+    if not tx_result or tx_result.badresult then
+        local err = (tx_result and tx_result.err) or "unknown error"
         log.error("Failed to start transaction: %s", err)
         release(db)
         return nil
@@ -500,13 +501,16 @@ function CMD.batch_update(_tbl, _data_list, _options)
         for _, data in ipairs(batch) do
             -- 检查主键
             local pk_conditions = {}
+            local pk_values = {}
             for _, pk in ipairs(primary_keys) do
                 if data[pk] == nil then
                     success = false
                     err_msg = string.format("Primary key %s not found", pk)
                     break
                 end
-                table.insert(pk_conditions, mysql.quote_sql_str(tostring(data[pk])))
+                local quoted_pk = mysql.quote_sql_str(tostring(data[pk]))
+                table.insert(pk_values, quoted_pk)
+                table.insert(pk_conditions, string.format("`%s`=%s", pk, quoted_pk))
             end
 
             if not success then
@@ -543,7 +547,7 @@ function CMD.batch_update(_tbl, _data_list, _options)
             end
             
             -- 收集WHERE条件的值
-            table.insert(where_values, table.concat(pk_conditions, ","))
+            table.insert(where_values, table.concat(pk_values, ","))
         end
 
         if not success then
@@ -554,9 +558,8 @@ function CMD.batch_update(_tbl, _data_list, _options)
         local set_list = {}
         for field_name, whens in pairs(case_whens) do
             if #whens > 0 then
-                local case_str = string.format("`%s` = CASE %s %s END",
+                local case_str = string.format("`%s` = CASE %s END",
                     field_name,
-                    table.concat(primary_keys, ","),
                     table.concat(whens, " ")
                 )
                 table.insert(set_list, case_str)
@@ -587,7 +590,7 @@ function CMD.batch_update(_tbl, _data_list, _options)
         local result = db:query(sql)
         if not result or result.badresult then
             success = false
-            err_msg = err or "Unknown error"
+            err_msg = (result and result.err) or "Unknown error"
             break
         end
 
@@ -597,7 +600,8 @@ function CMD.batch_update(_tbl, _data_list, _options)
     -- 事务处理
     if success then
         local result = db:query("COMMIT")
-        if err then
+        if not result or result.badresult then
+            local err = (result and result.err) or "unknown error"
             log.error("Failed to commit transaction: %s", err)
             db:query("ROLLBACK")
             release(db)

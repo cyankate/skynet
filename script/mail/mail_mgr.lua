@@ -340,7 +340,7 @@ function mail_mgr.check_global_mails(player_id)
     -- 获取新的全局邮件
     local new_globals = skynet.call(dbS, "lua", "select", "global_mail", {
         create_time = {[">"] = last_time},
-        status = 1,
+        --status = 1,
         expire_time = {[">"] = os.time()}
     })
     

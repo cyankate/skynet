@@ -337,13 +337,13 @@ function handler.message(fd, msg, sz)
         end
         
         -- 记录接收到的协议信息（用于调试）
-        if args and type(args) == "table" then
-            log.debug("收到协议: fd=%d, player_id=%s, protocol=%s, args=%s",
-                fd, tostring(c.player_id), name, tableUtils.serialize_table(args))
-        else
-            log.debug("收到协议: fd=%d, player_id=%s, protocol=%s, args=nil",
-                fd, tostring(c.player_id), name)
-        end
+        -- if args and type(args) == "table" then
+        --     log.debug("收到协议: fd=%d, player_id=%s, protocol=%s, args=%s",
+        --         fd, tostring(c.player_id), name, tableUtils.serialize_table(args))
+        -- else
+        --     log.debug("收到协议: fd=%d, player_id=%s, protocol=%s, args=nil",
+        --         fd, tostring(c.player_id), name)
+        -- end
         
         -- 如果是 RPC 请求（带 session），缓存 response_func，后续由业务处理完再调用
         if response_func and session then

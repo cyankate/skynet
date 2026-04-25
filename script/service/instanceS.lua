@@ -84,18 +84,18 @@ end
 
 function CMD.create_instance(type_name, args)
     args = args or {}
-    log.info("instance.create request type=%s inst_no=%s mode=%s creator=%s", tostring(type_name), tostring(args.inst_no), tostring(args.mode_type), tostring(args.creator_id))
+    --log.info("instance.create request type=%s inst_no=%s mode=%s creator=%s", tostring(type_name), tostring(args.inst_no), tostring(args.mode_type), tostring(args.creator_id))
     local inst_id = instance_mgr.create_instance(type_name, args)
     if not inst_id then
         log.error("instance.create failed type=%s inst_no=%s", tostring(type_name), tostring(args.inst_no))
         return false, "创建副本失败"
     end
-    log.info("instance.create ok inst_id=%s type=%s", tostring(inst_id), tostring(type_name))
+    --log.info("instance.create ok inst_id=%s type=%s", tostring(inst_id), tostring(type_name))
     return true, inst_id
 end
 
 function CMD.destroy_instance(inst_id)
-    log.info("instance.destroy request inst_id=%s", tostring(inst_id))
+    --log.info("instance.destroy request inst_id=%s", tostring(inst_id))
     local scene_data = instance_scene_map[inst_id]
     if scene_data then
         local scene = skynet.localname(".scene")
@@ -106,7 +106,7 @@ function CMD.destroy_instance(inst_id)
     end
     local ok = instance_mgr.destroy_instance(inst_id)
     if ok then
-        log.info("instance.destroy ok inst_id=%s", tostring(inst_id))
+        --log.info("instance.destroy ok inst_id=%s", tostring(inst_id))
     else
         log.error("instance.destroy failed inst_id=%s", tostring(inst_id))
     end
@@ -114,7 +114,7 @@ function CMD.destroy_instance(inst_id)
 end
 
 function CMD.create_and_enter_batch(type_name, args, players, join_data_map)
-    log.info("instance.batch_start type=%s players=%d ready_mode=%s mode=%s", tostring(type_name), #players, tostring(args.ready_mode), tostring(args.mode_type))
+    --log.info("instance.batch_start type=%s players=%d ready_mode=%s mode=%s", tostring(type_name), #players, tostring(args.ready_mode), tostring(args.mode_type))
     -- 多人编排入口：用于匹配/组队场景，不用于单人直进。
     args = args or {}
     players = players or {}
@@ -174,7 +174,7 @@ end
 
 function CMD.play_start_direct(player_id, type_name, options)
     local opt = options or {}
-    log.info("instance.direct_start player=%s type_name=%s instance_type=%s mode=%s", tostring(player_id), tostring(type_name), tostring(opt.instance_type_name or type_name), tostring(opt.mode_type))
+    --log.info("instance.direct_start player=%s type_name=%s instance_type=%s mode=%s", tostring(player_id), tostring(type_name), tostring(opt.instance_type_name or type_name), tostring(opt.mode_type))
     local in_inst, current_inst_id = instance_mgr.get_player_instance(player_id)
     if in_inst then
         log.warning("instance.direct_start rejected player=%s current_inst_id=%s", tostring(player_id), tostring(current_inst_id))
@@ -222,7 +222,7 @@ function CMD.play_start_direct(player_id, type_name, options)
 end
 
 function CMD.enter_instance(inst_id, player_id)
-    log.info("instance.enter request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
+    --log.info("instance.enter request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
@@ -267,14 +267,14 @@ function CMD.enter_instance(inst_id, player_id)
     if instance_mgr.is_auto_start(inst_id) and inst:get_status() ~= InstanceStatus.RUNNING then
         local started = inst:start()
         if started then
-            log.info("instance auto started, inst_id=%s", tostring(inst_id))
+            --log.info("instance auto started, inst_id=%s", tostring(inst_id))
         end
     end
     return true
 end
 
 function CMD.exit_instance(inst_id, player_id)
-    log.info("instance.exit request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
+    --log.info("instance.exit request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
@@ -327,7 +327,7 @@ function CMD.ready_instance(inst_id, player_id)
 end
 
 function CMD.instance_mode_event(inst_id, player_id, event_type, payload)
-    log.info("instance.mode_event request inst_id=%s player=%s event=%s value=%s target=%s", tostring(inst_id), tostring(player_id), tostring(event_type), tostring(payload and payload.event_value), tostring(payload and payload.target_id))
+    --log.info("instance.mode_event request inst_id=%s player=%s event=%s value=%s target=%s", tostring(inst_id), tostring(player_id), tostring(event_type), tostring(payload and payload.event_value), tostring(payload and payload.target_id))
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
@@ -340,12 +340,12 @@ function CMD.instance_mode_event(inst_id, player_id, event_type, payload)
         log.warning("instance.mode_event rejected inst_id=%s player=%s event=%s err=%s", tostring(inst_id), tostring(player_id), tostring(event_type), tostring(err_event))
         return false, err_event
     end
-    log.info("instance.mode_event accepted inst_id=%s player=%s event=%s", tostring(inst_id), tostring(player_id), tostring(event_type))
+    --log.info("instance.mode_event accepted inst_id=%s player=%s event=%s", tostring(inst_id), tostring(player_id), tostring(event_type))
     return true
 end
 
 function CMD.quit_instance(inst_id, player_id)
-    log.info("instance.quit request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
+    --log.info("instance.quit request inst_id=%s player=%s", tostring(inst_id), tostring(player_id))
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
@@ -366,7 +366,7 @@ function CMD.quit_instance(inst_id, player_id)
     if tableUtils.table_size(inst.pjoins_) == 0 then
         local inst_data = instance_mgr.get_instance_data(inst_id)
         if inst_data and inst_data.type == "multi" then
-            log.info("instance.multi_all_quit_complete inst_id=%s", tostring(inst_id))
+            --log.info("instance.multi_all_quit_complete inst_id=%s", tostring(inst_id))
             inst:complete(false, {
                 reason = "all_quit",
                 end_type = InstanceEndType.ACTIVE_QUIT,
@@ -403,7 +403,7 @@ function CMD.resume_instance(inst_id)
 end
 
 function CMD.complete_instance(inst_id, success, data_)
-    log.info("instance.complete request inst_id=%s success=%s", tostring(inst_id), tostring(success))
+    --log.info("instance.complete request inst_id=%s success=%s", tostring(inst_id), tostring(success))
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
@@ -482,7 +482,7 @@ function CMD.try_enter_match_flow(player_id)
     if not ok then
         return false, err_or_state or "玩家当前状态不可进入匹配"
     end
-    log.info("instance.flow set player=%s flow=matching", tostring(player_id))
+    --log.info("instance.flow set player=%s flow=matching", tostring(player_id))
     return true
 end
 
@@ -495,7 +495,7 @@ function CMD.mark_pending_confirm(player_ids)
             reason = "match_pending_confirm",
         })
         if ok then
-            log.info("instance.flow set player=%s flow=pending_confirm", tostring(player_id))
+            --log.info("instance.flow set player=%s flow=pending_confirm", tostring(player_id))
         end
     end
     return true
@@ -510,7 +510,7 @@ function CMD.clear_match_flow(player_ids)
             reason = "match_flow_clear",
         })
         if ok then
-            log.info("instance.flow set player=%s flow=idle", tostring(player_id))
+            --log.info("instance.flow set player=%s flow=idle", tostring(player_id))
         end
     end
     return true

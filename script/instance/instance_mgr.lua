@@ -68,12 +68,12 @@ end
 
 function instance_mgr.on_player_join(inst_id, player_id, data_)
     -- 预留给后续埋点/事件系统
-    log.info("instance_mgr: 玩家%s加入副本%s", tostring(player_id), tostring(inst_id))
+    --log.info("instance_mgr: 玩家%s加入副本%s", tostring(player_id), tostring(inst_id))
 end
 
 function instance_mgr.on_player_leave(inst_id, player_id)
     -- 预留给后续埋点/事件系统
-    log.info("instance_mgr: 玩家%s离开副本%s", tostring(player_id), tostring(inst_id))
+    --log.info("instance_mgr: 玩家%s离开副本%s", tostring(player_id), tostring(inst_id))
 end
 
 function instance_mgr.destroy_instance(inst_id)
