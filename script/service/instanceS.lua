@@ -9,13 +9,19 @@ local InstanceEndReason = inst_def.InstanceEndReason
 local tableUtils = require "utils.tableUtils"
 local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
+local service_ctx = require "runtime.service_ctx"
 
 local UPDATE_INTERVAL_TICK = 10 -- 0.1s
 local GLOBAL_INSTANCE_TIMEOUT_SEC = 3600
 local COMPLETED_INSTANCE_GC_SEC = 120
-local running = true
-local scene_counter = 0
-local instance_scene_map = {} -- inst_id -> { scene_id, spawn_x, spawn_y }
+local ctx = service_ctx.get("instance.instance", {})
+ctx.running = (ctx.running ~= false)
+ctx.scene_counter = ctx.scene_counter or 0
+ctx.instance_scene_map = ctx.instance_scene_map or {} -- inst_id -> { scene_id, spawn_x, spawn_y }
+
+local running = ctx.running
+local scene_counter = ctx.scene_counter
+local instance_scene_map = ctx.instance_scene_map
 
 local function get_instance_or_error(inst_id)
     local inst = instance_mgr.get_instance(inst_id)
@@ -27,6 +33,7 @@ end
 
 local function generate_scene_id()
     scene_counter = scene_counter + 1
+    ctx.scene_counter = scene_counter
     return 9000000 + scene_counter
 end
 
@@ -542,6 +549,7 @@ end
 
 function CMD.shutdown()
     running = false
+    ctx.running = false
 
     local scene = skynet.localname(".scene")
     if scene then
@@ -551,6 +559,7 @@ function CMD.shutdown()
     end
 
     instance_scene_map = {}
+    ctx.instance_scene_map = instance_scene_map
     instance_mgr.shutdown()
     return true
 end

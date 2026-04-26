@@ -1,13 +1,13 @@
 local skynet = require "skynet"
 local log = require "log"
 local InstanceDef = require "define.inst_def"
+local service_ctx = require "runtime.service_ctx"
 
-local instance_mgr = {}
-
-instance_mgr.instances = {}
-instance_mgr.instance_counter = 0
-instance_mgr.instance_types = {}
-instance_mgr.player_instance_map = {} -- player_id -> inst_id
+local instance_mgr = service_ctx.get("instance.instance_mgr", {})
+instance_mgr.instances = instance_mgr.instances or {}
+instance_mgr.instance_counter = instance_mgr.instance_counter or 0
+instance_mgr.instance_types = instance_mgr.instance_types or {}
+instance_mgr.player_instance_map = instance_mgr.player_instance_map or {} -- player_id -> inst_id
 
 local function resolve_ready_mode(args)
     if args.ready_mode == "all" or args.ready_mode == "leader" or args.ready_mode == "auto" then

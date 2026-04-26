@@ -3,6 +3,7 @@ local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local Guild = require "guild.guild_base"
 local guild_def = require "define.guild_def"
+local service_ctx = require "runtime.service_ctx"
 
 -- 错误码定义
 local ERROR_CODE = {
@@ -17,17 +18,16 @@ local ERROR_CODE = {
     DB_ERROR = 8,
 }
 
-local guild_mgr = {
-    guilds_ = {},                -- 公会列表
-    player_guilds_ = {},         -- 玩家所在公会映射
-    guild_names_ = {},           -- 公会名称映射
-    save_timer_ = nil,           -- 保存定时器
-    max_guild_count_ = 1000,     -- 最大公会数量
-    max_member_count_ = 100,     -- 最大成员数量
-    save_interval_ = 300,        -- 保存间隔(秒)
-    ERROR_CODE = ERROR_CODE,     -- 错误码
-    gen_id_ = 1,                 -- 生成ID
-}
+local guild_mgr = service_ctx.get("guild.guild_mgr", {})
+guild_mgr.guilds_ = guild_mgr.guilds_ or {}                -- 公会列表
+guild_mgr.player_guilds_ = guild_mgr.player_guilds_ or {}  -- 玩家所在公会映射
+guild_mgr.guild_names_ = guild_mgr.guild_names_ or {}      -- 公会名称映射
+guild_mgr.save_timer_ = guild_mgr.save_timer_ or nil       -- 保存定时器
+guild_mgr.max_guild_count_ = guild_mgr.max_guild_count_ or 1000     -- 最大公会数量
+guild_mgr.max_member_count_ = guild_mgr.max_member_count_ or 100     -- 最大成员数量
+guild_mgr.save_interval_ = guild_mgr.save_interval_ or 300           -- 保存间隔(秒)
+guild_mgr.ERROR_CODE = guild_mgr.ERROR_CODE or ERROR_CODE            -- 错误码
+guild_mgr.gen_id_ = guild_mgr.gen_id_ or 1                          -- 生成ID
 
 -- 初始化
 function guild_mgr.init()

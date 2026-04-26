@@ -1,9 +1,11 @@
 local skynet = require "skynet"
 local redis = require "skynet.db.redis"
+local service_ctx = require "runtime.service_ctx"
 
 local CMD = {}
-local pool = {}  -- Redis连接池
-local config = {
+local ctx = service_ctx.get("redis.redis", {})
+ctx.pool = ctx.pool or {}  -- Redis连接池
+ctx.config = ctx.config or {
     host = "127.0.0.1",
     port = 6379,
     db = 0,
@@ -11,6 +13,8 @@ local config = {
     pool_size = 8,  -- 连接池大小
     max_retry = 3,  -- 最大重试次数
 }
+local pool = ctx.pool
+local config = ctx.config
 
 -- 创建新的Redis连接
 local function new_connection()
@@ -85,6 +89,7 @@ function CMD.init(conf)
     for k, v in pairs(conf or {}) do
         config[k] = v
     end
+    ctx.config = config
     
     -- 预创建连接
     for i = 1, config.pool_size do
@@ -259,6 +264,7 @@ function CMD.shutdown()
         conn:disconnect()
     end
     pool = {}
+    ctx.pool = pool
 end
 
 skynet.start(function()

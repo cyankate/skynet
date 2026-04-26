@@ -5,19 +5,19 @@ local PrivateCache = require "cache.private_cache"
 local PrivateChannel = require "chat.private_channel"
 local GuildChannel = require "chat.guild_channel"
 local WorldChannel = require "chat.world_channel"
+local service_ctx = require "runtime.service_ctx"
 
 -- 频道管理器
-channel_mgr = {
-    channels = {},  -- {channel_id = channel_obj}
-    player_channels = {},  -- {player_id = {channel_id = true}}
-    private_channels = {},  -- {private_channel_key = channel_id}
-    cache = nil,
-    private_channel_cache = nil,
-    gen_id = 1000,
-    player_cache = nil,
-}
+local channel_mgr = service_ctx.get("chat.channel_mgr", {})
+channel_mgr.channels = channel_mgr.channels or {}  -- {channel_id = channel_obj}
+channel_mgr.player_channels = channel_mgr.player_channels or {}  -- {player_id = {channel_id = true}}
+channel_mgr.private_channels = channel_mgr.private_channels or {}  -- {private_channel_key = channel_id}
+channel_mgr.cache = channel_mgr.cache or nil
+channel_mgr.private_channel_cache = channel_mgr.private_channel_cache or nil
+channel_mgr.gen_id = channel_mgr.gen_id or 1000
+channel_mgr.player_cache = channel_mgr.player_cache or nil
 
-CHANNEL_TYPE = {
+channel_mgr.CHANNEL_TYPE = {
     PUBLIC = 1,
     PRIVATE = 2,
     GUILD = 3,

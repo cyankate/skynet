@@ -1,6 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local mailbox = require "mail.mailbox"
+local service_ctx = require "runtime.service_ctx"
 
 -- 邮件类型
 local MAIL_TYPE = {
@@ -37,7 +38,9 @@ local config = {
 local mail_mgr = {}
 
 -- 玩家邮箱缓存
-local player_mailboxes = {}
+local ctx = service_ctx.get("mail.mail_mgr", {})
+ctx.player_mailboxes = ctx.player_mailboxes or {}
+local player_mailboxes = ctx.player_mailboxes
 
 -- 获取玩家邮箱对象
 function mail_mgr.get_mailbox(player_id)

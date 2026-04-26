@@ -2,18 +2,21 @@ local skynet = require "skynet"
 local encrypt = require "security.encrypt"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
+local service_ctx = require "runtime.service_ctx"
 
-local token = {}
+local token = service_ctx.get("security.token", {})
 
 -- 令牌配置
-local TOKEN_CONFIG = {
+token.TOKEN_CONFIG = token.TOKEN_CONFIG or {
     SECRET_KEY = "iamthekeytoeverything", -- 密钥
     EXPIRE_TIME = 86400, -- 默认过期时间(秒)，此处为24小时
     REFRESH_THRESHOLD = 3600, -- 刷新阈值(秒)，小于这个值时自动刷新
 }
+local TOKEN_CONFIG = token.TOKEN_CONFIG
 
 -- 令牌缓存，用于快速验证和防止重放攻击
-local token_cache = {}
+token.token_cache = token.token_cache or {}
+local token_cache = token.token_cache
 
 -- 生成令牌
 function token.generate(user_id, device_id, extra_data)

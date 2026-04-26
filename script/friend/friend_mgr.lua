@@ -2,11 +2,11 @@ local skynet = require "skynet"
 local log = require "log"
 local FriendCache = require "cache.friend_cache"
 local protocol_handler = require "protocol_handler"
+local service_ctx = require "runtime.service_ctx"
 
 -- 好友管理器
-friend_mgr = {
-    cache = nil,
-}
+local friend_mgr = service_ctx.get("friend.friend_mgr", {})
+friend_mgr.cache = friend_mgr.cache or nil
 
 -- 发送消息给玩家
 local function send_to_player(player_id, name, data)

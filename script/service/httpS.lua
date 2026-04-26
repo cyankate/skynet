@@ -9,6 +9,7 @@ local tableUtils = require "utils.tableUtils"
 local common = require "utils.common"
 local attack_protection = require "security.attack_protection"
 local table_schema = require "sql.table_schema"
+local service_ctx = require "runtime.service_ctx"
 --local jwt = require "resty.jwt"  -- 添加 JWT 库
 require "skynet.manager"
 
@@ -91,22 +92,18 @@ local config = {
     }
 }
 
--- 连接池管理
-local connection_pool = {
+-- 模块级上下文（稳定区）：按模块 key 维护运行时数据
+local connection_pool = service_ctx.get("http.connection_pool", {
     max_size = 100,
     timeout = 300,  -- 5分钟
     connections = {}
-}
-
--- 缓存支持
-local cache = {
+})
+local cache = service_ctx.get("http.cache", {
     data = {},
     max_size = 1000,
     ttl = 3600  -- 1小时
-}
-
--- 监控指标
-local metrics = {
+})
+local metrics = service_ctx.get("http.metrics", {
     requests = {
         total = 0,
         by_status = {},
@@ -118,7 +115,7 @@ local metrics = {
         response_time = {},
         errors = 0
     }
-}
+})
 
 -- 安全相关的HTTP头
 local function add_security_headers(headers)

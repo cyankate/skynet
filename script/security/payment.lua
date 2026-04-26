@@ -1,11 +1,12 @@
 local skynet = require "skynet"
 local log = require "log"
 local encrypt = require "security.encrypt"
+local service_ctx = require "runtime.service_ctx"
 
-local payment = {}
+local payment = service_ctx.get("security.payment", {})
 
 -- 支付配置
-local payment_config = {
+payment.payment_config = payment.payment_config or {
     -- 支付渠道配置
     channels = {
         alipay = {
@@ -61,6 +62,7 @@ local payment_config = {
         expire_time = 300,  -- 签名有效期(秒)
     }
 }
+local payment_config = payment.payment_config
 
 -- 获取支付渠道配置
 function payment.get_channel_config(channel)

@@ -7,8 +7,11 @@ local table_schema = require "sql.table_schema"
 require "skynet.manager"
 local IDGenerator = require "utils.id_generator"
 local service_wrapper = require "utils.service_wrapper"
+local service_ctx = require "runtime.service_ctx"
 
-local pool = {}
+local ctx = service_ctx.get("db.db", {})
+ctx.pool = ctx.pool or {}
+local pool = ctx.pool
 local POOL_SIZE = 10
 
 local DB_CONNECTION = {
@@ -20,7 +23,7 @@ local DB_CONNECTION = {
     max_packet_size = 1024 * 1024,
 }
 
-local id_generator
+local id_generator = ctx.id_generator
 
 local function read_text_file(path)
     local f = io.open(path, "r")
@@ -825,6 +828,7 @@ function CMD.close()
         db:close()
     end
     pool = {}
+    ctx.pool = pool
     log.info(" MySQL connection closed")
 end
 
@@ -1171,6 +1175,7 @@ service_wrapper.create_service(function()
     export_all_table_schema()
     if not id_generator then
         id_generator = IDGenerator.new()
+        ctx.id_generator = id_generator
     end
 end, {
     name = "db",

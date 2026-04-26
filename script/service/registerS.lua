@@ -1,7 +1,11 @@
 local skynet = require "skynet"
 local log = require "log"
+local service_ctx = require "runtime.service_ctx"
 
-local player_id2agent = {}
+local ctx = service_ctx.get("register.register", {})
+ctx.player_id2agent = ctx.player_id2agent or {}
+local player_id2agent = ctx.player_id2agent
+
 function CMD.register(player_id, agent)
     player_id2agent[player_id] = agent
 end 

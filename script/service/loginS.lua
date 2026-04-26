@@ -2,15 +2,22 @@
     登录服务
     负责账号的登录、登出、重连、令牌验证等功能    
 ]]
-
-local account_loading = {}
-local account_info = {}
 require "skynet.manager"
 local service_wrapper = require "utils.service_wrapper"
+local service_ctx = require "runtime.service_ctx"
+
+local ctx = service_ctx.get("login.login", {})
+ctx.account_loading = ctx.account_loading or {}
+ctx.account_info = ctx.account_info or {}
+ctx.agent_pool = ctx.agent_pool or {}
+ctx.agent_to_accounts = ctx.agent_to_accounts or {}
+
+local account_loading = ctx.account_loading
+local account_info = ctx.account_info
 
 -- agent池管理
-local agent_pool = {}           -- 存储所有agent服务实例
-local agent_to_accounts = {}    -- 每个agent负责的账号 {agent_handle = {account_key1, account_key2, ...}}
+local agent_pool = ctx.agent_pool           -- 存储所有agent服务实例
+local agent_to_accounts = ctx.agent_to_accounts    -- 每个agent负责的账号 {agent_handle = {account_key1, account_key2, ...}}
 local INIT_AGENT_COUNT = 3      -- 初始创建的agent数量
 local CLIENT = {}
 

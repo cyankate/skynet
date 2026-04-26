@@ -4,6 +4,7 @@ require "skynet.manager"
 local payment_security = require "security.payment"
 local encrypt = require "security.encrypt"
 local service_wrapper = require "utils.service_wrapper"
+local service_ctx = require "runtime.service_ctx"
 
 -- 支付记录状态
 local PAYMENT_STATUS = {
@@ -26,20 +27,25 @@ local PAYMENT_CHANNEL = {
 }
 
 -- 商品配置
-local products = {}
+local ctx = service_ctx.get("payment.payment", {})
+ctx.products = ctx.products or {}
+ctx.db = ctx.db or nil
+local products = ctx.products
 
 -- 数据库连接
-local db
+local db = ctx.db
 
 -- 初始化函数
 local function init()
     -- 连接数据库
     db = skynet.localname(".db")
+    ctx.db = db
     
     -- 加载商品配置
     local ok, product_config = pcall(require, "define.product_config")
     if ok then
         products = product_config
+        ctx.products = products
         log.info("商品配置加载成功，共%d个商品", #products)
     else
         log.error("商品配置加载失败: %s", product_config)
@@ -375,6 +381,7 @@ function CMD.update_products(new_products)
     end
     
     products = new_products
+    ctx.products = products
     return {code = 0, message = "商品配置更新成功"}
 end
 

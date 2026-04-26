@@ -1,10 +1,15 @@
 local skynet = require "skynet"
 local log = require "log"
+local service_ctx = require "runtime.service_ctx"
 
 local M = {}
 
-local cache = {}
-local dirty = {}
+local ctx = service_ctx.get("global.global_mgr", {})
+ctx.cache = ctx.cache or {}
+ctx.dirty = ctx.dirty or {}
+
+local cache = ctx.cache
+local dirty = ctx.dirty
 
 local FLUSH_INTERVAL = 500 -- 5s
 

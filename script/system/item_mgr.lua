@@ -1,12 +1,13 @@
 local protocol_handler = require "protocol_handler"
 local log = require "log"
 local skynet = require "skynet"
+local service_ctx = require "runtime.service_ctx"
 
 local ITEM_DATA = require "setting.item_data"
 
-local item_mgr = {}
-
-local virtual_add_handlers = {}
+local item_mgr = service_ctx.get("system.item_mgr", {})
+item_mgr.virtual_add_handlers = item_mgr.virtual_add_handlers or {}
+local virtual_add_handlers = item_mgr.virtual_add_handlers
 
 local function to_int(v, default_v)
     local n = tonumber(v)
@@ -278,18 +279,17 @@ function item_mgr.get_item_count(player, item_id)
     return get_count(player, item_id)
 end
 
-virtual_add_handlers = {
-    guild_point = function(player, item_id, count, ext)
-        local guildS = skynet.localname(".guild")
-        if not guildS then
-            return false, "guild服务不可用"
-        end
-        local ok, msg = skynet.call(guildS, "lua", "add_player_guild_point", player.player_id_, tonumber(count) or 0)
-        if not ok then
-            return false, msg or "公会积分添加失败"
-        end
-        return true, false
-    end,
-}
+
+virtual_add_handlers.guild_point = function(player, item_id, count, ext)
+    local guildS = skynet.localname(".guild")
+    if not guildS then
+        return false, "guild服务不可用"
+    end
+    local ok, msg = skynet.call(guildS, "lua", "add_player_guild_point", player.player_id_, tonumber(count) or 0)
+    if not ok then
+        return false, msg or "公会积分添加失败"
+    end
+    return true, false
+end
 
 return item_mgr

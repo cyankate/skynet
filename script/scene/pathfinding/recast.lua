@@ -1,5 +1,6 @@
 local skynet = require "skynet"
 local log = require "log"
+local service_ctx = require "runtime.service_ctx"
 
 -- 加载底层C库
 local recast_c = require "recast"
@@ -30,8 +31,11 @@ RecastAPI.DEFAULT_CONFIG = {
 }
 
 -- 导航网格缓存
-local navmesh_cache = {}
-local path_cache = {}
+local ctx = service_ctx.get("scene.pathfinding.recast", {})
+ctx.navmesh_cache = ctx.navmesh_cache or {}
+ctx.path_cache = ctx.path_cache or {}
+local navmesh_cache = ctx.navmesh_cache
+local path_cache = ctx.path_cache
 
 -- 初始化系统
 function RecastAPI.init()
@@ -236,6 +240,8 @@ function RecastAPI.cleanup()
     -- 清理缓存
     navmesh_cache = {}
     path_cache = {}
+    ctx.navmesh_cache = navmesh_cache
+    ctx.path_cache = path_cache
     
     -- 清理C库资源
     recast_c.cleanup()

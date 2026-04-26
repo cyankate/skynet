@@ -7,11 +7,16 @@ local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
 local user_mgr = require "user_mgr"
 local tilent_mgr = require "system.tilent.tilent_mgr"
+local service_ctx = require "runtime.service_ctx"
 
 local agent_id = tonumber(...)
 -- 多账号支持
-local accounts = {}  -- account_key => {account_data, player_id}
-local logout_timers = {} -- account_key => timer_function
+local ctx = service_ctx.get("agent.agent", {})
+ctx.accounts = ctx.accounts or {}  -- account_key => {account_data, player_id}
+ctx.logout_timers = ctx.logout_timers or {} -- account_key => timer_function
+
+local accounts = ctx.accounts
+local logout_timers = ctx.logout_timers
 
 -- 定时器函数
 local function start_timer()

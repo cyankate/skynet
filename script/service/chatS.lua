@@ -4,6 +4,7 @@ require "skynet.manager"
 local service_wrapper = require "utils.service_wrapper"
 local protocol_handler = require "protocol_handler"
 local rate_limiter = require "chat.rate_limiter"
+local service_ctx = require "runtime.service_ctx"
 
 -- 导入频道相关模块
 local channel_mgr = require "chat.channel_mgr"
@@ -11,18 +12,24 @@ local WorldChannel = require "chat.world_channel"
 local GuildChannel = require "chat.guild_channel"
 local PrivateChannel = require "chat.private_channel"
 
-local limiters = nil
+local ctx = service_ctx.get("chat", {})
+
+
+local function get_limiters()
+    if not ctx.limiters then
+        ctx.limiters = rate_limiter.create_limiters()
+    end
+    return ctx.limiters
+end
 
 -- 初始化服务
 function CMD.init()
-    -- 初始化限流器
-    limiters = rate_limiter.create_limiters()
-    
+    get_limiters()
     -- 初始化频道管理器
     channel_mgr.init()
     
     -- 创建世界频道
-    local world_channel_id = channel_mgr.create_channel(WorldChannel, 1, "世界频道", CHANNEL_TYPE.PUBLIC)
+    local world_channel_id = channel_mgr.create_channel(WorldChannel, 1, "世界频道", channel_mgr.CHANNEL_TYPE.PUBLIC)
     channel_mgr.cache:get(world_channel_id)
 
     -- -- 创建系统频道
@@ -88,6 +95,7 @@ end
 
 -- 发送频道消息
 function CMD.send_channel_message(channel_id, player_id, content)
+    local limiters = get_limiters()
     -- 全局限流检查
     if not limiters.global.channel:try_acquire() then
         return false, "Global rate limit exceeded for channel messages"
@@ -108,6 +116,7 @@ end
 
 -- 发送私聊消息
 function CMD.send_private_message(player_id, to_player_id, content)
+    local limiters = get_limiters()
     -- 全局限流检查
     if not limiters.global.private:try_acquire() then
         return false, "Global rate limit exceeded for private messages"
@@ -124,6 +133,7 @@ end
 
 -- 获取频道历史消息
 function CMD.get_channel_history(channel_id, count, player_id)
+    local limiters = get_limiters()
     -- 全局限流检查
     if not limiters.global.history:try_acquire() then
         return nil, "Global rate limit exceeded for history queries"
@@ -140,6 +150,7 @@ end
 
 -- 获取私聊历史消息
 function CMD.get_private_history(player_id, other_player_id)
+    local limiters = get_limiters()
     -- 全局限流检查
     if not limiters.global.history:try_acquire() then
         return nil, "Global rate limit exceeded for history queries"

@@ -7,19 +7,27 @@ local sprotoloader = require "sprotoloader"
 local tableUtils = require "utils.tableUtils"
 local log = require "log"
 local proto_builder = require "utils.proto_builder"
+local service_ctx = require "runtime.service_ctx"
+
+local ctx = service_ctx.get("gate.gate", {})
+ctx.connection = ctx.connection or {}
+ctx.fd_player_map = ctx.fd_player_map or {}
+ctx.player_fd_map = ctx.player_fd_map or {}
+ctx.pending_responses = ctx.pending_responses or {}
+ctx.message_count = ctx.message_count or {}
 
 local host
 local sender
-local connection = {}
+local connection = ctx.connection
 
 -- 添加映射表
-local fd_player_map = {} -- fd => player_id
-local player_fd_map = {} -- player_id => fd
+local fd_player_map = ctx.fd_player_map -- fd => player_id
+local player_fd_map = ctx.player_fd_map -- player_id => fd
 
 -- sproto RPC 响应缓存：fd -> session -> response_func
 -- 当收到客户端请求时，由 host:dispatch 生成 response_func，保存在这里；
 -- 业务处理完后，通过 CMD.rpc_response 再由 gateS 调用 response_func 打包并发送给客户端。
-local pending_responses = {}  -- pending_responses[fd][session] = response_func
+local pending_responses = ctx.pending_responses  -- pending_responses[fd][session] = response_func
 
 skynet.register_protocol {
 	name = "client",
@@ -28,7 +36,7 @@ skynet.register_protocol {
 
 local handler = {}
 
-local message_count = {}
+local message_count = ctx.message_count
 
 -- 指令处理
 local CMD = {}

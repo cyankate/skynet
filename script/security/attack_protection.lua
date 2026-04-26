@@ -1,21 +1,25 @@
 local skynet = require "skynet"
 local log = require "log"
+local service_ctx = require "runtime.service_ctx"
 
-local attack_protection = {}
+local attack_protection = service_ctx.get("security.attack_protection", {})
 
 -- 频率限制记录
-local rate_limit_record = {}
+attack_protection.rate_limit_record = attack_protection.rate_limit_record or {}
+local rate_limit_record = attack_protection.rate_limit_record
 
 -- IP黑名单
-local ip_blacklist = {}
+attack_protection.ip_blacklist = attack_protection.ip_blacklist or {}
+local ip_blacklist = attack_protection.ip_blacklist
 
 -- 请求类型限制配置
-local REQUEST_LIMITS = {
+attack_protection.REQUEST_LIMITS = attack_protection.REQUEST_LIMITS or {
     login = { count = 1000, window = 60 },     -- 60秒内最多5次登录尝试
     register = { count = 300, window = 300 }, -- 5分钟内最多3次注册尝试
     payment = { count = 10, window = 3600 },-- 1小时内最多10次支付请求
     default = { count = 10000, window = 60 }  -- 默认60秒内最多100次请求
 }
+local REQUEST_LIMITS = attack_protection.REQUEST_LIMITS
 
 -- 频率限制检查（ip + uid + action基础上的限制）
 function attack_protection.check_rate_limit(ip, uid, action)

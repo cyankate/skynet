@@ -4,9 +4,12 @@ local log = require "log"
 local event_def = require "define/event_def"
 require "skynet.manager"
 local service_wrapper = require "utils.service_wrapper"
+local service_ctx = require "runtime.service_ctx"
 
 -- 事件订阅表
-local subscribers = {}
+local ctx = service_ctx.get("event.event", {})
+ctx.subscribers = ctx.subscribers or {}
+local subscribers = ctx.subscribers
 
 -- 注册事件监听
 function CMD.subscribe(event_name, service_address)

@@ -1,11 +1,14 @@
 local skynet = require "skynet"
 local Scene = require "scene.scene"
 local log = require "log"
+local service_ctx = require "runtime.service_ctx"
 
 local scene_mgr = {}
 
 -- 场景列表
-local scenes = {}  -- scene_id => scene_obj
+local ctx = service_ctx.get("scene.scene_mgr", {})
+ctx.scenes = ctx.scenes or {}  -- scene_id => scene_obj
+local scenes = ctx.scenes
 
 -- 场景更新间隔(秒)
 local UPDATE_INTERVAL = 0.1

@@ -1,13 +1,19 @@
 local skynet = require "skynet"
 require "skynet.manager"
+local service_ctx = require "runtime.service_ctx"
 
-local last_hour	= -1
+local ctx = service_ctx.get("logger.logger", {})
+ctx.last_hour = ctx.last_hour or -1
+ctx.log_file = ctx.log_file or nil
+ctx.service_name_map = ctx.service_name_map or {}
+
+local last_hour	= ctx.last_hour
 local log_path  = skynet.getenv("logpath")
-local log_file  = nil
+local log_file  = ctx.log_file
 local log_group = skynet.getenv("loggroup")
 local is_daemon = skynet.getenv("daemon") ~= nil
 
-local service_name_map = {}
+local service_name_map = ctx.service_name_map
 
 local function check_exists(path)
 	if not os.rename(path, path) then
@@ -36,6 +42,8 @@ local function open_file(date)
 
 	log_file = f
 	last_hour = date.hour
+	ctx.log_file = log_file
+	ctx.last_hour = last_hour
 end
 
 local function log_time(date)

@@ -1,6 +1,7 @@
 local skynet = require "skynet"
-local match_mgr = {}
 local default_match_rules = require "match.match_rules"
+local service_ctx = require "runtime.service_ctx"
+local match_mgr = service_ctx.get("match.match_mgr", {})
 
 --[[
 匹配管理器（通用流程层）
@@ -27,13 +28,13 @@ idle -> matching -> pending_confirm -> idle
 - shutdown()
 ]]
 
-match_mgr.match_queues = {} -- queue_key -> { players = {}, options = {} }
-match_mgr.player_match_map = {} -- player_id -> queue_key
-match_mgr.pending_matches = {} -- match_id -> { players, options, confirms, expire_at }
-match_mgr.player_pending_match = {} -- player_id -> match_id
-match_mgr.next_match_id = 0
-match_mgr.confirm_timeout_sec = 20
-match_mgr.match_rules = default_match_rules
+match_mgr.match_queues = match_mgr.match_queues or {} -- queue_key -> { players = {}, options = {} }
+match_mgr.player_match_map = match_mgr.player_match_map or {} -- player_id -> queue_key
+match_mgr.pending_matches = match_mgr.pending_matches or {} -- match_id -> { players, options, confirms, expire_at }
+match_mgr.player_pending_match = match_mgr.player_pending_match or {} -- player_id -> match_id
+match_mgr.next_match_id = match_mgr.next_match_id or 0
+match_mgr.confirm_timeout_sec = match_mgr.confirm_timeout_sec or 20
+match_mgr.match_rules = match_mgr.match_rules or default_match_rules
 
 function match_mgr.init()
     -- 当前为内存队列，无需额外初始化

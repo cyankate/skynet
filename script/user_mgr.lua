@@ -1,10 +1,11 @@
 local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
+local service_ctx = require "runtime.service_ctx"
 
-local M = {}
-
-local player_map = {}
+local M = service_ctx.get("agent.user_mgr", {})
+M.player_map = M.player_map or {}
+local player_map = M.player_map
 
 function M.add_player_obj(_player_id, _player_obj)
     if player_map[_player_id] then

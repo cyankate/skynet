@@ -1,9 +1,12 @@
 -- 服务端包装层：在共享 builder 基础上扩展 datacenter 同步与跨服务查询。
 local proto_builder = require "protocol.proto_builder"
+local service_ctx = require "runtime.service_ctx"
 
 local datacenter_available = false
 local datacenter = nil
-local schema_cache = {}
+local ctx = service_ctx.get("utils.proto_builder", {})
+ctx.schema_cache = ctx.schema_cache or {}
+local schema_cache = ctx.schema_cache
 pcall(function()
     datacenter = require "skynet.datacenter"
     datacenter_available = true
@@ -84,6 +87,7 @@ end
 
 function proto_builder.clear_schemas()
     schema_cache = {}
+    ctx.schema_cache = schema_cache
 end
 
 function proto_builder.get_send_to_client_schema(protocol_name)

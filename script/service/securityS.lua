@@ -3,6 +3,7 @@ local skynet = require "skynet"
 local log = require "log"
 require "skynet.manager"
 local service_wrapper = require "utils.service_wrapper"
+local service_ctx = require "runtime.service_ctx"
 
 -- 安全模块
 local encrypt = require "security.encrypt"
@@ -10,7 +11,8 @@ local token = require "security.token"
 local attack_protection = require "security.attack_protection"
 local validator = require "security.validator"
 
-local security_config = {
+local ctx = service_ctx.get("security.security", {})
+ctx.security_config = ctx.security_config or {
     token_secret = "default_secret_key_change_me_in_production",
     token_expire = 86400, -- 24小时
     rate_limit_enabled = true,
@@ -19,6 +21,7 @@ local security_config = {
     ip_blacklist_enabled = true,
     cleanup_interval = 300, -- 5分钟
 }
+local security_config = ctx.security_config
 
 -- 初始化配置
 local function init_config()
