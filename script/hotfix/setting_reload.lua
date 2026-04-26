@@ -1,27 +1,57 @@
 local M = {}
 
+local function replace_inplace(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then
+        return src
+    end
+
+    for k, _ in pairs(dst) do
+        if src[k] == nil then
+            dst[k] = nil
+        end
+    end
+
+    for k, v in pairs(src) do
+        if type(dst[k]) == "table" and type(v) == "table" then
+            replace_inplace(dst[k], v)
+        else
+            dst[k] = v
+        end
+    end
+
+    setmetatable(dst, getmetatable(src))
+    return dst
+end
+
 function M.update()
     local invalidated = {}
     local reloaded = {}
     local failed = {}
+    local old_modules = {}
 
-    -- 先清 codecache，确保 require 命中最新文件
     local ok_codecache, codecache = pcall(require, "skynet.codecache")
     if ok_codecache and codecache and codecache.clear then
         pcall(codecache.clear)
     end
 
-    for mod_name, _ in pairs(package.loaded) do
+    for mod_name, mod_ref in pairs(package.loaded) do
         if type(mod_name) == "string" and mod_name:match("^setting%.") then
+            old_modules[mod_name] = mod_ref
             package.loaded[mod_name] = nil
             table.insert(invalidated, mod_name)
         end
     end
 
-    -- 立即重载，避免仅清缓存导致“看起来没生效”
     for _, mod_name in ipairs(invalidated) do
         local ok, result = pcall(require, mod_name)
         if ok then
+            local old_ref = old_modules[mod_name]
+            if type(old_ref) == "table" and type(result) == "table" then
+                replace_inplace(old_ref, result)
+                package.loaded[mod_name] = old_ref
+            else
+                package.loaded[mod_name] = result
+            end
             table.insert(reloaded, mod_name)
         else
             failed[#failed + 1] = {
