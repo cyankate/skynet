@@ -8,6 +8,8 @@ function CMD.help()
 热更新系统命令:
   update <service> <file> [args...]  - 对指定服务应用热更新文件
   update_all <file> [args...]        - 对所有已注册服务应用热更新文件
+  reload_loaded <service>            - 对指定服务自动热更当前已加载代码
+  reload_all_code                    - 对所有已注册服务自动热更当前已加载代码
   status [service]                   - 查看热更新状态
   list                               - 列出可用的热更新模块
   stats                              - 显示热更新统计信息
@@ -81,6 +83,69 @@ function CMD.update_all(hotfix_name, ...)
         end
     end
     
+    return report
+end
+
+-- 对指定服务自动热更已加载代码
+function CMD.reload_loaded(service_name)
+    if not service_name then
+        return "用法: reload_loaded <service>"
+    end
+
+    local hotfix_service = skynet.localname(".hotfix")
+    if not hotfix_service then
+        return "错误: 热更新服务未启动"
+    end
+
+    local ok, res = skynet.call(hotfix_service, "lua", "reload_loaded_code", service_name)
+    if not ok then
+        return string.format("失败: 服务 %s 自动热更失败: %s", service_name, tostring(res))
+    end
+
+    if type(res) == "table" then
+        return string.format("成功: 服务 %s 自动热更完成，重载 %d/%d，失败 %d",
+            service_name,
+            tonumber(res.reloaded) or 0,
+            tonumber(res.total) or 0,
+            type(res.failed) == "table" and #res.failed or 0
+        )
+    end
+    return string.format("成功: 服务 %s 自动热更完成", service_name)
+end
+
+-- 对所有服务自动热更已加载代码
+function CMD.reload_all_code()
+    local hotfix_service = skynet.localname(".hotfix")
+    if not hotfix_service then
+        return "错误: 热更新服务未启动"
+    end
+
+    local ok, result = skynet.call(hotfix_service, "lua", "reload_loaded_code_batch", {"all"})
+    if type(result) ~= "table" then
+        return string.format("错误: 自动热更返回结果异常: %s", tostring(result))
+    end
+
+    local success_count = 0
+    local total_count = 0
+    for _, info in pairs(result) do
+        total_count = total_count + 1
+        if info.success then
+            success_count = success_count + 1
+        end
+    end
+
+    local report = string.format("自动热更结果: %d/%d 个服务成功\n", success_count, total_count)
+    if success_count < total_count then
+        report = report .. "失败的服务:\n"
+        for service_name, info in pairs(result) do
+            if not info.success then
+                report = report .. string.format("  %s: %s\n", service_name, tostring(info.result))
+            end
+        end
+    end
+    if not ok then
+        report = report .. "(存在失败服务，请根据上面列表排查)\n"
+    end
     return report
 end
 

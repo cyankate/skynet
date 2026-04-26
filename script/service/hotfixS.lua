@@ -263,6 +263,70 @@ function CMD.batch_update(services, module_name, ...)
     return all_success, results
 end
 
+-- 对指定服务执行“已加载代码自动热更”
+function CMD.reload_loaded_code(service_name)
+    if not service_name then
+        return false, "服务名不能为空"
+    end
+
+    local std_name = service_name
+    if service_name:sub(1,1) == "." then
+        std_name = service_name:sub(2)
+    end
+
+    local service_ok, service_err = verify_service(std_name)
+    if not service_ok then
+        return false, service_err
+    end
+
+    local target_addr = registered_services[std_name].full_name
+    local ok, result, err = pcall(skynet.call, target_addr, "lua", "hotfix_reload_loaded")
+
+    if not ok then
+        record_status(std_name, false, nil, tostring(result))
+        return false, "发送自动热更请求失败: " .. tostring(result)
+    end
+
+    if not result then
+        record_status(std_name, false, nil, tostring(err or "未知错误"))
+        return false, err or "自动热更失败"
+    end
+
+    record_status(std_name, true, "自动热更成功")
+    return true, err
+end
+
+-- 对服务列表执行“已加载代码自动热更”
+function CMD.reload_loaded_code_batch(services)
+    if type(services) ~= "table" then
+        return false, "服务列表必须是一个表"
+    end
+
+    local results = {}
+    local all_success = true
+
+    if services[1] == "all" then
+        local registered = {}
+        for name, _ in pairs(registered_services) do
+            table.insert(registered, name)
+        end
+        services = registered
+    end
+
+    for _, service_name in ipairs(services) do
+        local ok, result = CMD.reload_loaded_code(service_name)
+        results[service_name] = {
+            success = ok,
+            result = result,
+        }
+        if not ok then
+            all_success = false
+        end
+    end
+
+    return all_success, results
+end
+
 -- 获取热更新统计信息
 function CMD.get_statistics()
     local stats = {

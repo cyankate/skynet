@@ -58,4 +58,60 @@ _G.CMD = {
     after_hotfix = function(hotfix_name)
         --log.info("热更新后执行")
     end,
+
+    -- 自动重载当前服务里已加载的 Lua 代码模块（仅 script 目录）
+    hotfix_reload_loaded = function()
+        local function is_project_lua_module(module_name)
+            if type(module_name) ~= "string" then
+                return false
+            end
+            local file_path = package.searchpath(module_name, package.path)
+            if not file_path then
+                return false
+            end
+            local normalized = file_path:gsub("\\", "/")
+            return normalized:find("/script/", 1, true) ~= nil
+        end
+
+        local modules = {}
+        for module_name, loaded in pairs(package.loaded) do
+            if loaded ~= nil and is_project_lua_module(module_name) then
+                modules[#modules + 1] = module_name
+            end
+        end
+        table.sort(modules)
+
+        local reloaded = {}
+        local failed = {}
+
+        for _, module_name in ipairs(modules) do
+            local old_module = package.loaded[module_name]
+            package.loaded[module_name] = nil
+            local ok, result = pcall(require, module_name)
+            if ok then
+                reloaded[#reloaded + 1] = module_name
+            else
+                -- 失败时恢复旧模块，避免服务进入不可用状态
+                package.loaded[module_name] = old_module
+                failed[#failed + 1] = {
+                    module = module_name,
+                    error = tostring(result),
+                }
+            end
+        end
+
+        if #failed > 0 then
+            return false, {
+                total = #modules,
+                reloaded = #reloaded,
+                failed = failed,
+            }
+        end
+
+        return true, {
+            total = #modules,
+            reloaded = #reloaded,
+            failed = {},
+        }
+    end,
 }
