@@ -2,10 +2,18 @@
 package.path = package.path .. ";./script/?.lua"
 skynet = require "skynet"
 log = require "log"
+local codecache = require "skynet.codecache"
 protocol_handler = require "protocol_handler"
 service_wrapper = require "utils.service_wrapper"
 require "skynet.manager"
 tableUtils = require "utils.tableUtils"
+
+local function clear_code_cache()
+    local ok, err = pcall(codecache.clear)
+    if not ok then
+        log.warning("codecache.clear failed: %s", tostring(err))
+    end
+end
 
 _G.CMD = {
     -- 加载并执行热更新文件
@@ -14,6 +22,9 @@ _G.CMD = {
         
         local hotfix_path = "hotfix." .. hotfix_name
         
+        -- 清除代码缓存，确保读取最新源码
+        clear_code_cache()
+
         -- 清除可能的旧缓存
         package.loaded[hotfix_path] = nil
         
@@ -83,6 +94,8 @@ _G.CMD = {
 
         local reloaded = {}
         local failed = {}
+        -- 批量重载前清理一次代码缓存
+        clear_code_cache()
 
         for _, module_name in ipairs(modules) do
             local old_module = package.loaded[module_name]
