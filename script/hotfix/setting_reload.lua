@@ -5,6 +5,12 @@ function M.update()
     local reloaded = {}
     local failed = {}
 
+    -- 先清 codecache，确保 require 命中最新文件
+    local ok_codecache, codecache = pcall(require, "skynet.codecache")
+    if ok_codecache and codecache and codecache.clear then
+        pcall(codecache.clear)
+    end
+
     for mod_name, _ in pairs(package.loaded) do
         if type(mod_name) == "string" and mod_name:match("^setting%.") then
             package.loaded[mod_name] = nil

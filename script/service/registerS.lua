@@ -1,25 +1,9 @@
-local skynet = require "skynet"
-local log = require "log"
-local service_ctx = require "runtime.service_ctx"
+local register_service = require "register.register_service"
 
-local ctx = service_ctx.get("register.register", {})
-ctx.player_id2agent = ctx.player_id2agent or {}
-local player_id2agent = ctx.player_id2agent
-
-function CMD.register(player_id, agent)
-    player_id2agent[player_id] = agent
-end 
-
-function CMD.unregister(player_id)
-    player_id2agent[player_id] = nil
-end
-
-function CMD.get_agent(player_id)
-    return player_id2agent[player_id]
-end
+CMD = setmetatable({}, { __index = register_service })
 
 local function main()
-    
+    CMD.init()
 end
 
 service_wrapper.create_service(main, {

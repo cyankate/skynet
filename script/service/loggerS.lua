@@ -1,82 +1,15 @@
 local skynet = require "skynet"
 require "skynet.manager"
-local service_ctx = require "runtime.service_ctx"
-
-local ctx = service_ctx.get("logger.logger", {})
-ctx.last_hour = ctx.last_hour or -1
-ctx.log_file = ctx.log_file or nil
-ctx.service_name_map = ctx.service_name_map or {}
-
-local last_hour	= ctx.last_hour
-local log_path  = skynet.getenv("logpath")
-local log_file  = ctx.log_file
-local log_group = skynet.getenv("loggroup")
-local is_daemon = skynet.getenv("daemon") ~= nil
-
-local service_name_map = ctx.service_name_map
-
-local function check_exists(path)
-	if not os.rename(path, path) then
-		os.execute("mkdir " .. path)
-	end
-end
-
-local function file_path(date)
-	return string.format("%s%s_%04d-%02d-%02d-%02d.log", log_path, log_group, 
-		date.year, date.month, date.day, date.hour)
-end
-
-local function open_file(date)
-	check_exists(log_path)
-
-	if log_file then
-		log_file:close()
-		log_file = nil
-	end
-
-	local f, e = io.open(file_path(date), "a")
-	if not f then
-		print("logger error:", tostring(e))
-		return
-	end
-
-	log_file = f
-	last_hour = date.hour
-	ctx.log_file = log_file
-	ctx.last_hour = last_hour
-end
-
-local function log_time(date)
-	return string.format("%04d-%02d-%02d %02d:%02d:%02d.%02d", date.year, date.month, date.day, date.hour, date.min, date.sec, 
-		math.floor(skynet.time()*100%100))
-end
+local logger_service = require "logger.logger_service"
 
 local CMD = {}
 
 function CMD.logging(source, type, color, str)
-	local date = os.date("*t")
-	local service_name = service_name_map[source]
-	if not service_name then
-		service_name = string.format(":%08x", source)
-	end
-	str = string.format("[%s][%s][%s]%s", log_time(date), type, service_name, str)
-	if color ~= "" then
-		str = color .. str .. "\27[0m"
-	end
-	if not log_file or date.hour ~= last_hour then
-		open_file(date)
-	end
-
-	log_file:write(str .. '\n')
-	log_file:flush()
-	
-	if not is_daemon then
-		print(str)
-	end
+	logger_service.logging(source, type, color, str)
 end
 
 function CMD.register_name(source, name)
-	service_name_map[source] = name
+	logger_service.register_name(source, name)
 end
 
 skynet.register_protocol {
@@ -99,6 +32,7 @@ skynet.register_protocol {
 }
 
 skynet.start(function()
+	logger_service.init()
 	skynet.register(".logger")
 	
     skynet.dispatch("lua", function(_, source, cmd, ...)

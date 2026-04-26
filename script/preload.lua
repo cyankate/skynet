@@ -94,18 +94,24 @@ _G.CMD = {
 
         local reloaded = {}
         local failed = {}
+        local old_modules = {}
         -- 批量重载前清理一次代码缓存
         clear_code_cache()
 
+        -- 第一阶段：统一失效（避免顺序重载时依赖引用旧模块）
         for _, module_name in ipairs(modules) do
-            local old_module = package.loaded[module_name]
+            old_modules[module_name] = package.loaded[module_name]
             package.loaded[module_name] = nil
+        end
+
+        -- 第二阶段：统一加载
+        for _, module_name in ipairs(modules) do
             local ok, result = pcall(require, module_name)
             if ok then
                 reloaded[#reloaded + 1] = module_name
             else
                 -- 失败时恢复旧模块，避免服务进入不可用状态
-                package.loaded[module_name] = old_module
+                package.loaded[module_name] = old_modules[module_name]
                 failed[#failed + 1] = {
                     module = module_name,
                     error = tostring(result),
