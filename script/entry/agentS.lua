@@ -1,11 +1,13 @@
 local service_wrapper = require "utils.service_wrapper"
-local agent_service = require "agent.agent_service"
+local S = require "service.agent_service"
 
 local agent_id = tonumber(...)
-CMD = setmetatable({}, { __index = agent_service })
+CMD = setmetatable({}, { __index = S })
 
 local function main()
-    CMD.init()
+    if S.init then
+        S.init()
+    end
 end
 
 service_wrapper.create_service(main, {

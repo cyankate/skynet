@@ -1235,7 +1235,10 @@ local function start_http_server()
     }
 end
 
--- 启动服务
-skynet.start(function()
+local M = {}
+
+function M.init()
     start_http_server()
-end)
+end
+
+return M

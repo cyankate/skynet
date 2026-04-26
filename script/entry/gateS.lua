@@ -1,9 +1,9 @@
 local gateserver = require "snax.gateserver"
 local skynet = require "skynet"
-local gate_service = require "gate.gate_service"
+local gate_service = require "service.gate_service"
+
 local handler = {}
 
--- 向客户端发送消息
 function handler.open(conf)
     return gate_service.handler_open(conf)
 end
@@ -29,12 +29,10 @@ function handler.warning(fd, size)
     return gate_service.handler_warning(fd, size)
 end
 
--- 处理指令
 function handler.command(cmd, source, ...)
     return gate_service.handler_command(cmd, source, ...)
 end
 
 gateserver.start(handler)
-
 skynet.name(".gate", skynet.self())
 skynet.send(".logger", "lua", "register_name", "gate")

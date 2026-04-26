@@ -6,10 +6,10 @@ local log = require "log"
 local table_schema = require "sql.table_schema"
 require "skynet.manager"
 local IDGenerator = require "utils.id_generator"
-local service_wrapper = require "utils.service_wrapper"
 local service_ctx = require "runtime.service_ctx"
 
 local ctx = service_ctx.get("db.db", {})
+local CMD = {}
 ctx.pool = ctx.pool or {}
 local pool = ctx.pool
 local POOL_SIZE = 10
@@ -1165,7 +1165,7 @@ local function export_all_table_schema()
     return export_to_file(all_configs)
 end
 
-service_wrapper.create_service(function()
+function CMD.init()
     skynet.name(".db", skynet.self())
     connect()
     local ok, err = apply_migrations()
@@ -1177,7 +1177,6 @@ service_wrapper.create_service(function()
         id_generator = IDGenerator.new()
         ctx.id_generator = id_generator
     end
-end, {
-    name = "db",
-    register_hotfix = false,
-})
+end
+
+return CMD
