@@ -110,6 +110,7 @@ function M.load(account_key)
             info = data.info,
         }
         account.player_id = data.player_id
+        log.info("load player, account_key=%s, player_id=%d", account_key, data.player_id)
     else
         local player_id = skynet.call(db, "lua", "gen_id", "player")
         player_data = {
@@ -125,6 +126,7 @@ function M.load(account_key)
         account.player_id = player_id
         account.account_data.players[player_id] = { player_id = player_id, player_name = player_data.player_name }
         skynet.send(skynet.localname(".login"), "lua", "account_update", account_key, account.account_data)
+        log.info("create player, account_key=%s, player_id=%d", account_key, player_id)
     end
     if not player_data or account_key ~= player_data.account_key then
         return false
@@ -162,6 +164,7 @@ function M.reconnect(account_key, fd)
     if not player then
         return false, "Player not found"
     end
+    log.info("reconnect, fd=%d, account_key=%s, player_id=%d", fd, account_key, account.player_id)
     skynet.send(skynet.localname(".gate"), "lua", "register_player", fd, account.player_id)
     M.handle_login(player)
     if player.loaded_ then
@@ -191,6 +194,7 @@ function M.kicked_out(account_key, new_fd)
     if player.loaded_ then
         player:save_to_db()
     end
+    log.info("kicked_out, new_fd=%d, account_key=%s, player_id=%d", new_fd, account_key, account.player_id)
     skynet.send(skynet.localname(".gate"), "lua", "register_player", new_fd, account.player_id)
     M.send_player_data(player)
     return true
@@ -205,6 +209,7 @@ function M.disconnect(account_key)
     if not player then
         return false, "Player not found"
     end
+    log.info("disconnect, account_key=%s, player_id=%d", account_key, account.player_id)
     local matchS = skynet.localname(".match")
     if matchS then
         skynet.send(matchS, "lua", "cancel_match", account.player_id)
