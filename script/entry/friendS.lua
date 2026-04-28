@@ -1,17 +1,9 @@
-local service_wrapper = require "utils.service_wrapper"
-local S = require "service.friend_service"
+local bootstrap = require "entry._bootstrap"
 
-CMD = setmetatable({}, { __index = S })
-
-local function main()
-    if S.init then
-        S.init()
-    end
-end
-
-service_wrapper.create_service(main, {
+bootstrap("service.friend_service", {
     name = "friend",
     custom_stats = function()
+        local S = require "service.friend_service"
         return S.custom_stats()
     end,
 })
