@@ -1181,16 +1181,25 @@ local function start_http_server()
         -- 处理请求
         local code, url, method, header, body = httpd.read_request(interface.read, config.server.max_request_size)
         if not code then
-            log_error("Failed to read request", {fd = id})
-            error_response(id, interface, 500, "Internal Server Error")
+            -- 常见场景是客户端提前断开，不按服务内部错误处理
+            log.warning("[http] read_request closed, fd=%s reason=%s", tostring(id), tostring(url))
+            if interface.close then
+                pcall(interface.close)
+            end
+            socket.close(id)
             return
         end
         if code ~= 200 then
             error_response(id, interface, code, "Internal Server Error")
-        else 
+        else
             -- 处理请求
             handle_request(id, method, url, header, body, interface)
-        end 
+        end
+
+        if interface.close then
+            pcall(interface.close)
+        end
+        socket.close(id)
     end)
     
     -- 启动健康检查
