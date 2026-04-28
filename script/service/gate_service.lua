@@ -83,6 +83,7 @@ function M.close_client(fd)
     if not c then
         return false
     end
+    log.info("client closed, fd=%d, account_key=%s", fd, c.account_key)
     socketdriver.close(fd)
     connection[fd] = nil
     return true
@@ -265,6 +266,7 @@ function M.handler_message(fd, msg, sz)
 end
 
 function M.handler_connect(fd, addr)
+    log.info("client connected, fd=%d, addr=%s", fd, addr)
     connection[fd] = { fd = fd, ip = addr }
 end
 
@@ -273,6 +275,7 @@ function M.handler_disconnect(fd)
     if c and c.account_key then
         local loginS = skynet.localname(".login")
         skynet.send(loginS, "lua", "disconnect", c.account_key)
+        log.info("client disconnected, fd=%d, account_key=%s", fd, c.account_key)
     end
     connection[fd] = nil
 end
