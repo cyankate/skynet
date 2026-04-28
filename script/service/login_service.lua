@@ -99,9 +99,8 @@ function CLIENT.login(fd, msg, session)
         protocol_handler.rpc_response(fd, session, { success = false, player_id = 0, player_name = "" })
         return
     end
-
+    log.info("login request, fd=%d, account_key=%s", fd, account_key)
     protocol_handler.rpc_response(fd, session, { success = true, player_id = 0, player_name = "test" })
-
     local gateS = skynet.localname(".gate")
     local ainfo = account_info[account_key]
     if ainfo and ainfo.agent then
