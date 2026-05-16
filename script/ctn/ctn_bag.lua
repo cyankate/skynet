@@ -146,18 +146,30 @@ function CtnBag:add_item(item_id, count)
             end
         end
     end
-    -- 寻找空格子
-    for slot = 1, self.config_.max_slots do
-        if self:is_slot_empty(slot) then
-            self.slots_[slot] = {
-                item_id = item_id,
-                count = count,
-            }
-            self:set_dirty()
-            return true, slot
+    -- 寻找空格子（单格数量不超过 max_stack）
+    local max_stack = tonumber(self.config_.max_stack) or BAG_CONFIG.MAX_STACK
+    while count > 0 do
+        local placed = false
+        for slot = 1, self.config_.max_slots do
+            if self:is_slot_empty(slot) then
+                local put = math.min(count, max_stack)
+                self.slots_[slot] = {
+                    item_id = item_id,
+                    count = put,
+                }
+                count = count - put
+                placed = true
+                if count <= 0 then
+                    self:set_dirty()
+                    return true, slot
+                end
+            end
+        end
+        if not placed then
+            break
         end
     end
-    
+
     return false, "背包已满"
 end
 

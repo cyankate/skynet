@@ -61,6 +61,13 @@ local c2s_builder = builder.new()
             count = "integer",
         }
     })
+
+    :protocol("cost_item", 653, {
+        request = {
+            item_id = "integer",
+            count = "integer",
+        }
+    })
     
     :protocol("change_name", 6, {
         request = {
@@ -866,17 +873,20 @@ local s2c_builder = builder.new()
         }
     })
 
+    :type("item_info", {
+        item_id = "integer",
+        count = "integer",
+    })
+
     :type("item_change_info", {
         item_id = "integer",
         delta = "integer",
         count = "integer",
     })
 
-    :protocol("add_item_response", 650, {
+    :protocol("bag_item_list_notify", 653, {
         request = {
-            result = "integer",
-            message = "string",
-            changes = "*item_change_info",
+            items = "*item_info",
         }
     })
 
@@ -899,11 +909,6 @@ local s2c_builder = builder.new()
         status = "integer",         -- 邮件状态:0=未读,1=已读
         items_status = "integer",   -- 附件状态:0=未领取,1=已领取
         items = "*item_info",
-    })
-    
-    :type("item_info", {
-        item_id = "integer",
-        count = "integer",
     })
     
     :protocol("mail_list_response", 330, {

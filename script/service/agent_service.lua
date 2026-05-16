@@ -10,6 +10,7 @@ local user_mgr = require "user_mgr"
 local tilent_mgr = require "system.tilent.tilent_mgr"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
+local item_mgr = require "system.item_mgr"
 local service_ctx = require "runtime.service_ctx"
 
 local M = service_ctx.get("agent.agent", {})
@@ -63,6 +64,7 @@ function M.send_player_data(player)
         player_id = player.player_id_,
         player_name = player.player_name_,
     })
+    item_mgr.sync_bag_list_to_client(player)
     tilent_mgr.sync_to_client(player, "login")
 end
 

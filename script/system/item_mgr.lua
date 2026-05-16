@@ -279,6 +279,52 @@ function item_mgr.get_item_count(player, item_id)
     return get_count(player, item_id)
 end
 
+-- 按 item_id 聚合后的物品列表（不含槽位，供客户端展示）
+function item_mgr.build_item_list(player)
+    local bag = player:get_ctn("bag")
+    if not bag then
+        return {}
+    end
+
+    local tally = {}
+    for _, item in pairs(bag.slots_ or {}) do
+        local item_id = to_int(item.item_id, 0)
+        local count = to_int(item.count, 0)
+        if item_id > 0 and count > 0 then
+            tally[item_id] = (tally[item_id] or 0) + count
+        end
+    end
+    for item_id_raw, count_raw in pairs(bag.virtual_items_ or {}) do
+        local item_id = to_int(item_id_raw, 0)
+        local count = to_int(count_raw, 0)
+        if item_id > 0 and count > 0 then
+            tally[item_id] = (tally[item_id] or 0) + count
+        end
+    end
+
+    local items = {}
+    for item_id, count in pairs(tally) do
+        table.insert(items, {
+            item_id = item_id,
+            count = count,
+        })
+    end
+    table.sort(items, function(a, b)
+        return a.item_id < b.item_id
+    end)
+    return items
+end
+
+function item_mgr.sync_bag_list_to_client(player)
+    if not player or not player.player_id_ then
+        return false
+    end
+    protocol_handler.send_to_player(player.player_id_, "bag_item_list_notify", {
+        items = item_mgr.build_item_list(player),
+    })
+    return true
+end
+
 
 virtual_add_handlers.guild_point = function(player, item_id, count, ext)
     local guildS = skynet.localname(".guild")

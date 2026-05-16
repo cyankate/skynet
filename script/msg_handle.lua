@@ -8,32 +8,60 @@ local instance_rules = require "match.instance_rules"
 local tilent_mgr = require "system.tilent.tilent_mgr"
 local item_mgr = require "system.item_mgr"
 
+local function normalize_item_msg(_msg)
+    if type(_msg) ~= "table" then
+        return nil, nil, "参数无效"
+    end
+    local item_id = tonumber(_msg.item_id)
+    local count = tonumber(_msg.count)
+    if not item_id or item_id <= 0 then
+        return nil, nil, "物品ID无效"
+    end
+    if not count or count <= 0 then
+        return nil, nil, "数量必须大于0"
+    end
+    count = math.floor(count)
+    if count <= 0 then
+        return nil, nil, "数量必须大于0"
+    end
+    return item_id, count
+end
+
 function on_add_item(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
     if not player then
         return false, "Player not found"
     end
-
+    local item_id, count, err = normalize_item_msg(_msg)
+    if not item_id then
+        return false, err
+    end
     local ok, result_or_err = item_mgr.add_items(player, {
-        [_msg.item_id] = _msg.count,
+        [item_id] = count,
     }, "c2s_add_item")
-
     if not ok then
-        protocol_handler.send_to_player(_player_id, "add_item_response", {
-            result = 1,
-            message = result_or_err or "add failed",
-            changes = {},
-        })
         return false, result_or_err
     end
-
-    protocol_handler.send_to_player(_player_id, "add_item_response", {
-        result = 0,
-        message = "ok",
-        changes = result_or_err,
-    })
     return true
-end 
+end
+
+function on_cost_item(_player_id, _msg)
+    local player = user_mgr.get_player_obj(_player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    local item_id, count, err = normalize_item_msg(_msg)
+    if not item_id then
+        return false, err
+    end
+    local ok, result_or_err = item_mgr.cost_items(player, {
+        [item_id] = count,
+    }, "c2s_cost_item")
+    if not ok then
+        return false, result_or_err
+    end
+    return true
+end
 
 function on_change_name(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
@@ -1066,6 +1094,7 @@ end
 
 local handle = {
     ["add_item"] = on_add_item,
+    ["cost_item"] = on_cost_item,
     ["change_name"] = on_change_name,
     ["signin"] = on_signin,
     -- 聊天相关消息处理
