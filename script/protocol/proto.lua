@@ -590,6 +590,282 @@ local s2c_builder = builder.new()
         }
     })
 
+    :protocol("main_scene_enter_notify", 528, {
+        request = {
+            result = "integer",
+            message = "string",
+            scene_id = "integer",
+            x = "integer",
+            y = "integer",
+        }
+    })
+
+    :type("map_info", {
+        map_id = "integer",
+        name = "string",
+        region_count = "integer",
+    })
+
+    :type("map_monster_info", {
+        uid = "string",
+        x = "integer",
+        y = "integer",
+        kind = "string",
+        region_id = "integer",
+        visibility_layer = "integer",
+        owner_player_id = "integer",
+    })
+
+    :type("map_item_info", {
+        uid = "string",
+        x = "integer",
+        y = "integer",
+        item_id = "integer",
+        count = "integer",
+        region_id = "integer",
+        visibility_layer = "integer",
+        owner_player_id = "integer",
+    })
+
+    :protocol("map_list", 529, {
+        request = {}
+    })
+
+    :protocol("map_list_response", 530, {
+        request = {
+            result = "integer",
+            message = "string",
+            maps = "*map_info",
+        }
+    })
+
+    :protocol("map_list_notify", 556, {
+        request = {
+            maps = "*map_info",
+        }
+    })
+
+    :protocol("map_enter", 531, {
+        request = {
+            map_id = "integer",
+        }
+    })
+
+    :protocol("map_enter_response", 532, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            scene_id = "integer",
+            x = "integer",
+            y = "integer",
+            region_id = "integer",
+            explored_region_count = "integer",
+            total_region_count = "integer",
+            fog_percent = "integer",
+            key_count = "integer",
+            monsters = "*map_monster_info",
+            items = "*map_item_info",
+        }
+    })
+
+    :protocol("map_move", 533, {
+        request = {
+            x = "integer",
+            y = "integer",
+        }
+    })
+
+    :protocol("map_move_response", 534, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            region_id = "integer",
+            x = "integer",
+            y = "integer",
+            explored_region_count = "integer",
+            total_region_count = "integer",
+            fog_percent = "integer",
+            key_count = "integer",
+        }
+    })
+
+    :protocol("map_interact_monster", 535, {
+        request = {
+            monster_uid = "string",
+        }
+    })
+
+    :protocol("map_interact_monster_response", 536, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            monster_uid = "string",
+            battle_type = "string",
+            inst_id = "string",
+            scene_id = "integer",
+            accepted = "boolean",
+        }
+    })
+
+    :protocol("map_battle_result", 537, {
+        request = {
+            monster_uid = "string",
+            win = "boolean",
+        }
+    })
+
+    :protocol("map_battle_result_response", 538, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            monster_uid = "string",
+            win = "boolean",
+            removed = "boolean",
+        }
+    })
+
+    :protocol("map_monster_removed_notify", 539, {
+        request = {
+            map_id = "integer",
+            monster_uid = "string",
+            x = "integer",
+            y = "integer",
+            killer_player_id = "integer",
+        }
+    })
+
+    :protocol("map_progress_notify", 540, {
+        request = {
+            map_id = "integer",
+            region_id = "integer",
+            explored_region_count = "integer",
+            total_region_count = "integer",
+            fog_percent = "integer",
+        }
+    })
+
+    :protocol("map_state", 541, {
+        request = {}
+    })
+
+    :protocol("map_pick_item", 550, {
+        request = {
+            item_uid = "string",
+        }
+    })
+
+    :protocol("map_state_response", 543, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            scene_id = "integer",
+            region_id = "integer",
+            x = "integer",
+            y = "integer",
+            explored_region_count = "integer",
+            total_region_count = "integer",
+            fog_percent = "integer",
+            key_count = "integer",
+            monsters = "*map_monster_info",
+            items = "*map_item_info",
+        }
+    })
+
+    :protocol("map_leave", 544, {
+        request = {}
+    })
+
+    :protocol("map_leave_response", 545, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+        }
+    })
+
+    :protocol("map_pick_item_response", 551, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            item_uid = "string",
+            item_id = "integer",
+            count = "integer",
+            key_count = "integer",
+            removed = "boolean",
+        }
+    })
+
+    :protocol("map_unlock_region", 554, {
+        request = {
+            region_id = "integer",
+        }
+    })
+
+    :protocol("map_unlock_region_response", 555, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            region_id = "integer",
+            key_count = "integer",
+        }
+    })
+
+    :protocol("map_region_cleared_notify", 552, {
+        request = {
+            map_id = "integer",
+            region_id = "integer",
+            trigger_player_id = "integer",
+            scope = "string",
+        }
+    })
+
+    :protocol("map_item_removed_notify", 553, {
+        request = {
+            map_id = "integer",
+            item_uid = "string",
+            x = "integer",
+            y = "integer",
+            picker_player_id = "integer",
+        }
+    })
+
+    :protocol("map_flow_notify", 557, {
+        request = {
+            map_id = "integer",
+            phase = "string",
+            region_id = "integer",
+            explored_region_count = "integer",
+            total_region_count = "integer",
+            fog_percent = "integer",
+            key_count = "integer",
+            ts = "integer",
+        }
+    })
+
+    :protocol("map_region_unlocked_notify", 558, {
+        request = {
+            map_id = "integer",
+            region_id = "integer",
+            key_count = "integer",
+        }
+    })
+
+    :protocol("map_visible_sync_notify", 559, {
+        request = {
+            map_id = "integer",
+            region_id = "integer",
+            monsters = "*map_monster_info",
+            items = "*map_item_info",
+        }
+    })
+
     :type("item_change_info", {
         item_id = "integer",
         delta = "integer",

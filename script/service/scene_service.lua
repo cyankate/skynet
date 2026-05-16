@@ -22,6 +22,14 @@ function M.create_scene(scene_id, config)
     return true
 end
 
+function M.ensure_scene(scene_id, config)
+    local scene = scene_mgr.get_scene(scene_id)
+    if scene then
+        return true
+    end
+    return M.create_scene(scene_id, config)
+end
+
 function M.destroy_scene(scene_id)
     return scene_mgr.destroy_scene(scene_id)
 end

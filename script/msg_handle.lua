@@ -810,6 +810,260 @@ function on_tilent_activate(_player_id, _msg)
     return true
 end
 
+local function send_map_result(player_id, protocol_name, ok, message, payload)
+    local data = {
+        result = ok and 0 or 1,
+        message = message or (ok and "ok" or "failed"),
+    }
+    if payload then
+        for k, v in pairs(payload) do
+            data[k] = v
+        end
+    end
+    protocol_handler.send_to_player(player_id, protocol_name, data)
+end
+
+function on_map_list(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_list_response", false, "地图服务不可用", { maps = {} })
+        return false, "Map service not available"
+    end
+    local list = skynet.call(mapS, "lua", "get_map_list", _player_id) or {}
+    send_map_result(_player_id, "map_list_response", true, "ok", { maps = list })
+    return true
+end
+
+function on_map_enter(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_enter_response", false, "地图服务不可用", {
+            map_id = tonumber(_msg and _msg.map_id) or 0,
+            scene_id = 0,
+            x = 0,
+            y = 0,
+            region_id = 0,
+        })
+        return false, "Map service not available"
+    end
+
+    local player = user_mgr.get_player_obj(_player_id)
+    local player_name = player and player.player_name_ or ""
+    local ok, result = skynet.call(mapS, "lua", "enter_map", _player_id, player_name, tonumber(_msg and _msg.map_id) or 0)
+    if not ok then
+        send_map_result(_player_id, "map_enter_response", false, result or "进入地图失败", {
+            map_id = tonumber(_msg and _msg.map_id) or 0,
+            scene_id = 0,
+            x = 0,
+            y = 0,
+            region_id = 0,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_enter_response", true, "ok", result)
+    protocol_handler.send_to_player(_player_id, "main_scene_enter_notify", {
+        result = 0,
+        message = "ok",
+        scene_id = result.scene_id or 0,
+        x = result.x or 0,
+        y = result.y or 0,
+    })
+    return true
+end
+
+function on_map_move(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_move_response", false, "地图服务不可用", {
+            map_id = 0,
+            x = 0,
+            y = 0,
+        })
+        return false, "Map service not available"
+    end
+    local ok, result = skynet.call(mapS, "lua", "move", _player_id, tonumber(_msg and _msg.x) or 0, tonumber(_msg and _msg.y) or 0)
+    if not ok then
+        send_map_result(_player_id, "map_move_response", false, result or "移动失败", {
+            map_id = 0,
+            x = 0,
+            y = 0,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_move_response", true, "ok", result)
+    return true
+end
+
+function on_map_interact_monster(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_interact_monster_response", false, "地图服务不可用", {
+            map_id = 0,
+            monster_uid = tostring(_msg and _msg.monster_uid or ""),
+            battle_type = "",
+            accepted = false,
+        })
+        return false, "Map service not available"
+    end
+    local ok, result = skynet.call(mapS, "lua", "interact_monster", _player_id, _msg and _msg.monster_uid)
+    if not ok then
+        send_map_result(_player_id, "map_interact_monster_response", false, result or "交互失败", {
+            map_id = 0,
+            monster_uid = tostring(_msg and _msg.monster_uid or ""),
+            battle_type = "",
+            accepted = false,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_interact_monster_response", true, "ok", {
+        map_id = result.map_id or 0,
+        monster_uid = result.monster_uid or "",
+        battle_type = result.battle_type or "monster_instance",
+        inst_id = result.inst_id or "",
+        scene_id = result.scene_id or 0,
+        accepted = true,
+    })
+    return true
+end
+
+function on_map_battle_result(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_battle_result_response", false, "地图服务不可用", {
+            map_id = 0,
+            monster_uid = tostring(_msg and _msg.monster_uid or ""),
+            win = (_msg and _msg.win) and true or false,
+            removed = false,
+        })
+        return false, "Map service not available"
+    end
+    local ok, result = skynet.call(
+        mapS,
+        "lua",
+        "on_battle_result",
+        _player_id,
+        _msg and _msg.monster_uid,
+        (_msg and _msg.win) and true or false
+    )
+    if not ok then
+        send_map_result(_player_id, "map_battle_result_response", false, result or "战斗结果回写失败", {
+            map_id = 0,
+            monster_uid = tostring(_msg and _msg.monster_uid or ""),
+            win = (_msg and _msg.win) and true or false,
+            removed = false,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_battle_result_response", true, "ok", {
+        map_id = result.map_id or 0,
+        monster_uid = result.monster_uid or tostring(_msg and _msg.monster_uid or ""),
+        win = result.win and true or false,
+        removed = result.removed and true or false,
+    })
+    return true
+end
+
+function on_map_pick_item(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_pick_item_response", false, "地图服务不可用", {
+            map_id = 0,
+            item_uid = tostring(_msg and _msg.item_uid or ""),
+            item_id = 0,
+            count = 0,
+            removed = false,
+        })
+        return false, "Map service not available"
+    end
+    local ok, result = skynet.call(mapS, "lua", "pick_item", _player_id, _msg and _msg.item_uid)
+    if not ok then
+        send_map_result(_player_id, "map_pick_item_response", false, result or "拾取失败", {
+            map_id = 0,
+            item_uid = tostring(_msg and _msg.item_uid or ""),
+            item_id = 0,
+            count = 0,
+            removed = false,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_pick_item_response", true, "ok", {
+        map_id = result.map_id or 0,
+        item_uid = result.item_uid or tostring(_msg and _msg.item_uid or ""),
+        item_id = result.item_id or 0,
+        count = result.count or 0,
+        removed = result.removed and true or false,
+    })
+    return true
+end
+
+function on_map_state(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_state_response", false, "地图服务不可用", {
+            map_id = 0,
+            scene_id = 0,
+            region_id = 0,
+            x = 0,
+            y = 0,
+            explored_region_count = 0,
+            total_region_count = 0,
+            fog_percent = 100,
+            monsters = {},
+            items = {},
+        })
+        return false, "Map service not available"
+    end
+    local result = skynet.call(mapS, "lua", "get_state", _player_id)
+    send_map_result(_player_id, "map_state_response", true, "ok", result)
+    return true
+end
+
+function on_map_leave(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_leave_response", false, "地图服务不可用", {
+            map_id = 0,
+        })
+        return false, "Map service not available"
+    end
+    local ok, err = skynet.call(mapS, "lua", "leave_map", _player_id)
+    if not ok then
+        send_map_result(_player_id, "map_leave_response", false, err or "离开地图失败", {
+            map_id = 0,
+        })
+        return false, err
+    end
+    send_map_result(_player_id, "map_leave_response", true, "ok", { map_id = 0 })
+    return true
+end
+
+function on_map_unlock_region(_player_id, _msg)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        send_map_result(_player_id, "map_unlock_region_response", false, "地图服务不可用", {
+            map_id = 0,
+            region_id = tonumber(_msg and _msg.region_id) or 0,
+            key_count = 0,
+        })
+        return false, "Map service not available"
+    end
+    local ok, result = skynet.call(mapS, "lua", "unlock_region", _player_id, tonumber(_msg and _msg.region_id) or 0)
+    if not ok then
+        send_map_result(_player_id, "map_unlock_region_response", false, result or "区域解锁失败", {
+            map_id = 0,
+            region_id = tonumber(_msg and _msg.region_id) or 0,
+            key_count = 0,
+        })
+        return false, result
+    end
+    send_map_result(_player_id, "map_unlock_region_response", true, "ok", {
+        map_id = result.map_id or 0,
+        region_id = result.region_id or tonumber(_msg and _msg.region_id) or 0,
+        key_count = result.key_count or 0,
+    })
+    return true
+end
+
 local handle = {
     ["add_item"] = on_add_item,
     ["change_name"] = on_change_name,
@@ -860,6 +1114,15 @@ local handle = {
     ["send_player_mail"] = on_send_player_mail,
     ["mark_mail_read"] = on_mark_mail_read,
     ["tilent_activate"] = on_tilent_activate,
+    ["map_list"] = on_map_list,
+    ["map_enter"] = on_map_enter,
+    ["map_move"] = on_map_move,
+    ["map_interact_monster"] = on_map_interact_monster,
+    ["map_battle_result"] = on_map_battle_result,
+    ["map_pick_item"] = on_map_pick_item,
+    ["map_state"] = on_map_state,
+    ["map_leave"] = on_map_leave,
+    ["map_unlock_region"] = on_map_unlock_region,
 }
 
 return handle

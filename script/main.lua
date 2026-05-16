@@ -46,6 +46,8 @@ skynet.start(function()
 
     local scene = skynet.newservice("sceneS")
 
+    local map = skynet.newservice("mapS")
+
     local register = skynet.newservice("registerS")
 
     skynet.call(gate, "lua", "open", {

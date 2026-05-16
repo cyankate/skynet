@@ -66,6 +66,25 @@ function M.send_player_data(player)
     tilent_mgr.sync_to_client(player, "login")
 end
 
+function M.send_map_entry(player_id)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        return
+    end
+    local maps = skynet.call(mapS, "lua", "get_map_list", player_id) or {}
+    protocol_handler.send_to_player(player_id, "map_list_notify", {
+        maps = maps,
+    })
+end
+
+function M.sync_map_view(player_id)
+    local mapS = skynet.localname(".map")
+    if not mapS then
+        return
+    end
+    skynet.send(mapS, "lua", "sync_player_view", player_id)
+end
+
 function M.on_player_loaded(player_id)
     local player = user_mgr.get_player_obj(player_id)
     if not player then
@@ -84,6 +103,7 @@ function M.on_player_loaded(player_id)
     skynet.send(skynet.localname(".register"), "lua", "register", player_id, skynet.self())
     M.handle_login(player)
     M.send_player_data(player)
+    M.send_map_entry(player_id)
     local instanceS = skynet.localname(".instance")
     if instanceS then
         skynet.send(instanceS, "lua", "sync_player_instance_state", player_id)
@@ -169,6 +189,7 @@ function M.reconnect(account_key, fd)
     M.handle_login(player)
     if player.loaded_ then
         M.send_player_data(player)
+        M.sync_map_view(account.player_id)
     end
     local instanceS = skynet.localname(".instance")
     if instanceS then
@@ -197,6 +218,7 @@ function M.kicked_out(account_key, new_fd)
     log.info("kicked_out, new_fd=%d, account_key=%s, player_id=%d", new_fd, account_key, account.player_id)
     skynet.send(skynet.localname(".gate"), "lua", "register_player", new_fd, account.player_id)
     M.send_player_data(player)
+    M.sync_map_view(account.player_id)
     return true
 end
 
@@ -232,6 +254,10 @@ function M.disconnect(account_key)
         local loginS = skynet.localname(".login")
         if loginS then
             skynet.send(loginS, "lua", "account_exit", account_key)
+        end
+        local mapS = skynet.localname(".map")
+        if mapS then
+            skynet.send(mapS, "lua", "leave_map", account.player_id)
         end
         accounts[account_key] = nil
         logout_timers[account_key] = nil
@@ -302,6 +328,10 @@ function M.shutdown()
         local loginS = skynet.localname(".login")
         if loginS then
             skynet.send(loginS, "lua", "agent_exit", account_key)
+        end
+        local mapS = skynet.localname(".map")
+        if mapS then
+            skynet.send(mapS, "lua", "leave_map", account.player_id)
         end
     end
     skynet.exit()
