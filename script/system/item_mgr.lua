@@ -9,43 +9,39 @@ local item_mgr = service_ctx.get("system.item_mgr", {})
 item_mgr.virtual_add_handlers = item_mgr.virtual_add_handlers or {}
 local virtual_add_handlers = item_mgr.virtual_add_handlers
 
-local function to_int(v, default_v)
-    local n = tonumber(v)
-    if not n then
-        return default_v or 0
-    end
-    return math.floor(n)
+local function num(v)
+    return math.floor(tonumber(v) or 0)
 end
 
 local function get_cfg(item_id)
-    return ITEM_DATA[to_int(item_id, 0)]
+    return ITEM_DATA[num(item_id)]
 end
 
-local function is_virtual_item(cfg)
-    return cfg and to_int(cfg.type, -1) == 0
+local function is_virtual_item(item_id)
+    local cfg = get_cfg(item_id)
+    return cfg ~= nil and num(cfg.type) == 0
 end
 
-local function get_virtual_subtype(cfg)
-    return cfg and (cfg.subType or cfg.sub_type) or nil
+local function get_virtual_subtype(item_id)
+    local cfg = get_cfg(item_id)
+    if not cfg then
+        return nil
+    end
+    return cfg.subType or cfg.sub_type
 end
 
 local function get_count(player, item_id)
-    local cfg = get_cfg(item_id)
-    if not cfg then
+    if not get_cfg(item_id) then
         return 0
-    end
-    if is_virtual_item(cfg) then
-        local bag = player:get_ctn("bag")
-        if not bag then
-            return 0
-        end
-        return to_int(bag:get_virtual_item_count(item_id), 0)
     end
     local bag = player:get_ctn("bag")
     if not bag then
         return 0
     end
-    return to_int(bag:get_item_count(item_id), 0)
+    if is_virtual_item(item_id) then
+        return num(bag:get_virtual_item_count(item_id))
+    end
+    return num(bag:get_item_count(item_id))
 end
 
 local function build_change(player, item_id, delta)
@@ -56,42 +52,38 @@ local function build_change(player, item_id, delta)
     }
 end
 
+local function merge_count(tbl, item_id, count)
+    tbl[item_id] = (tbl[item_id] or 0) + count
+end
+
 local function analyze_add_items(items)
     local ctx = {
         all = {},
         real = {},
         virtual = {},
-        special_virtual = {},
+        special = {},
     }
     if type(items) ~= "table" then
         return ctx
     end
 
     for item_id_raw, count_raw in pairs(items) do
-        local item_id = to_int(item_id_raw, 0)
-        local count = to_int(count_raw, 0)
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
         if item_id > 0 and count > 0 then
-            local cfg = get_cfg(item_id)
-            if not cfg then
+            if not get_cfg(item_id) then
                 return nil, string.format("物品配置不存在:%s", tostring(item_id))
             end
-            local entry = {
-                item_id = item_id,
-                count = count,
-                cfg = cfg,
-                is_virtual = is_virtual_item(cfg),
-                sub_type = get_virtual_subtype(cfg),
-            }
-            table.insert(ctx.all, entry)
-            if entry.is_virtual then
-                local add_handler = entry.sub_type and virtual_add_handlers[entry.sub_type] or nil
-                if add_handler then
-                    table.insert(ctx.special_virtual, entry)
+            merge_count(ctx.all, item_id, count)
+            if is_virtual_item(item_id) then
+                local sub_type = get_virtual_subtype(item_id)
+                if sub_type and virtual_add_handlers[sub_type] then
+                    merge_count(ctx.special, item_id, count)
                 else
-                    table.insert(ctx.virtual, entry)
+                    merge_count(ctx.virtual, item_id, count)
                 end
             else
-                table.insert(ctx.real, entry)
+                merge_count(ctx.real, item_id, count)
             end
         end
     end
@@ -99,9 +91,7 @@ local function analyze_add_items(items)
 end
 
 local function run_add_item_rules(ctx, player, ext)
-    -- 规则处理预留点：
-    -- 可在这里做“整卡转碎片、重复转材料、溢出转换”等二次加工
-    -- 当前版本保持透传，不修改 ctx
+    -- 规则处理预留点：整卡转碎片、重复转材料、溢出转换等
     return ctx
 end
 
@@ -110,15 +100,12 @@ local function precheck_add_items(ctx, player, ext)
     if not bag then
         return false, "背包不存在"
     end
-
-    -- 规则二次加工后重新校验实体道具可加入性，避免执行期失败
-    if #ctx.real > 0 then
+    if next(ctx.real) then
         local ok, err = bag:can_add_items(ctx.real)
         if not ok then
             return false, err or "背包空间不足"
         end
     end
-
     return true
 end
 
@@ -130,31 +117,33 @@ local function apply_add_items(ctx, player, reason, ext)
 
     local changes = {}
 
-    for _, entry in ipairs(ctx.special_virtual) do
-        local add_handler = virtual_add_handlers[entry.sub_type]
-        local h_ok, need_add_to_virtual = add_handler(player, entry.item_id, entry.count, ext)
+    for item_id, count in pairs(ctx.special) do
+        local sub_type = get_virtual_subtype(item_id)
+        local add_handler = sub_type and virtual_add_handlers[sub_type]
+        if not add_handler then
+            return false, "虚拟道具处理器不存在"
+        end
+        local h_ok, need_add_to_virtual = add_handler(player, item_id, count, ext)
         if not h_ok then
             return false, need_add_to_virtual or "虚拟道具添加失败"
         end
         if need_add_to_virtual then
-            local old = to_int(bag:get_virtual_item_count(entry.item_id), 0)
-            bag:set_virtual_item_count(entry.item_id, old + entry.count)
-            table.insert(changes, build_change(player, entry.item_id, entry.count))
+            bag:set_virtual_item_count(item_id, num(bag:get_virtual_item_count(item_id)) + count)
+            table.insert(changes, build_change(player, item_id, count))
         end
     end
 
-    for _, entry in ipairs(ctx.virtual) do
-        local old = to_int(bag:get_virtual_item_count(entry.item_id), 0)
-        bag:set_virtual_item_count(entry.item_id, old + entry.count)
-        table.insert(changes, build_change(player, entry.item_id, entry.count))
+    for item_id, count in pairs(ctx.virtual) do
+        bag:set_virtual_item_count(item_id, num(bag:get_virtual_item_count(item_id)) + count)
+        table.insert(changes, build_change(player, item_id, count))
     end
 
-    for _, entry in ipairs(ctx.real) do
-        local add_ok, add_err = bag:add_item(entry.item_id, entry.count)
+    for item_id, count in pairs(ctx.real) do
+        local add_ok, add_err = bag:add_item(item_id, count)
         if not add_ok then
             return false, add_err or "背包添加失败"
         end
-        table.insert(changes, build_change(player, entry.item_id, entry.count))
+        table.insert(changes, build_change(player, item_id, count))
     end
 
     protocol_handler.send_to_player(player.player_id_, "item_update_notify", {
@@ -169,14 +158,14 @@ function item_mgr.can_add_items(player, items, ext)
     if not ctx then
         return false, err
     end
-    if #ctx.real > 0 then
-        local bag = player:get_ctn("bag")
-        if not bag then
-            return false, "背包不存在"
-        end
-        return bag:can_add_items(ctx.real)
+    if not next(ctx.real) then
+        return true
     end
-    return true
+    local bag = player:get_ctn("bag")
+    if not bag then
+        return false, "背包不存在"
+    end
+    return bag:can_add_items(ctx.real)
 end
 
 function item_mgr.has_enough_items(player, items, ext)
@@ -184,31 +173,24 @@ function item_mgr.has_enough_items(player, items, ext)
         return true
     end
     for item_id_raw, count_raw in pairs(items) do
-        local item_id = to_int(item_id_raw, 0)
-        local count = to_int(count_raw, 0)
-        if item_id <= 0 or count <= 0 then
-            goto continue
-        end
-        local cfg = get_cfg(item_id)
-        if not cfg then
-            return false, string.format("物品配置不存在:%s", tostring(item_id))
-        end
-        if is_virtual_item(cfg) then
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
+        if item_id > 0 and count > 0 then
+            if not get_cfg(item_id) then
+                return false, string.format("物品配置不存在:%s", tostring(item_id))
+            end
             local bag = player:get_ctn("bag")
             if not bag then
                 return false, "背包不存在"
             end
-            local own = to_int(bag:get_virtual_item_count(item_id), 0)
-            if own < count then
-                return false, "虚拟道具不足"
-            end
-        else
-            local bag = player:get_ctn("bag")
-            if not bag or not bag:has_enough_items(item_id, count) then
+            if is_virtual_item(item_id) then
+                if num(bag:get_virtual_item_count(item_id)) < count then
+                    return false, "虚拟道具不足"
+                end
+            elseif not bag:has_enough_items(item_id, count) then
                 return false, "背包道具不足"
             end
         end
-        ::continue::
     end
     return true
 end
@@ -236,32 +218,28 @@ function item_mgr.cost_items(player, items, reason, ext)
         items = {}
     end
     local changes = {}
+    local bag = player:get_ctn("bag")
+    if not bag then
+        return false, "背包不存在"
+    end
+
     for item_id_raw, count_raw in pairs(items) do
-        local item_id = to_int(item_id_raw, 0)
-        local count = to_int(count_raw, 0)
-        if item_id <= 0 or count <= 0 then
-            goto continue
-        end
-        local cfg = get_cfg(item_id)
-        if not cfg then
-            return false, string.format("物品配置不存在:%s", tostring(item_id))
-        end
-        if is_virtual_item(cfg) then
-            local bag = player:get_ctn("bag")
-            if not bag then
-                return false, "背包不存在"
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
+        if item_id > 0 and count > 0 then
+            if not get_cfg(item_id) then
+                return false, string.format("物品配置不存在:%s", tostring(item_id))
             end
-            local old = to_int(bag:get_virtual_item_count(item_id), 0)
-            bag:set_virtual_item_count(item_id, old - count)
-        else
-            local bag = player:get_ctn("bag")
-            local cost_ok, cost_err = bag:cost_item(item_id, count)
-            if not cost_ok then
-                return false, cost_err
+            if is_virtual_item(item_id) then
+                bag:set_virtual_item_count(item_id, num(bag:get_virtual_item_count(item_id)) - count)
+            else
+                local cost_ok, cost_err = bag:cost_item(item_id, count)
+                if not cost_ok then
+                    return false, cost_err
+                end
             end
+            table.insert(changes, build_change(player, item_id, -count))
         end
-        table.insert(changes, build_change(player, item_id, -count))
-        ::continue::
     end
 
     protocol_handler.send_to_player(player.player_id_, "item_update_notify", {
@@ -272,14 +250,12 @@ function item_mgr.cost_items(player, items, reason, ext)
 end
 
 function item_mgr.get_item_count(player, item_id)
-    local cfg = get_cfg(item_id)
-    if not cfg then
+    if not get_cfg(item_id) then
         return 0
     end
     return get_count(player, item_id)
 end
 
--- 按 item_id 聚合后的物品列表（不含槽位，供客户端展示）
 function item_mgr.build_item_list(player)
     local bag = player:get_ctn("bag")
     if not bag then
@@ -288,15 +264,15 @@ function item_mgr.build_item_list(player)
 
     local tally = {}
     for _, item in pairs(bag.slots_ or {}) do
-        local item_id = to_int(item.item_id, 0)
-        local count = to_int(item.count, 0)
+        local item_id = num(item.item_id)
+        local count = num(item.count)
         if item_id > 0 and count > 0 then
             tally[item_id] = (tally[item_id] or 0) + count
         end
     end
     for item_id_raw, count_raw in pairs(bag.virtual_items_ or {}) do
-        local item_id = to_int(item_id_raw, 0)
-        local count = to_int(count_raw, 0)
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
         if item_id > 0 and count > 0 then
             tally[item_id] = (tally[item_id] or 0) + count
         end
@@ -304,10 +280,7 @@ function item_mgr.build_item_list(player)
 
     local items = {}
     for item_id, count in pairs(tally) do
-        table.insert(items, {
-            item_id = item_id,
-            count = count,
-        })
+        table.insert(items, { item_id = item_id, count = count })
     end
     table.sort(items, function(a, b)
         return a.item_id < b.item_id
@@ -325,13 +298,12 @@ function item_mgr.sync_bag_list_to_client(player)
     return true
 end
 
-
 virtual_add_handlers.guild_point = function(player, item_id, count, ext)
     local guildS = skynet.localname(".guild")
     if not guildS then
         return false, "guild服务不可用"
     end
-    local ok, msg = skynet.call(guildS, "lua", "add_player_guild_point", player.player_id_, tonumber(count) or 0)
+    local ok, msg = skynet.call(guildS, "lua", "add_player_guild_point", player.player_id_, num(count))
     if not ok then
         return false, msg or "公会积分添加失败"
     end

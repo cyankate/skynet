@@ -194,13 +194,16 @@ function CtnBag:can_add_items(items)
     end
 
     local need_new_slots = 0
-    for _, row in ipairs(items or {}) do
-        local item_id = tonumber(row.item_id) or 0
-        local count = tonumber(row.count) or 0
+    for item_id_raw, count_raw in pairs(items or {}) do
+        local item_id = tonumber(item_id_raw) or 0
+        local count = tonumber(count_raw) or 0
         if item_id > 0 and count > 0 then
             local remain = count - (free_by_item[item_id] or 0)
             if remain > 0 then
                 need_new_slots = need_new_slots + math.ceil(remain / max_stack)
+                free_by_item[item_id] = 0
+            else
+                free_by_item[item_id] = (free_by_item[item_id] or 0) - count
             end
         end
     end
