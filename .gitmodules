@@ -13,11 +13,3 @@
 [submodule "3rd/luasocket"]
 	path = 3rd/luasocket
 	url = https://github.com/lunarmodules/luasocket.git
-[submodule "script/setting"]
-	path = script/setting
-	url = git@8.163.100.189:/home/git/repos/server-setting.git
-	branch = main
-[submodule "script/protocol"]
-	path = script/protocol
-	url = git@8.163.100.189:/home/git/repos/protocol.git
-	branch = main
