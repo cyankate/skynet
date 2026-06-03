@@ -66,7 +66,7 @@ function CtnTask:accept_task(task_id)
     skynet.call("dbS", "lua", "save_player_task", self.player.id, task_data)
     
     -- 触发任务接受事件
-    self:trigger_event(event_def.PLAYER_TASK_ACCEPT, task_id)
+    self:trigger_event(event_def.PLAYER.TASK_ACCEPT, task_id)
     
     return true
 end
@@ -151,7 +151,7 @@ function CtnTask:complete_task(task_id)
     skynet.call("dbS", "lua", "update_task_state", self.player.id, task_id, task_data.state)
     
     -- 触发任务完成事件
-    self:trigger_event(event_def.PLAYER_TASK_COMPLETE, task_id)
+    self:trigger_event(event_def.PLAYER.TASK_COMPLETE, task_id)
     
     return true
 end
@@ -178,7 +178,7 @@ function CtnTask:get_task_reward(task_id)
     self.completed_tasks[task_id] = task_data
     
     -- 触发任务领奖事件
-    self:trigger_event(event_def.PLAYER_TASK_REWARD, task_id)
+    self:trigger_event(event_def.PLAYER.TASK_REWARD, task_id)
     
     return true
 end

@@ -1,5 +1,7 @@
 local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
+local timeutils = require "utils.timeutils"
+local event_def = require "define.event_def"
 
 local M = service_ctx.get("event.event_service", {})
 M.subscribers = M.subscribers or {}
@@ -31,11 +33,25 @@ function M.trigger(event_name, ...)
     end
 end
 
+local function bind_global_timers()
+    timeutils.on_minute(function(ts)
+        M.trigger(event_def.TIMER.MINUTE, ts)
+    end)
+    timeutils.on_hour(function(ts)
+        M.trigger(event_def.TIMER.HOUR, ts)
+    end)
+    timeutils.on_day_reset(function(reset_day_key, ts)
+        M.trigger(event_def.TIMER.DAY_RESET, reset_day_key, ts)
+    end)
+end
+
 function M.init()
     if M._inited then
         return true
     end
     M._inited = true
+    bind_global_timers()
+    timeutils.start_global_timers()
     return true
 end
 

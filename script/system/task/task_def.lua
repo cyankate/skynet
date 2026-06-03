@@ -1,4 +1,6 @@
 -- script/system/task/task_def.lua
+local event_def = require "define.event_def"
+
 local task_def = {
     -- 任务类型
     TASK_TYPE = {
@@ -17,27 +19,6 @@ local task_def = {
         REWARDED = 3,   -- 已领奖
     },
     
-    -- 任务条件类型
-    CONDITION_TYPE = {
-        LEVEL = 1,          -- 等级要求
-        ITEM = 2,           -- 物品要求
-        KILL = 3,           -- 击杀要求
-        COLLECT = 4,        -- 收集要求
-        TALK = 5,           -- 对话要求
-        USE_ITEM = 6,       -- 使用物品
-        REACH_PLACE = 7,    -- 到达地点
-    },
-    
-    -- 任务事件类型
-    EVENT_TYPE = {
-        LEVEL_UP = "player.level_up",
-        ITEM_CHANGE = "player.item_change",
-        KILL_MONSTER = "battle.kill_monster",
-        COLLECT_ITEM = "player.collect_item",
-        TALK_NPC = "player.talk_npc",
-        USE_ITEM = "player.use_item",
-        REACH_PLACE = "player.reach_place",
-    }
 }
 
 return task_def

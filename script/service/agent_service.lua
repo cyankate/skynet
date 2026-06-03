@@ -3,6 +3,8 @@ local log = require "log"
 local player_obj = require "player_obj"
 local CtnBag = require "ctn.ctn_bag"
 local CtnCommon = require "ctn.ctn_common"
+local CtnDay = require "ctn.ctn_day"
+local CtnWeek = require "ctn.ctn_week"
 local common = require "utils.common"
 local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
@@ -11,6 +13,7 @@ local tilent_mgr = require "system.tilent.tilent_mgr"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
+local recovery_mgr = require "system.recovery_mgr"
 local service_ctx = require "runtime.service_ctx"
 
 local M = service_ctx.get("agent.agent", {})
@@ -37,6 +40,8 @@ function M.load_player_data(player)
     player.ctns_ = {
         bag = CtnBag.new(player.player_id_, "bag", "bag"),
         common = CtnCommon.new(player.player_id_, "common", "common"),
+        day = CtnDay.new(player.player_id_, "player_day", "day"),
+        week = CtnWeek.new(player.player_id_, "player_week", "week"),
     }
     player.ctn_loading_ = {}
     for k, v in pairs(player.ctns_) do
@@ -379,12 +384,29 @@ local function start_timer()
     skynet.timeout((60 - date.sec) * 100, timer_loop)
 end
 
+function M.on_event(event_name, reset_day_key, ts)
+    if event_name == event_def.TIMER.DAY_RESET then
+        for _, account in pairs(accounts) do
+            local player = user_mgr.get_player_obj(account.player_id)
+            if player and player.loaded_ then
+                recovery_mgr.check_and_reset(player)
+            end
+        end
+    end
+end
+
 function M.init()
     M.register_client_protocol()
     if M._inited then
         return
     end
     M._inited = true
+
+    local eventS = skynet.localname(".event")
+    if eventS then
+        skynet.call(eventS, "lua", "subscribe", event_def.TIMER.DAY_RESET, skynet.self())
+    end
+
     start_timer()
 end
 

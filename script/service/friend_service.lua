@@ -1,6 +1,7 @@
 local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
 local friend_mgr = require "system.friend.friend_mgr"
+local event_def = require "define.event_def"
 
 local M = service_ctx.get("system.friend.friend_service", {})
 
@@ -14,17 +15,17 @@ function M.init()
 
     local event = skynet.localname(".event")
     if event then
-        skynet.send(event, "lua", "subscribe", "player.login", skynet.self())
-        skynet.send(event, "lua", "subscribe", "player.logout", skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGOUT, skynet.self())
     end
 
     return true
 end
 
 function M.on_event(event_name, event_data)
-    if event_name == "player.login" then
+    if event_name == event_def.PLAYER.LOGIN then
         friend_mgr.on_player_login(event_data.player_id)
-    elseif event_name == "player.logout" then
+    elseif event_name == event_def.PLAYER.LOGOUT then
         friend_mgr.on_player_logout(event_data.player_id)
     end
 end

@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
 local guild_mgr = require "system.guild.guild_mgr"
 local protocol_handler = require "protocol_handler"
+local event_def = require "define.event_def"
 
 local M = service_ctx.get("system.guild.guild_service", {})
 
@@ -11,6 +12,17 @@ function M.init()
     end
     M._inited = true
     guild_mgr.init()
+
+    local eventS = skynet.localname(".event")
+    if eventS then
+        skynet.call(eventS, "lua", "subscribe", event_def.TIMER.MINUTE, skynet.self())
+    end
+end
+
+function M.on_event(event_name, ts)
+    if event_name == event_def.TIMER.MINUTE then
+        guild_mgr.save_dirty_guilds()
+    end
 end
 
 function M.create_guild(player_id, leader_name, guild_name)

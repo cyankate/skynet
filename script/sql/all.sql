@@ -180,6 +180,20 @@ CREATE TABLE IF NOT EXISTS `common` (
     PRIMARY KEY (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公共数据表';
 
+-- 玩家日周期数据表
+CREATE TABLE IF NOT EXISTS `player_day` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '日周期数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家日周期数据表';
+
+-- 玩家周周期数据表
+CREATE TABLE IF NOT EXISTS `player_week` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '周周期数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家周周期数据表';
+
 -- 玩家表
 CREATE TABLE IF NOT EXISTS `player` (
     `player_id` int NOT NULL COMMENT '玩家ID',

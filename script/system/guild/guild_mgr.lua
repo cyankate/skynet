@@ -22,10 +22,8 @@ local guild_mgr = service_ctx.get("system.guild.guild_mgr", {})
 guild_mgr.guilds_ = guild_mgr.guilds_ or {}                -- 公会列表
 guild_mgr.player_guilds_ = guild_mgr.player_guilds_ or {}  -- 玩家所在公会映射
 guild_mgr.guild_names_ = guild_mgr.guild_names_ or {}      -- 公会名称映射
-guild_mgr.save_timer_ = guild_mgr.save_timer_ or nil       -- 保存定时器
 guild_mgr.max_guild_count_ = guild_mgr.max_guild_count_ or 1000     -- 最大公会数量
 guild_mgr.max_member_count_ = guild_mgr.max_member_count_ or 100     -- 最大成员数量
-guild_mgr.save_interval_ = guild_mgr.save_interval_ or 300           -- 保存间隔(秒)
 guild_mgr.ERROR_CODE = guild_mgr.ERROR_CODE or ERROR_CODE            -- 错误码
 guild_mgr.gen_id_ = guild_mgr.gen_id_ or 1                          -- 生成ID
 
@@ -46,11 +44,6 @@ function guild_mgr.init()
     if max_id and max_id[1] then
         guild_mgr.gen_id_ = max_id[1].max_id
     end
-    
-    -- 启动保存定时器
-    guild_mgr.save_timer_ = skynet.timeout(guild_mgr.save_interval_ * 100, function()
-        guild_mgr.save_dirty_guilds()
-    end)
     log.info("guild_mgr init, guild_count: %d, gen_id: %d", tableUtils.table_size(guild_mgr.guilds_), guild_mgr.gen_id_)
 end
 
@@ -284,11 +277,6 @@ function guild_mgr.save_dirty_guilds()
             guild_mgr.save_guild(guild)
         end
     end
-    
-    -- 重新启动保存定时器
-    guild_mgr.save_timer_ = skynet.timeout(guild_mgr.save_interval_ * 100, function()
-        guild_mgr.save_dirty_guilds()
-    end)
 end
 
 function guild_mgr.save_guild(_guild)

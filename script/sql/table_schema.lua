@@ -200,6 +200,64 @@ local config = {
             ["data"] = true,
         },
     },
+    ["player_day"] = {
+        table_name = "player_day",
+        fields = {
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "日周期数据",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
+    ["player_week"] = {
+        table_name = "player_week",
+        fields = {
+            ["player_id"] = {
+                type = "int",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "玩家ID",
+            },
+            ["data"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "周周期数据",
+            },
+        },
+        primary_keys = {
+            "player_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["data"] = true,
+        },
+    },
     ["friend"] = {
         table_name = "friend",
         fields = {

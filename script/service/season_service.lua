@@ -1,6 +1,7 @@
 local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
 local season_def = require "define.season_def"
+local event_def = require "define.event_def"
 
 local M = service_ctx.get("season.season_service", {})
 M.current_season = M.current_season or nil
@@ -17,7 +18,7 @@ local function end_season()
     if not M.current_season then return end
     M.current_season.state = season_def.STATE.ENDED
     pcall(function() skynet.call("dbS", "lua", "update_season_state", M.current_season) end)
-    trigger_event(season_def.EVENT.SEASON_END, M.current_season)
+    trigger_event(event_def.SEASON.END, M.current_season)
     if M.stage_timer then skynet.kill(M.stage_timer) M.stage_timer = nil end
 end
 
@@ -30,7 +31,7 @@ local function on_stage_timeout()
         M.current_season.current_stage = M.current_stage
         M.current_season.end_time = os.time() + next_stage_cfg.duration
         pcall(function() skynet.call("dbS", "lua", "update_season_stage", M.current_season) end)
-        trigger_event(season_def.EVENT.STAGE_CHANGE, { season_id = M.current_season.id, stage_id = M.current_stage })
+        trigger_event(event_def.SEASON.STAGE_CHANGE, { season_id = M.current_season.id, stage_id = M.current_stage })
         M.start_season_timer()
     else
         end_season()
@@ -57,7 +58,7 @@ local function create_new_season()
     }
     M.current_stage = 1
     pcall(function() skynet.call("dbS", "lua", "save_current_season", M.current_season) end)
-    trigger_event(season_def.EVENT.SEASON_START, M.current_season)
+    trigger_event(event_def.SEASON.START, M.current_season)
 end
 
 function M.init()

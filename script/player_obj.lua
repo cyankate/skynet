@@ -3,6 +3,7 @@ local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
 local item_mgr = require "system.item_mgr"
+local recovery_mgr = require "system.recovery_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -20,7 +21,9 @@ function Player:on_loaded()
     -- 这里可以添加玩家加载完成后的逻辑
     log.info(string.format("Player %s on_loaded successfully", self.player_id_))
     -- 例如通知其他服务，或者进行一些初始化操作
-    self.loaded_ = true 
+    self.loaded_ = true
+
+    recovery_mgr.init_player(self)
 
     local rankS = skynet.localname(".rank")
     skynet.send(rankS, "lua", "update_rank", "score", {
@@ -110,6 +113,61 @@ function Player:try_set_flow_state(expected_states, new_state)
     end
     self:set_flow_state(new_state)
     return true, self.flow_state_
+end
+
+--- 日周期桶内字段；cycle_offset=0 当前日，-1 上一日
+function Player:get_day_data(field_key, cycle_offset)
+    local ctn = self:get_ctn("day")
+    if not ctn then
+        return false, "Day not found"
+    end
+    return ctn:get_field(field_key, cycle_offset or 0)
+end
+
+function Player:set_day_data(field_key, value, cycle_offset)
+    local ctn = self:get_ctn("day")
+    if not ctn then
+        return false, "Day not found"
+    end
+    return ctn:set_field(field_key, value, cycle_offset or 0)
+end
+
+--- 周周期桶内字段；cycle_offset=0 当前周，-1 上一周
+function Player:get_week_data(field_key, cycle_offset)
+    local ctn = self:get_ctn("week")
+    if not ctn then
+        return false, "Week not found"
+    end
+    return ctn:get_field(field_key, cycle_offset or 0)
+end
+
+function Player:set_week_data(field_key, value, cycle_offset)
+    local ctn = self:get_ctn("week")
+    if not ctn then
+        return false, "Week not found"
+    end
+    return ctn:set_field(field_key, value, cycle_offset or 0)
+end
+
+--- common 容器字段；default 为无值时返回的默认值（如 {}）
+function Player:get_common_data(field_key, default)
+    local ctn = self:get_ctn("common")
+    if not ctn then
+        return false, "Common not found"
+    end
+    local v = ctn:get(field_key)
+    if v == nil then
+        return default
+    end
+    return v
+end
+
+function Player:set_common_data(field_key, value)
+    local ctn = self:get_ctn("common")
+    if not ctn then
+        return false, "Common not found"
+    end
+    return ctn:set(field_key, value)
 end
 
 return Player

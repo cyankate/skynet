@@ -5,6 +5,7 @@ local service_ctx = require "runtime.service_ctx"
 local channel_mgr = require "chat.channel_mgr"
 local WorldChannel = require "chat.world_channel"
 local GuildChannel = require "chat.guild_channel"
+local event_def = require "define.event_def"
 
 local M = service_ctx.get("chat", {})
 M._inited = M._inited or false
@@ -30,29 +31,29 @@ function M.init()
 
     local event = skynet.localname(".event")
     if event then
-        skynet.send(event, "lua", "subscribe", "player.login", skynet.self())
-        skynet.send(event, "lua", "subscribe", "player.logout", skynet.self())
-        skynet.send(event, "lua", "subscribe", "guild.create", skynet.self())
-        skynet.send(event, "lua", "subscribe", "guild.dismiss", skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGOUT, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.GUILD.CREATE, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.GUILD.DISMISS, skynet.self())
     end
     return true
 end
 
 function M.on_event(event_name, event_data)
-    if event_name == "player.login" then
+    if event_name == event_def.PLAYER.LOGIN then
         local player_id = event_data.player_id
         local player_name = event_data.player_name
         channel_mgr.join_channel(1, player_id, player_name)
         channel_mgr.on_player_login(player_id)
-    elseif event_name == "player.logout" then
+    elseif event_name == event_def.PLAYER.LOGOUT then
         local player_id = event_data.player_id
         channel_mgr.on_player_logout(player_id)
-    elseif event_name == "guild.create" then
+    elseif event_name == event_def.GUILD.CREATE then
         local guild_id = event_data.guild_id
         local guild_name = event_data.guild_name
         local channel_id = channel_mgr.create_channel(GuildChannel, guild_name .. "公会频道", "guild", guild_id)
         log.info("Guild channel created for guild %d with ID: %d", guild_id, channel_id)
-    elseif event_name == "guild.dismiss" then
+    elseif event_name == event_def.GUILD.DISMISS then
         local guild_id = event_data.guild_id
         for channel_id, channel in pairs(channel_mgr.channels) do
             if channel.channel_type == "guild" and channel:get_guild_id() == guild_id then

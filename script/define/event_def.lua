@@ -1,29 +1,49 @@
--- event_def.lua
+-- event_def.lua：全局事件名（event 服务 subscribe / trigger 使用）
 local event_def = {
-    -- 玩家生命周期事件 (由agent服务触发)
+    -- 玩家生命周期（多由 agent 触发）
     PLAYER = {
-        LOGIN = "player.login",           -- 玩家登录
-        LOGOUT = "player.logout",         -- 玩家登出
-        LEVEL_UP = "player.level_up",     -- 玩家升级
-        ITEM_CHANGE = "player.item_change",     -- 物品变化 
-        TASK_COMPLETE = "player.task_complete", -- 任务完成
+        LOGIN = "player.login",
+        LOGOUT = "player.logout",
+        LEVEL_UP = "player.level_up",
+        ITEM_CHANGE = "player.item_change",
+        TASK_ACCEPT = "player.task_accept",
+        TASK_COMPLETE = "player.task_complete",
+        TASK_REWARD = "player.task_reward",
+        COLLECT_ITEM = "player.collect_item",
+        TALK_NPC = "player.talk_npc",
+        USE_ITEM = "player.use_item",
+        REACH_PLACE = "player.reach_place",
     },
-    
-    -- 战斗相关事件 (由battle服务触发)
+
+    -- 公会（多由 guild 服务触发）
+    GUILD = {
+        CREATE = "guild.create",
+        DISMISS = "guild.dismiss",
+    },
+
+    -- 战斗（由 battle / 副本等触发）
     BATTLE = {
-        START = "battle.start",           -- 战斗开始
-        END = "battle.end",               -- 战斗结束
-        WIN = "battle.win",               -- 战斗胜利
-        LOSE = "battle.lose",             -- 战斗失败
+        START = "battle.start",
+        END = "battle.end",
+        WIN = "battle.win",
+        LOSE = "battle.lose",
+        KILL_MONSTER = "battle.kill_monster",
     },
-    
-    -- 赛季相关事件 (由season服务触发)
+
+    -- 赛季（由 season 服务触发）
     SEASON = {
-        START = "season.start",           -- 赛季开始
-        SETTLE= "season.settle",          -- 赛季结算
-        END = "season.end",               -- 赛季结束
+        START = "season.start",
+        SETTLE = "season.settle",
+        END = "season.end",
+        STAGE_CHANGE = "season.stage_change",
     },
-    
+
+    -- 全局定时器（由 event 服务 timeutils 桥接触发）
+    TIMER = {
+        MINUTE = "timer.minute",
+        HOUR = "timer.hour",
+        DAY_RESET = "timer.day_reset",
+    },
 }
 
 return event_def
