@@ -247,9 +247,6 @@ function M.load(account_key)
         skynet.send(skynet.localname(".login"), "lua", "account_update", account_key, account.account_data)
         log.info("create player, account_key=%s, player_id=%d", account_key, player_id)
     end
-    if not player_data or account_key ~= player_data.account_key then
-        return false
-    end
     local player = player_obj.new(player_data.player_id, player_data)
     user_mgr.add_player_obj(player_data.player_id, player)
     M.load_player_data(player)
@@ -268,10 +265,6 @@ function M.start(account_key, account_data, args)
         args = args,
     }
     if not M.load(account_key) then
-        local player_id = accounts[account_key] and accounts[account_key].player_id
-        if player_id then
-            user_mgr.del_player_obj(player_id)
-        end
         accounts[account_key] = nil
         return false, "load player failed"
     end
