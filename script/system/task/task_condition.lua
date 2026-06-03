@@ -1,5 +1,6 @@
--- script/task/task_condition.lua
-local task_def = require "task.task_def"
+-- script/system/task/task_condition.lua
+local task_def = require "system.task.task_def"
+local task_loader = require "system.task.task_loader"
 local task_condition = {}
 
 -- 检查接取任务条件

@@ -3,7 +3,7 @@ local log = require "log"
 local class = require "utils.class"
 local tableUtils = require "utils.tableUtils"
 
-local Rank = require "rank.rank_base"
+local Rank = require "system.rank.rank_base"
 
 local ScoreRank = class("ScoreRank", Rank)
 

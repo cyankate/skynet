@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local CtnKv = require "ctn.ctn_kv"
 local event_def = require "define.event_def"
 local condition_def = require "define.condition_def"
+local task_def = require "system.task.task_def"
 
 -- 使用class模块实现继承
 local CtnTask = class("CtnTask", CtnKv)

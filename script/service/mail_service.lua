@@ -1,9 +1,9 @@
 local skynet = require "skynet"
 local log = require "log"
 local service_ctx = require "runtime.service_ctx"
-local mail_mgr = require "mail.mail_mgr"
+local mail_mgr = require "system.mail.mail_mgr"
 
-local M = service_ctx.get("mail.mail_service", {})
+local M = service_ctx.get("system.mail.mail_service", {})
 
 function M.get_mail_list(player_id, page, page_size)
     return mail_mgr.get_mail_list(player_id, page, page_size)

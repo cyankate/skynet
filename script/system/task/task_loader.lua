@@ -1,6 +1,6 @@
--- script/task/task_loader.lua
+-- script/system/task/task_loader.lua
 local service_ctx = require "runtime.service_ctx"
-local task_loader = service_ctx.get("system.task_loader", {})
+local task_loader = service_ctx.get("system.task.task_loader", {})
 
 task_loader.task_configs = task_loader.task_configs or {}
 local task_configs = task_loader.task_configs

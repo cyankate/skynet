@@ -5,7 +5,7 @@ local protocol_handler = require "protocol_handler"
 local service_ctx = require "runtime.service_ctx"
 
 -- 好友管理器
-local friend_mgr = service_ctx.get("friend.friend_mgr", {})
+local friend_mgr = service_ctx.get("system.friend.friend_mgr", {})
 friend_mgr.cache = friend_mgr.cache or nil
 
 -- 发送消息给玩家

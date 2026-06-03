@@ -1,8 +1,8 @@
 local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
-local friend_mgr = require "friend.friend_mgr"
+local friend_mgr = require "system.friend.friend_mgr"
 
-local M = service_ctx.get("friend.friend_service", {})
+local M = service_ctx.get("system.friend.friend_service", {})
 
 function M.init()
     if M._inited then

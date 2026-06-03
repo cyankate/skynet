@@ -1,10 +1,10 @@
 local skynet = require "skynet"
 local log = require "log"
-local ScoreRank = require "rank.score_rank"
+local ScoreRank = require "system.rank.score_rank"
 local event_def = require "define.event_def"
 local service_ctx = require "runtime.service_ctx"
 
-local M = service_ctx.get("rank.rank_service", {})
+local M = service_ctx.get("system.rank.rank_service", {})
 M.ranks = M.ranks or {}
 local ranks = M.ranks
 

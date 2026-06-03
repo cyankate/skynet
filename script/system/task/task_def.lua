@@ -1,4 +1,4 @@
--- script/task/task_def.lua
+-- script/system/task/task_def.lua
 local task_def = {
     -- 任务类型
     TASK_TYPE = {

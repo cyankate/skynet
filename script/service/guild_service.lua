@@ -1,9 +1,9 @@
 local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
-local guild_mgr = require "guild.guild_mgr"
+local guild_mgr = require "system.guild.guild_mgr"
 local protocol_handler = require "protocol_handler"
 
-local M = service_ctx.get("guild.guild_service", {})
+local M = service_ctx.get("system.guild.guild_service", {})
 
 function M.init()
     if M._inited then

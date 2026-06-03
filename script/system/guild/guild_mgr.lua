@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
-local Guild = require "guild.guild_base"
+local Guild = require "system.guild.guild_base"
 local guild_def = require "define.guild_def"
 local service_ctx = require "runtime.service_ctx"
 
@@ -18,7 +18,7 @@ local ERROR_CODE = {
     DB_ERROR = 8,
 }
 
-local guild_mgr = service_ctx.get("guild.guild_mgr", {})
+local guild_mgr = service_ctx.get("system.guild.guild_mgr", {})
 guild_mgr.guilds_ = guild_mgr.guilds_ or {}                -- 公会列表
 guild_mgr.player_guilds_ = guild_mgr.player_guilds_ or {}  -- 玩家所在公会映射
 guild_mgr.guild_names_ = guild_mgr.guild_names_ or {}      -- 公会名称映射
