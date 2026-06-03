@@ -13,7 +13,7 @@ function M.activate_tilent(player, tilent_id)
     if activated[tilent_id] then
         return false, "天赋已点亮"
     end
-    for _, v in pairs(cfg.pre_tilents) do 
+    for _, v in pairs(cfg.pre_tilents) do
         if not activated[v] then
             return false, "前置天赋未点亮"
         end
@@ -28,7 +28,7 @@ function M.activate_tilent(player, tilent_id)
         tilent_id = tilent_id,
     }
 end
- 
+
 function M.sync_to_client(player)
     local ctn = player:get_ctn("common")
     local activated = ctn:get_tilents()

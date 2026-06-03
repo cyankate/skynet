@@ -5,7 +5,7 @@ local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
 local match_rules = require "match.match_rules"
 local instance_rules = require "match.instance_rules"
-local tilent_mgr = require "system.tilent.tilent_mgr"
+local tilent_mgr = require "system.tilent_mgr"
 local item_mgr = require "system.item_mgr"
 
 local function normalize_item_msg(_msg)
