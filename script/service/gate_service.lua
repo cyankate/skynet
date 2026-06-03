@@ -131,9 +131,30 @@ function M.register_player(fd, player_id)
     if not c then
         return false
     end
+    local old_fd = player_fd_map[player_id]
+    if old_fd and old_fd ~= fd then
+        local old_c = connection[old_fd]
+        if old_c then
+            old_c.player_id = nil
+        end
+    end
     c.player_id = player_id
     player_fd_map[player_id] = fd
     return true
+end
+
+--- 按 player_id 踢下线并解除 gate 上的玩家绑定（顶号用）
+function M.kick_player(player_id, reason, message)
+    local old_fd = player_fd_map[player_id]
+    if not old_fd then
+        return false
+    end
+    player_fd_map[player_id] = nil
+    local c = connection[old_fd]
+    if c then
+        c.player_id = nil
+    end
+    return M.kick_client(old_fd, reason, message)
 end
 
 function M.get_player_fd(player_id)
@@ -272,10 +293,15 @@ end
 
 function M.handler_disconnect(fd)
     local c = connection[fd]
-    if c and c.account_key then
-        local loginS = skynet.localname(".login")
-        skynet.send(loginS, "lua", "disconnect", c.account_key)
-        log.info("client disconnected, fd=%d, account_key=%s", fd, c.account_key)
+    if c then
+        if c.player_id and player_fd_map[c.player_id] == fd then
+            player_fd_map[c.player_id] = nil
+        end
+        if c.account_key then
+            local loginS = skynet.localname(".login")
+            skynet.send(loginS, "lua", "disconnect", c.account_key, fd)
+            log.info("client disconnected, fd=%d, account_key=%s", fd, c.account_key)
+        end
     end
     connection[fd] = nil
 end

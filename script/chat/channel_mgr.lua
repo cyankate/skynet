@@ -245,6 +245,10 @@ function channel_mgr.on_player_logout(player_id)
 
 end
 
+function channel_mgr.on_player_offline(player_id)
+
+end
+
 -- 初始化管理器
 function channel_mgr.init()
     channel_mgr.cache = ChatCache.new()   

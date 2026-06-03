@@ -3,7 +3,10 @@ local event_def = {
     -- 玩家生命周期（多由 agent 触发）
     PLAYER = {
         LOGIN = "player.login",
+        --- 连接断开（含闪断宽限期内暂离，玩家对象仍在 agent 内存）
         LOGOUT = "player.logout",
+        --- 玩家从 agent 内存卸载（宽限期结束、关服等），用于「真正离线」业务
+        OFFLINE = "player.offline",
         LEVEL_UP = "player.level_up",
         ITEM_CHANGE = "player.item_change",
         TASK_ACCEPT = "player.task_accept",

@@ -42,7 +42,9 @@ function M.on_event(event, data)
             log.info("Player %d received %d global mails on login", data.player_id, count)
         end
     elseif event == event_def.PLAYER.LOGOUT then
-        mail_mgr.remove_mailbox(data.player_id)
+        mail_mgr.on_player_logout(data.player_id)
+    elseif event == event_def.PLAYER.OFFLINE then
+        mail_mgr.on_player_offline(data.player_id)
     end
 end
 
@@ -56,6 +58,7 @@ function M.init()
     if event then
         skynet.call(event, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
         skynet.call(event, "lua", "subscribe", event_def.PLAYER.LOGOUT, skynet.self())
+        skynet.call(event, "lua", "subscribe", event_def.PLAYER.OFFLINE, skynet.self())
     end
 end
 

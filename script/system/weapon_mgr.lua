@@ -4,6 +4,7 @@
 ]]
 
 local log = require "log"
+local protocol_handler = require "protocol_handler"
 local ITEM_DATA = require "setting.ITEM_DATA"
 
 local M = {
@@ -71,6 +72,16 @@ function M.get_unlocked_weapon_ids(player)
     end
     table.sort(list)
     return list
+end
+
+function M.sync_to_client(player)
+    if not player or not player.player_id_ then
+        return false
+    end
+    protocol_handler.send_to_player(player.player_id_, "weapon_list_notify", {
+        weapons = M.get_unlocked_weapon_ids(player),
+    })
+    return true
 end
 
 function M.has_weapon(player, weapon_id)

@@ -654,6 +654,12 @@ local s2c_builder = builder.new()
         }
     })
 
+    :protocol("weapon_list_notify", 543, {
+        request = {
+            weapons = "*integer",
+        }
+    })
+
 proto.s2c = sprotoparser.parse(s2c_builder:to_string())
 
 -- 注册 S2C 协议 schema（用于验证）

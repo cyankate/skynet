@@ -17,6 +17,7 @@ function M.init()
     if event then
         skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
         skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGOUT, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.OFFLINE, skynet.self())
     end
 
     return true
@@ -27,6 +28,8 @@ function M.on_event(event_name, event_data)
         friend_mgr.on_player_login(event_data.player_id)
     elseif event_name == event_def.PLAYER.LOGOUT then
         friend_mgr.on_player_logout(event_data.player_id)
+    elseif event_name == event_def.PLAYER.OFFLINE then
+        friend_mgr.on_player_offline(event_data.player_id)
     end
 end
 

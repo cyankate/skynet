@@ -26,6 +26,30 @@ M._inited = M._inited or false
 local accounts = M.accounts
 local logout_timers = M.logout_timers
 
+local function get_gate()
+    return skynet.localname(".gate")
+end
+
+local function bind_session(account, player_id, fd)
+    if not account or not fd or not player_id then
+        return false
+    end
+    local gateS = get_gate()
+    if not gateS then
+        return false
+    end
+    account.cur_fd = fd
+    return skynet.call(gateS, "lua", "register_player", fd, player_id)
+end
+
+local function kick_player_sync(player_id, reason, message)
+    local gateS = get_gate()
+    if not gateS or not player_id then
+        return false
+    end
+    return skynet.call(gateS, "lua", "kick_player", player_id, reason, message)
+end
+
 local function ctn_loaded(player_id, _ctn)
     local player = user_mgr.get_player_obj(player_id)
     if not player or not player.ctn_loading_[_ctn.name_] then
@@ -58,11 +82,83 @@ function M.handle_login(player)
         return
     end
     local eventS = skynet.localname(".event")
+    if not eventS then
+        return
+    end
     skynet.send(eventS, "lua", "trigger", event_def.PLAYER.LOGIN, {
         player_id = player.player_id_,
         player_name = player.player_name_,
         agent = skynet.self(),
     })
+end
+
+--- 连接断开：闪断/顶号旧连接等，数据仍在内存，勿当作正式离线
+function M.handle_logout(player)
+    if not player then
+        return
+    end
+    local eventS = skynet.localname(".event")
+    if not eventS then
+        return
+    end
+    skynet.send(eventS, "lua", "trigger", event_def.PLAYER.LOGOUT, {
+        player_id = player.player_id_,
+        player_name = player.player_name_,
+    })
+end
+
+--- 玩家从 agent 卸载前触发（宽限期结束、关服清理等）
+function M.handle_offline(player)
+    if not player then
+        return
+    end
+    local eventS = skynet.localname(".event")
+    if not eventS then
+        return
+    end
+    skynet.send(eventS, "lua", "trigger", event_def.PLAYER.OFFLINE, {
+        player_id = player.player_id_,
+        player_name = player.player_name_,
+    })
+end
+
+local function unload_account_from_agent(account_key, account)
+    if not account then
+        return
+    end
+    local player_id = account.player_id
+    local player = player_id and user_mgr.get_player_obj(player_id)
+    if player and player.loaded_ then
+        player:save_to_db()
+    end
+    if player then
+        M.handle_offline(player)
+    end
+    local mapS = skynet.localname(".map")
+    if mapS and player_id then
+        skynet.send(mapS, "lua", "leave_map", player_id)
+    end
+    accounts[account_key] = nil
+    logout_timers[account_key] = nil
+    if player_id then
+        user_mgr.del_player_obj(player_id)
+        skynet.send(skynet.localname(".register"), "lua", "unregister", player_id)
+    end
+end
+
+--- 顶号/rebind 后旧 fd 断开，不应再次走登出逻辑
+function M.should_handle_disconnect(account_key, fd)
+    local account = accounts[account_key]
+    if not account then
+        return false
+    end
+    if account.disconnect_pending then
+        return true
+    end
+    if fd and account.cur_fd and fd ~= account.cur_fd then
+        return false
+    end
+    return true
 end
 
 function M.send_player_data(player)
@@ -71,10 +167,27 @@ function M.send_player_data(player)
         player_name = player.player_name_,
     })
     item_mgr.sync_bag_list_to_client(player)
-    tilent_mgr.sync_to_client(player, "login")
-    weapon_mgr.sync_to_client(player, "login")
+    tilent_mgr.sync_to_client(player)
+    weapon_mgr.sync_to_client(player)
 end
 
+--- 玩家已 loaded：跨服 LOGIN + 客户端全量同步 + 副本状态（重连/顶号/首登 load 完成共用）
+local function notify_player_online(player)
+    if not player or not player.loaded_ then
+        return
+    end
+    M.handle_login(player)
+    M.send_player_data(player)
+    local instanceS = skynet.localname(".instance")
+    if instanceS then
+        skynet.send(instanceS, "lua", "sync_player_instance_state", player.player_id_)
+    end
+end
+
+function M.is_account_ready(account_key)
+    local account = accounts[account_key]
+    return account ~= nil and account.loaded == true
+end
 
 function M.on_player_loaded(player_id)
     local player = user_mgr.get_player_obj(player_id)
@@ -82,22 +195,18 @@ function M.on_player_loaded(player_id)
         return
     end
     player:on_loaded()
-    player.loaded = true
     local account = accounts[player.account_key_]
     if not account then
         return
     end
-    local gateS = skynet.localname(".gate")
-    skynet.send(gateS, "lua", "register_player", account.args.fd, player_id)
+    account.loaded = true
     account.args = nil
+    if account.cur_fd then
+        bind_session(account, player_id, account.cur_fd)
+    end
     skynet.send(skynet.localname(".login"), "lua", "account_loaded", player.account_key_)
     skynet.send(skynet.localname(".register"), "lua", "register", player_id, skynet.self())
-    M.handle_login(player)
-    M.send_player_data(player)
-    local instanceS = skynet.localname(".instance")
-    if instanceS then
-        skynet.send(instanceS, "lua", "sync_player_instance_state", player_id)
-    end
+    notify_player_online(player)
 end
 
 function M.load(account_key)
@@ -149,15 +258,23 @@ end
 
 function M.start(account_key, account_data, args)
     if accounts[account_key] then
-        return false
+        return false, "account already exists"
     end
     accounts[account_key] = {
         account_data = account_data,
         player_id = nil,
         loaded = false,
+        cur_fd = args and args.fd,
         args = args,
     }
-    M.load(account_key)
+    if not M.load(account_key) then
+        local player_id = accounts[account_key] and accounts[account_key].player_id
+        if player_id then
+            user_mgr.del_player_obj(player_id)
+        end
+        accounts[account_key] = nil
+        return false, "load player failed"
+    end
     return true
 end
 
@@ -175,15 +292,9 @@ function M.reconnect(account_key, fd)
         return false, "Player not found"
     end
     log.info("reconnect, fd=%d, account_key=%s, player_id=%d", fd, account_key, account.player_id)
-    skynet.send(skynet.localname(".gate"), "lua", "register_player", fd, account.player_id)
-    M.handle_login(player)
-    if player.loaded_ then
-        M.send_player_data(player)
-    end
-    local instanceS = skynet.localname(".instance")
-    if instanceS then
-        skynet.send(instanceS, "lua", "sync_player_instance_state", account.player_id)
-    end
+    account.disconnect_pending = false
+    bind_session(account, account.player_id, fd)
+    notify_player_online(player)
     return true
 end
 
@@ -196,17 +307,18 @@ function M.kicked_out(account_key, new_fd)
         logout_timers[account_key]()
         logout_timers[account_key] = nil
     end
-    skynet.send(skynet.localname(".gate"), "lua", "kick_client", account.player_id, "kicked_out", "您的账号在其他设备登录，已被强制下线")
     local player = user_mgr.get_player_obj(account.player_id)
     if not player then
         return false, "Player not found"
     end
+    kick_player_sync(account.player_id, "kicked_out", "您的账号在其他设备登录，已被强制下线")
     if player.loaded_ then
         player:save_to_db()
     end
     log.info("kicked_out, new_fd=%d, account_key=%s, player_id=%d", new_fd, account_key, account.player_id)
-    skynet.send(skynet.localname(".gate"), "lua", "register_player", new_fd, account.player_id)
-    M.send_player_data(player)
+    account.disconnect_pending = false
+    bind_session(account, account.player_id, new_fd)
+    notify_player_online(player)
     return true
 end
 
@@ -219,7 +331,14 @@ function M.disconnect(account_key)
     if not player then
         return false, "Player not found"
     end
+    if account.disconnect_pending then
+        return true
+    end
+    account.disconnect_pending = true
+
     log.info("disconnect, account_key=%s, player_id=%d", account_key, account.player_id)
+    M.handle_logout(player)
+
     local matchS = skynet.localname(".match")
     if matchS then
         skynet.send(matchS, "lua", "cancel_match", account.player_id)
@@ -236,39 +355,17 @@ function M.disconnect(account_key)
         logout_timers[account_key] = nil
     end
     logout_timers[account_key] = common.set_timeout(180 * 100, function()
-        if player.loaded_ then
-            player:save_to_db()
-        end
         local loginS = skynet.localname(".login")
         if loginS then
             skynet.send(loginS, "lua", "account_exit", account_key)
         end
-        local mapS = skynet.localname(".map")
-        if mapS then
-            skynet.send(mapS, "lua", "leave_map", account.player_id)
-        end
-        accounts[account_key] = nil
-        logout_timers[account_key] = nil
-        user_mgr.del_player_obj(account.player_id)
-        skynet.send(skynet.localname(".register"), "lua", "unregister", account.player_id)
+        unload_account_from_agent(account_key, account)
     end)
     return true
 end
 
 function M.get_account_count()
     return tableUtils.table_size(accounts)
-end
-
-function M.get_managed_accounts()
-    local result = {}
-    for account_key, account in pairs(accounts) do
-        table.insert(result, {
-            account_key = account_key,
-            player_id = account.player_id,
-            loaded = account.loaded,
-        })
-    end
-    return result
 end
 
 local function get_player_or_err(player_id)
@@ -305,10 +402,6 @@ end
 
 function M.shutdown()
     for account_key, account in pairs(accounts) do
-        local player = user_mgr.get_player_obj(account.player_id)
-        if player and player.loaded_ then
-            player:save_to_db()
-        end
         if logout_timers[account_key] then
             logout_timers[account_key]()
             logout_timers[account_key] = nil
@@ -317,10 +410,7 @@ function M.shutdown()
         if loginS then
             skynet.send(loginS, "lua", "agent_exit", account_key)
         end
-        local mapS = skynet.localname(".map")
-        if mapS then
-            skynet.send(mapS, "lua", "leave_map", account.player_id)
-        end
+        unload_account_from_agent(account_key, account)
     end
     skynet.exit()
 end

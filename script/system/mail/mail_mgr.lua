@@ -57,6 +57,15 @@ function mail_mgr.remove_mailbox(player_id)
     player_mailboxes[player_id] = nil
 end
 
+-- 连接断开（闪断宽限期内邮箱仍保留）
+function mail_mgr.on_player_logout(player_id)
+end
+
+-- 玩家正式离线，从内存卸载邮箱
+function mail_mgr.on_player_offline(player_id)
+    mail_mgr.remove_mailbox(player_id)
+end
+
 -- 获取邮件列表（分页）
 function mail_mgr.get_mail_list(player_id, page)
     local box = mail_mgr.get_mailbox(player_id)

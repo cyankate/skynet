@@ -214,8 +214,13 @@ function friend_mgr.on_player_login(player_id)
 
 end
 
--- 玩家登出处理
+-- 连接断开（闪断宽限期内数据仍保留）
 function friend_mgr.on_player_logout(player_id)
+
+end
+
+-- 玩家正式离线（从 agent 内存卸载）
+function friend_mgr.on_player_offline(player_id)
 
 end
 

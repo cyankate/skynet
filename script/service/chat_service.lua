@@ -33,6 +33,7 @@ function M.init()
     if event then
         skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGIN, skynet.self())
         skynet.send(event, "lua", "subscribe", event_def.PLAYER.LOGOUT, skynet.self())
+        skynet.send(event, "lua", "subscribe", event_def.PLAYER.OFFLINE, skynet.self())
         skynet.send(event, "lua", "subscribe", event_def.GUILD.CREATE, skynet.self())
         skynet.send(event, "lua", "subscribe", event_def.GUILD.DISMISS, skynet.self())
     end
@@ -46,8 +47,9 @@ function M.on_event(event_name, event_data)
         channel_mgr.join_channel(1, player_id, player_name)
         channel_mgr.on_player_login(player_id)
     elseif event_name == event_def.PLAYER.LOGOUT then
-        local player_id = event_data.player_id
-        channel_mgr.on_player_logout(player_id)
+        channel_mgr.on_player_logout(event_data.player_id)
+    elseif event_name == event_def.PLAYER.OFFLINE then
+        channel_mgr.on_player_offline(event_data.player_id)
     elseif event_name == event_def.GUILD.CREATE then
         local guild_id = event_data.guild_id
         local guild_name = event_data.guild_name

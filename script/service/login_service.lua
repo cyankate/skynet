@@ -76,6 +76,14 @@ local function assign_account_to_agent(agent, account_key)
     table.insert(agent_to_accounts[agent], account_key)
 end
 
+local function login_rpc_ok(fd, session, player_id, player_name)
+    protocol_handler.rpc_response(fd, session, {
+        success = true,
+        player_id = player_id or 0,
+        player_name = player_name or "",
+    })
+end
+
 local function remove_account_from_agent(agent, account_key)
     if not agent_to_accounts[agent] then
         return
@@ -100,22 +108,36 @@ function CLIENT.login(fd, msg, session)
         return
     end
     log.info("login request, fd=%d, account_key=%s", fd, account_key)
-    protocol_handler.rpc_response(fd, session, { success = true, player_id = 0, player_name = "test" })
     local gateS = skynet.localname(".gate")
     local ainfo = account_info[account_key]
     if ainfo and ainfo.agent then
         if ainfo.logout then
             local ok = M.reconnect(account_key, fd)
             if ok then
+                login_rpc_ok(fd, session)
                 skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
                 return
             end
+            protocol_handler.send_to_client(fd, "login_failed", { reason = "重连失败，请重新登录" })
+            return
+        end
+
+        local ready = skynet.call(ainfo.agent, "lua", "is_account_ready", account_key)
+        if not ready then
+            protocol_handler.send_to_client(fd, "login_failed", { reason = "账号加载中，请稍后再试" })
+            return
         end
 
         ainfo.last_login_ip = ip
         ainfo.last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time())
         ainfo.device_id = device_id
-        skynet.send(ainfo.agent, "lua", "kicked_out", account_key, fd)
+        ainfo.logout = false
+        local kick_ok = skynet.call(ainfo.agent, "lua", "kicked_out", account_key, fd)
+        if not kick_ok then
+            protocol_handler.send_to_client(fd, "login_failed", { reason = "顶号失败，请稍后重试" })
+            return
+        end
+        login_rpc_ok(fd, session)
         skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
         return
     end
@@ -162,9 +184,9 @@ function CLIENT.login(fd, msg, session)
     end
 
     local agent = get_available_agent()
-    local ok = skynet.send(agent, "lua", "start", account_key, account_data, { fd = fd })
+    local ok, err = skynet.call(agent, "lua", "start", account_key, account_data, { fd = fd })
     if not ok then
-        log.error(string.format("Failed to start agent for account %s", account_key))
+        log.error("Failed to start agent for account %s: %s", account_key, tostring(err))
         account_loading[account_key] = nil
         protocol_handler.send_to_client(fd, "login_failed", { reason = "登录失败" })
         return
@@ -173,10 +195,12 @@ function CLIENT.login(fd, msg, session)
     assign_account_to_agent(agent, account_key)
     account_info[account_key] = {
         agent = agent,
+        logout = false,
         last_login_ip = ip,
         last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time()),
         device_id = device_id,
     }
+    login_rpc_ok(fd, session)
     skynet.send(gateS, "lua", "bound_agent", fd, account_key, agent)
 end
 
@@ -233,13 +257,21 @@ function M.account_exit(account_key)
     account_info[account_key] = nil
 end
 
-function M.disconnect(account_key)
+function M.disconnect(account_key, fd)
     if not account_info[account_key] then
         log.error(string.format("Account %s not found", account_key))
         return false
     end
     if account_info[account_key].logout then
         return true
+    end
+    local ainfo = account_info[account_key]
+    if ainfo.agent then
+        local should = skynet.call(ainfo.agent, "lua", "should_handle_disconnect", account_key, fd)
+        if not should then
+            log.info("ignore stale disconnect, account_key=%s, fd=%s", account_key, tostring(fd))
+            return true
+        end
     end
     account_info[account_key].logout = true
     skynet.send(account_info[account_key].agent, "lua", "disconnect", account_key)
