@@ -395,4 +395,40 @@ function M.random_n_from_list_ex(list, n)
     return result
 end
 
+-- 按权重从列表中随机选取一项
+-- @param list {{key, weight}, ...}
+-- @return key 选中项的 key；列表无效或总权重为 0 时返回 nil
+function M.random_weight_from_list(list)
+    if not list or #list == 0 then
+        return nil
+    end
+
+    local total = 0
+    for i = 1, #list do
+        local entry = list[i]
+        local weight = entry and math.floor(tonumber(entry[2]) or 0) or 0
+        if weight > 0 then
+            total = total + weight
+        end
+    end
+    if total <= 0 then
+        return nil
+    end
+
+    local roll = math.random(1, total)
+    local sum = 0
+    for i = 1, #list do
+        local entry = list[i]
+        local key = entry and entry[1]
+        local weight = entry and math.floor(tonumber(entry[2]) or 0) or 0
+        if weight > 0 and key ~= nil then
+            sum = sum + weight
+            if roll <= sum then
+                return key
+            end
+        end
+    end
+    return nil
+end
+
 return M

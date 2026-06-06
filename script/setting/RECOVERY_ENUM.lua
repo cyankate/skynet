@@ -1,0 +1,2 @@
+return 
+{["CAPACITY"]=1,["FIGHT_TIMES"]=2,["REWARD_DOUBLES"]=3}

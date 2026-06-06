@@ -48,46 +48,6 @@ function Player:add_item(_item_id, _count)
     }, "player_add_item")
 end
 
-function Player:change_name(_name)
-    local ctn = self:get_ctn("base")
-    if not ctn then
-        return false, "Base not found"
-    end
-    ctn:set("player_name", _name)
-end
-
-function Player:get_player_name()
-    local ctn = self:get_ctn("base")
-    if not ctn then
-        return false, "Base not found"
-    end
-    return ctn:get("player_name")
-end 
-
-function Player:signin()
-    local ctn = self:get_ctn("base")
-    if not ctn then
-        return false, "Base not found"
-    end
-    ctn:set("signin_days", 1)
-end
-
-function Player:add_score(_score)
-    local ctn = self:get_ctn("base")
-    if not ctn then
-        return false, "Base not found"
-    end
-    ctn:inc("score", _score)
-end
-
-function Player:get_score()
-    local ctn = self:get_ctn("base")
-    if not ctn then
-        return 0
-    end
-    return ctn:get("score")
-end
-
 function Player:get_flow_state()
     return self.flow_state_ or "idle", self.flow_version_ or 0
 end
@@ -149,12 +109,8 @@ function Player:set_week_data(field_key, value, cycle_offset)
     return ctn:set_field(field_key, value, cycle_offset or 0)
 end
 
---- common 容器字段；default 为无值时返回的默认值（如 {}）
 function Player:get_common_data(field_key, default)
     local ctn = self:get_ctn("common")
-    if not ctn then
-        return false, "Common not found"
-    end
     local v = ctn:get(field_key)
     if v == nil then
         return default
@@ -164,10 +120,19 @@ end
 
 function Player:set_common_data(field_key, value)
     local ctn = self:get_ctn("common")
-    if not ctn then
-        return false, "Common not found"
-    end
     return ctn:set(field_key, value)
 end
+
+function Player:get_level()
+    self:get_common_data("level", 1)
+end 
+
+function Player:get_exp()
+    self:get_common_data("exp", 0)
+end 
+
+function Player:add_exp(_exp)
+    
+end 
 
 return Player

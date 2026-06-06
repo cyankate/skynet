@@ -1,5 +1,14 @@
-local sprotoparser = require "sprotoparser"
-local builder = require "protocol.proto_builder"
+
+local sprotoparser = nil
+local builder = nil
+if SKYNET_LUA_ROOT then
+    sprotoparser = require "Skynet/lualib/sprotoparser"
+    builder = require "Skynet/script/protocol/proto_builder"
+else
+    sprotoparser = require "sprotoparser"
+    builder = require "protocol.proto_builder"
+end
+
 
 local proto = {}
 
@@ -569,6 +578,13 @@ local s2c_builder = builder.new()
             changes = "*item_change_info",
         }
     })
+
+    :protocol("show_item_tips", 652, {
+        request = {
+            tips = "integer", 
+            items = "*item_info",
+        }
+    })
     
     -- 邮件系统
     :type("mail_info", {
@@ -651,12 +667,6 @@ local s2c_builder = builder.new()
     :protocol("tilent_info_notify", 542, {
         request = {
             tilents = "*integer",
-        }
-    })
-
-    :protocol("weapon_list_notify", 543, {
-        request = {
-            weapons = "*integer",
         }
     })
 

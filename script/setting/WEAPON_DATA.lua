@@ -1,0 +1,11 @@
+return 
+{
+[1]={["WeaponId"]=1,["Name"]="$ID:A-718046116",["PartType"]=1,["UnlockLevel"]=0},
+[2]={["WeaponId"]=2,["Name"]="$ID:A-1143749678",["PartType"]=1,["UnlockLevel"]=0},
+[3]={["WeaponId"]=3,["Name"]="$ID:A1474074891",["PartType"]=1,["UnlockLevel"]=0},
+[4]={["WeaponId"]=4,["Name"]="$ID:A-2012142654",["PartType"]=2,["UnlockLevel"]=1},
+[5]={["WeaponId"]=5,["Name"]="$ID:A-2019556285",["PartType"]=2,["UnlockLevel"]=1},
+[6]={["WeaponId"]=6,["Name"]="$ID:A-859799283",["PartType"]=2,["UnlockLevel"]=2},
+[7]={["WeaponId"]=7,["Name"]="$ID:A1683728624",["PartType"]=3,["UnlockLevel"]=4},
+[8]={["WeaponId"]=8,["Name"]="$ID:A-883535278",["PartType"]=3,["UnlockLevel"]=5},
+[9]={["WeaponId"]=9,["Name"]="$ID:A-542026610",["PartType"]=3,["UnlockLevel"]=7}}
