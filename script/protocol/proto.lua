@@ -206,6 +206,12 @@ local c2s_builder = builder.new()
             type_name = "string",       -- 统一玩法入口（单人/多人）
         }
     })
+
+    :protocol("talent_activate", 541, {
+        request = {
+            talent_id = "integer",
+        }
+    })
     
     -- 邮件系统
     :type("item_info", {
@@ -671,9 +677,18 @@ local s2c_builder = builder.new()
         }
     })
 
-    :protocol("tilent_info_notify", 542, {
+    :protocol("talent_info_notify", 542, {
         request = {
-            tilents = "*integer",
+            talents = "*integer",
+        }
+    })
+
+    :protocol("talent_activate_response", 543, {
+        request = {
+            result = "integer",
+            message = "string",
+            talent_id = "integer",
+            level = "integer",
         }
     })
 

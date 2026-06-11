@@ -3,7 +3,6 @@
 ]]
 
 local effect_core = require "effect.effect_core"
-local TILENT_DATA = require "setting.TILENT_DATA"
 
 local M = setmetatable({}, { __index = effect_core })
 
@@ -18,28 +17,10 @@ local function append_effect_ids(ids, part)
     if type(part) ~= "table" then
         return
     end
-    for _, effect_id in ipairs(part) do
-        table.insert(ids, effect_id)
+    for _, effect_id in pairs(part) do
+        ids[#ids + 1] = effect_id
     end
 end
-
-local function collect_tilent_effect_ids(player)
-    local ids = {}
-    local ctn = player and player:get_ctn("common")
-    if not ctn or not ctn.get_tilents then
-        return ids
-    end
-    local activated = ctn:get_tilents() or {}
-    for tilent_id in pairs(activated) do
-        local cfg = TILENT_DATA[num(tilent_id)]
-        if cfg and cfg.effect_ids then
-            append_effect_ids(ids, cfg.effect_ids)
-        end
-    end
-    return ids
-end
-
-table.insert(M.effect_id_collectors, collect_tilent_effect_ids)
 
 function M.register_effect_id_collector(collector)
     if type(collector) == "function" then

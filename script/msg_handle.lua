@@ -5,7 +5,7 @@ local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
 local match_rules = require "match.match_rules"
 local instance_rules = require "match.instance_rules"
-local tilent_mgr = require "system.tilent_mgr"
+local talent_mgr = require "system.talent_mgr"
 local item_mgr = require "system.item_mgr"
 
 local function normalize_item_msg(_msg)
@@ -804,37 +804,36 @@ function on_mark_mail_read(_player_id, _msg)
 end
 
 
-function on_tilent_activate(_player_id, _msg)
+function on_talent_activate(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
     if not player then
-        protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+        protocol_handler.send_to_player(_player_id, "talent_activate_response", {
             result = 1,
             message = "Player not found",
-            tilent_id = tonumber(_msg.tilent_id) or 0,
+            talent_id = tonumber(_msg.talent_id) or 0,
             level = 0,
         })
         return false, "Player not found"
     end
 
-    tilent_mgr.init_player(player)
-    local ok, result_or_err = tilent_mgr.activate_tilent(player, _msg.tilent_id)
+    local ok, result_or_err = talent_mgr.activate_talent(player, _msg.talent_id)
     if not ok then
-        protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+        protocol_handler.send_to_player(_player_id, "talent_activate_response", {
             result = 1,
             message = result_or_err or "点亮失败",
-            tilent_id = tonumber(_msg.tilent_id) or 0,
+            talent_id = tonumber(_msg.talent_id) or 0,
             level = 0,
         })
         return false, result_or_err
     end
 
-    protocol_handler.send_to_player(_player_id, "tilent_activate_response", {
+    protocol_handler.send_to_player(_player_id, "talent_activate_response", {
         result = 0,
         message = "ok",
-        tilent_id = result_or_err.id or (tonumber(_msg.tilent_id) or 0),
+        talent_id = result_or_err.talent_id or (tonumber(_msg.talent_id) or 0),
         level = result_or_err.level or 1,
     })
-    tilent_mgr.sync_to_client(player, "activate")
+    talent_mgr.sync_to_client(player)
     return true
 end
 
@@ -1142,7 +1141,7 @@ local handle = {
     ["delete_mail"] = on_delete_mail,
     ["send_player_mail"] = on_send_player_mail,
     ["mark_mail_read"] = on_mark_mail_read,
-    ["tilent_activate"] = on_tilent_activate,
+    ["talent_activate"] = on_talent_activate,
     ["map_list"] = on_map_list,
     ["map_enter"] = on_map_enter,
     ["map_move"] = on_map_move,

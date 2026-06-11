@@ -9,7 +9,7 @@ local common = require "utils.common"
 local msg_handle = require "msg_handle"
 local event_def = require "define.event_def"
 local user_mgr = require "user_mgr"
-local tilent_mgr = require "system.tilent_mgr"
+local talent_mgr = require "system.talent_mgr"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
@@ -170,7 +170,7 @@ function M.send_player_data(player)
         player_name = player.player_name_,
     })
     item_mgr.sync_bag_list_to_client(player)
-    tilent_mgr.sync_to_client(player)
+    talent_mgr.sync_to_client(player)
     weapon_mgr.sync_to_client(player)
     head_mgr.sync_to_client(player)
 end
