@@ -12,7 +12,7 @@ function CtnCondition:ctor(player)
     self.conditions = {
         level = 1,              -- 当前等级
         chapters = {},          -- 已通关章节 {chapter_id = true}
-        stages = {},            -- 已通关关卡 {stage_id = true}
+        barriers = {},          -- 已通关主线关卡 {barrier_id = true}
         equip_quality = {},     -- 装备品质统计 {quality = count}
         equip_level = {},       -- 装备等级统计 {level = count}
     }

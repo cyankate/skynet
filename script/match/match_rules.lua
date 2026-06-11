@@ -2,6 +2,11 @@
 -- 只维护“如何匹配”，不维护“如何创建副本/如何结算”。
 
 return {
+    -- 主线关卡：直进单机副本
+    barrier = {
+        entry = "direct",
+        max_team_size = 1,
+    },
     -- 单人玩法：直进副本，不走匹配
     single = {
         entry = "direct",

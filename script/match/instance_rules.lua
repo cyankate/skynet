@@ -2,6 +2,17 @@
 -- 只维护“如何创建/进入/结算副本”，不维护匹配队列规则。
 
 return {
+    barrier = {
+        instance_type_name = "single",
+        mode_type = "survival",
+        mode_config = {
+            target_seconds = 180,
+        },
+        adapter_name = "daily_instance",
+        result_source = "client",
+        default_inst_no = 1,
+        ready_mode = "auto",
+    },
     single = {
         instance_type_name = "single",
         mode_type = "survival",

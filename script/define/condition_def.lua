@@ -9,7 +9,8 @@ local condition_def = {
     -- 关卡相关
     CHAPTER = {
         PASS = "chapter.pass",           -- 通关指定章节
-        STAGE_PASS = "stage.pass",       -- 通关指定关卡
+        BARRIER_PASS = "barrier.pass",   -- 通关指定主线关卡
+        STAGE_PASS = "barrier.pass",     -- 兼容旧名
     },
     
     -- 装备相关
@@ -29,8 +30,8 @@ condition_def.handlers = {
         [condition_def.CHAPTER.PASS] = function(self, data)
             return self.conditions.chapters[data.chapter_id] or false
         end,
-        [condition_def.STAGE_PASS] = function(self, data)
-            return self.conditions.stages[data.stage_id] or false
+        [condition_def.CHAPTER.BARRIER_PASS] = function(self, data)
+            return self.conditions.barriers[data.barrier_id or data.stage_id] or false
         end,
         [condition_def.EQUIP.QUALITY_COUNT] = function(self, data)
             return self.conditions.equip_quality[data.quality] or 0
@@ -48,7 +49,7 @@ condition_def.handlers = {
         [condition_def.CHAPTER.PASS] = function(current_value, data)
             return current_value == true
         end,
-        [condition_def.STAGE_PASS] = function(current_value, data)
+        [condition_def.CHAPTER.BARRIER_PASS] = function(current_value, data)
             return current_value == true
         end,
         [condition_def.EQUIP.QUALITY_COUNT] = function(current_value, data)
@@ -69,9 +70,9 @@ condition_def.handlers = {
             self.conditions.chapters[value] = true
             return condition_def.CHAPTER.PASS
         end,
-        [condition_def.STAGE_PASS] = function(self, value)
-            self.conditions.stages[value] = true
-            return condition_def.STAGE_PASS
+        [condition_def.CHAPTER.BARRIER_PASS] = function(self, value)
+            self.conditions.barriers[value] = true
+            return condition_def.CHAPTER.BARRIER_PASS
         end,
     },
 }

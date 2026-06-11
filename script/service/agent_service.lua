@@ -16,6 +16,7 @@ local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
+local barrier_mgr = require "system.barrier_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
 
@@ -173,6 +174,7 @@ function M.send_player_data(player)
     talent_mgr.sync_to_client(player)
     weapon_mgr.sync_to_client(player)
     head_mgr.sync_to_client(player)
+    barrier_mgr.sync_to_client(player)
 end
 
 --- 玩家已 loaded：跨服 LOGIN + 客户端全量同步 + 副本状态（重连/顶号/首登 load 完成共用）
@@ -353,6 +355,7 @@ function M.disconnect(account_key)
             skynet.send(instanceS, "lua", "quit_instance", inst_id_or_err, account.player_id)
         end
     end
+    barrier_mgr.clear_session(player)
     if logout_timers[account_key] then
         logout_timers[account_key]()
         logout_timers[account_key] = nil

@@ -6,6 +6,7 @@ local protocol_handler = require "protocol_handler"
 local match_rules = require "match.match_rules"
 local instance_rules = require "match.instance_rules"
 local talent_mgr = require "system.talent_mgr"
+local barrier_mgr = require "system.barrier_mgr"
 local item_mgr = require "system.item_mgr"
 
 local function normalize_item_msg(_msg)
@@ -804,6 +805,95 @@ function on_mark_mail_read(_player_id, _msg)
 end
 
 
+local function send_barrier_result(player_id, protocol_name, ok, message, payload)
+    local data = {
+        result = ok and 0 or 1,
+        message = message or (ok and "ok" or "failed"),
+    }
+    if payload then
+        for k, v in pairs(payload) do
+            data[k] = v
+        end
+    end
+    protocol_handler.send_to_player(player_id, protocol_name, data)
+end
+
+function on_barrier_enter(_player_id, _msg)
+    local player = user_mgr.get_player_obj(_player_id)
+    if not player then
+        send_barrier_result(_player_id, "barrier_enter_response", false, "Player not found", {
+            barrier_id = tonumber(_msg.barrier_id) or 0,
+        })
+        return false, "Player not found"
+    end
+
+    local ok, result_or_err = barrier_mgr.enter_barrier(player, _msg.barrier_id)
+    if not ok then
+        send_barrier_result(_player_id, "barrier_enter_response", false, result_or_err or "进入关卡失败", {
+            barrier_id = tonumber(_msg.barrier_id) or 0,
+        })
+        return false, result_or_err
+    end
+
+    send_barrier_result(_player_id, "barrier_enter_response", true, "ok", result_or_err)
+    return true
+end
+
+function on_barrier_settle(_player_id, _msg)
+    local player = user_mgr.get_player_obj(_player_id)
+    if not player then
+        send_barrier_result(_player_id, "barrier_settle_response", false, "Player not found", {
+            barrier_id = 0,
+        })
+        return false, "Player not found"
+    end
+
+    local ok, result_or_err = barrier_mgr.settle_barrier(
+        player,
+        _msg.inst_id,
+        _msg.success,
+        _msg.stars,
+        _msg.progress
+    )
+    if not ok then
+        send_barrier_result(_player_id, "barrier_settle_response", false, result_or_err or "结算失败", {
+            barrier_id = 0,
+        })
+        return false, result_or_err
+    end
+
+    send_barrier_result(_player_id, "barrier_settle_response", true, "ok", result_or_err)
+    barrier_mgr.sync_to_client(player)
+    return true
+end
+
+function on_barrier_claim_chest(_player_id, _msg)
+    local player = user_mgr.get_player_obj(_player_id)
+    if not player then
+        send_barrier_result(_player_id, "barrier_claim_chest_response", false, "Player not found", {
+            barrier_id = tonumber(_msg.barrier_id) or 0,
+            chest_index = tonumber(_msg.chest_index) or 0,
+        })
+        return false, "Player not found"
+    end
+
+    local ok, result_or_err = barrier_mgr.claim_chest(player, _msg.barrier_id, _msg.chest_index)
+    if not ok then
+        send_barrier_result(_player_id, "barrier_claim_chest_response", false, result_or_err or "领取失败", {
+            barrier_id = tonumber(_msg.barrier_id) or 0,
+            chest_index = tonumber(_msg.chest_index) or 0,
+        })
+        return false, result_or_err
+    end
+
+    send_barrier_result(_player_id, "barrier_claim_chest_response", true, "ok", {
+        barrier_id = result_or_err.barrier_id,
+        chest_index = result_or_err.chest_index,
+    })
+    barrier_mgr.sync_to_client(player)
+    return true
+end
+
 function on_talent_activate(_player_id, _msg)
     local player = user_mgr.get_player_obj(_player_id)
     if not player then
@@ -1141,6 +1231,9 @@ local handle = {
     ["delete_mail"] = on_delete_mail,
     ["send_player_mail"] = on_send_player_mail,
     ["mark_mail_read"] = on_mark_mail_read,
+    ["barrier_enter"] = on_barrier_enter,
+    ["barrier_settle"] = on_barrier_settle,
+    ["barrier_claim_chest"] = on_barrier_claim_chest,
     ["talent_activate"] = on_talent_activate,
     ["map_list"] = on_map_list,
     ["map_enter"] = on_map_enter,

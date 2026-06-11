@@ -212,6 +212,28 @@ local c2s_builder = builder.new()
             talent_id = "integer",
         }
     })
+
+    :protocol("barrier_enter", 655, {
+        request = {
+            barrier_id = "integer",
+        }
+    })
+
+    :protocol("barrier_settle", 656, {
+        request = {
+            inst_id = "string",
+            success = "boolean",
+            stars = "integer",
+            progress = "integer",
+        }
+    })
+
+    :protocol("barrier_claim_chest", 657, {
+        request = {
+            barrier_id = "integer",
+            chest_index = "integer",
+        }
+    })
     
     -- 邮件系统
     :type("item_info", {
@@ -689,6 +711,55 @@ local s2c_builder = builder.new()
             message = "string",
             talent_id = "integer",
             level = "integer",
+        }
+    })
+
+    :type("barrier_info", {
+        barrier_id = "integer",
+        name = "string",
+        unlocked = "boolean",
+        passed = "boolean",
+        best_stars = "integer",
+        claimed_chests = "*integer",
+    })
+
+    :protocol("barrier_enter_response", 658, {
+        request = {
+            result = "integer",
+            message = "string",
+            barrier_id = "integer",
+            inst_id = "string",
+            scene_id = "integer",
+            stamina = "integer",
+        }
+    })
+
+    :protocol("barrier_settle_response", 659, {
+        request = {
+            result = "integer",
+            message = "string",
+            barrier_id = "integer",
+            success = "boolean",
+            stars = "integer",
+            progress = "integer",
+            best_stars = "integer",
+            first_pass = "boolean",
+        }
+    })
+
+    :protocol("barrier_claim_chest_response", 660, {
+        request = {
+            result = "integer",
+            message = "string",
+            barrier_id = "integer",
+            chest_index = "integer",
+        }
+    })
+
+    :protocol("barrier_info_notify", 661, {
+        request = {
+            stamina = "integer",
+            barriers = "*barrier_info",
         }
     })
 

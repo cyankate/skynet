@@ -5,6 +5,7 @@ local log = require "log"
 local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local head_mgr = require "system.head_mgr"
+local barrier_mgr = require "system.barrier_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -17,11 +18,13 @@ function Player:ctor(_player_id, _player_data)
     self.is_new_ = _player_data.is_new == true
     self.flow_state_ = "idle"
     self.flow_version_ = 0
+    self.barrier_session_ = nil
 end
 
 --- 新号初始化：容器 load 完成后写入默认数据
 function Player:init_new_player()
     head_mgr.init_player(self)
+    barrier_mgr.init_player(self)
 end
 
 function Player:on_loaded()
@@ -31,6 +34,7 @@ function Player:on_loaded()
     self.loaded_ = true
 
     recovery_mgr.init_player(self)
+    barrier_mgr.on_player_loaded(self)
 
     local rankS = skynet.localname(".rank")
     skynet.send(rankS, "lua", "update_rank", "score", {
@@ -64,6 +68,18 @@ function Player:set_flow_state(new_state)
     self.flow_state_ = new_state or "idle"
     self.flow_version_ = (self.flow_version_ or 0) + 1
     return old_state, self.flow_state_, self.flow_version_
+end
+
+function Player:get_barrier_session()
+    return self.barrier_session_
+end
+
+function Player:set_barrier_session(session)
+    self.barrier_session_ = session
+end
+
+function Player:clear_barrier_session()
+    self.barrier_session_ = nil
 end
 
 function Player:try_set_flow_state(expected_states, new_state)
