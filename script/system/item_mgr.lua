@@ -5,6 +5,7 @@ local service_ctx = require "runtime.service_ctx"
 
 local ITEM_DEF = require "define.item_def"
 local ITEM_DATA = require "setting.item_data"
+local head_mgr = require "system.head_mgr"
 
 local item_mgr = service_ctx.get("system.item_mgr", {})
 item_mgr.virtual_add_handlers = item_mgr.virtual_add_handlers or {}
@@ -358,7 +359,7 @@ function item_mgr.sync_bag_list_to_client(player)
     return true
 end
 
-virtual_add_handlers.guild_point = function(player, item_id, count, ext)
+virtual_add_handlers[ITEM_DEF.ITEM_SUB_TYPE.GUILD_POINT] = function(player, item_id, count, ext)
     local guildS = skynet.localname(".guild")
     if not guildS then
         return false, "guild服务不可用"
@@ -369,8 +370,16 @@ virtual_add_handlers.guild_point = function(player, item_id, count, ext)
     end
     return true, false
 end
- 
-virtual_add_handlers.weapon_fragment = function(player, item_id, count, ext)
+
+virtual_add_handlers[ITEM_DEF.ITEM_SUB_TYPE.HEAD_EXP] = function(player, item_id, count, ext)
+    local ok, result = head_mgr.add_head_exp(player, num(count))
+    if not ok then
+        return false, result or "车头经验添加失败"
+    end
+    return true, false
+end
+
+virtual_add_handlers[ITEM_DEF.ITEM_SUB_TYPE.WEAPON] = function(player, item_id, count, ext)
     local weapon_id = num(ext.weapon_id)
     if weapon_id <= 0 then
         return false, "武器id不存在"

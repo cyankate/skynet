@@ -6,6 +6,8 @@ local ITEM_ID = {
 
 local ITEM_SUB_TYPE = {
     CAPACITY = 1000,
+    GUILD_POINT = 1001,
+    HEAD_EXP = 1002,
     WEAPON = 1200,
     GIFT = 1300,
 }

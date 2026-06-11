@@ -4,6 +4,7 @@ local class = require "utils.class"
 local log = require "log"
 local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
+local head_mgr = require "system.head_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -12,9 +13,15 @@ function Player:ctor(_player_id, _player_data)
     self.account_key_ = _player_data.account_key
     self.ctns_ = {} -- 存储容器对象
     self.ctn_loading_ = {} -- 正在加载的容器
-    self.loaded_ = false 
+    self.loaded_ = false
+    self.is_new_ = _player_data.is_new == true
     self.flow_state_ = "idle"
     self.flow_version_ = 0
+end
+
+--- 新号初始化：容器 load 完成后写入默认数据
+function Player:init_new_player()
+    head_mgr.init_player(self)
 end
 
 function Player:on_loaded()

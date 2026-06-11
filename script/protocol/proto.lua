@@ -585,6 +585,13 @@ local s2c_builder = builder.new()
             items = "*item_info",
         }
     })
+
+    :protocol("head_upgrade_notify", 654, {
+        request = {
+            level = "integer",
+            exp = "integer",
+        }
+    })
     
     -- 邮件系统
     :type("mail_info", {

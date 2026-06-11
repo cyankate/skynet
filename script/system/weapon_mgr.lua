@@ -1,17 +1,48 @@
 --[[
-    武器管理：虚拟武器道具（Type=0, SubType=1200）获得时不进背包，
-    由 item_mgr 特殊处理器直接解锁对应武器（Args 内配置 weapon_id）。
+    武器养成：解锁 + 属性结算。
 ]]
 
-local log = require "log"
+local attr_calc = require "effect.attr_calc"
+local effect_mgr = require "system.effect_mgr"
 local protocol_handler = require "protocol_handler"
-local ITEM_DATA = require "setting.ITEM_DATA"
+local log = require "log"
 
-local M = {
-}
+local M = {}
+
+local DEFAULT_WEAPON_LEVEL = 1
 
 local function num(v)
-    return math.floor(tonumber(v) or 0)
+    return tonumber(v) or 0
+end
+
+local function get_ctn(player)
+    return player and player:get_ctn("common")
+end
+
+function M.get_weapon_level(player, weapon_id)
+    local ctn = get_ctn(player)
+    if not ctn then
+        return DEFAULT_WEAPON_LEVEL
+    end
+    local weapons = ctn:get_weapons()
+    local entry = weapons and weapons[num(weapon_id)]
+    if type(entry) == "table" then
+        local level = num(entry.level)
+        if level > 0 then
+            return level
+        end
+    end
+    return DEFAULT_WEAPON_LEVEL
+end
+
+function M.calc_player_weapon_attrs(player, weapon_ids)
+    weapon_ids = weapon_ids or M.get_unlocked_weapon_ids(player)
+    local weapons = {}
+    for _, weapon_id in ipairs(weapon_ids) do
+        table.insert(weapons, attr_calc.build_weapon(weapon_id, M.get_weapon_level(player, weapon_id)))
+    end
+    local attr_mods = effect_mgr.collect_player_attr_mods(player)
+    return attr_calc.calc_weapons_attrs(weapons, attr_mods), attr_mods
 end
 
 function M.activate_weapon(player, weapon_id)
@@ -19,7 +50,7 @@ function M.activate_weapon(player, weapon_id)
     if weapon_id <= 0 then
         return false, "invalid weapon_id"
     end
-    local ctn = player:get_ctn("common")
+    local ctn = get_ctn(player)
     if not ctn then
         return false, "common container not found"
     end
@@ -32,7 +63,7 @@ function M.activate_weapon(player, weapon_id)
 end
 
 function M.get_unlocked_weapon_ids(player)
-    local ctn = player:get_ctn("common")
+    local ctn = get_ctn(player)
     if not ctn then
         return {}
     end
@@ -55,7 +86,7 @@ function M.sync_to_client(player)
 end
 
 function M.has_weapon(player, weapon_id)
-    local ctn = player:get_ctn("common")
+    local ctn = get_ctn(player)
     if not ctn then
         return false
     end

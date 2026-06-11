@@ -1,6 +1,7 @@
 local protocol_handler = require "protocol_handler"
 local TILENT_DATA = require "setting.tilent_data"
 local item_mgr = require "system.item_mgr"
+local effect_mgr = require "system.effect_mgr"
 local M = {}
 
 function M.activate_tilent(player, tilent_id)
@@ -24,6 +25,7 @@ function M.activate_tilent(player, tilent_id)
         return false, err
     end
     ctn:set_tilent_activated(tilent_id)
+    effect_mgr.collect_player_effects(player)
     return true, {
         tilent_id = tilent_id,
     }

@@ -15,6 +15,8 @@ local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
+local head_mgr = require "system.head_mgr"
+local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
 
 local M = service_ctx.get("agent.agent", {})
@@ -162,6 +164,7 @@ function M.should_handle_disconnect(account_key, fd)
 end
 
 function M.send_player_data(player)
+    effect_mgr.collect_player_effects(player)
     protocol_handler.send_to_player(player.player_id_, "player_data", {
         player_id = player.player_id_,
         player_name = player.player_name_,
@@ -169,6 +172,7 @@ function M.send_player_data(player)
     item_mgr.sync_bag_list_to_client(player)
     tilent_mgr.sync_to_client(player)
     weapon_mgr.sync_to_client(player)
+    head_mgr.sync_to_client(player)
 end
 
 --- 玩家已 loaded：跨服 LOGIN + 客户端全量同步 + 副本状态（重连/顶号/首登 load 完成共用）
@@ -193,6 +197,11 @@ function M.on_player_loaded(player_id)
     local player = user_mgr.get_player_obj(player_id)
     if not player then
         return
+    end
+    if player.is_new_ then
+        player:init_new_player()
+        player.is_new_ = false
+        player:save_to_db()
     end
     player:on_loaded()
     local account = accounts[player.account_key_]
@@ -237,6 +246,7 @@ function M.load(account_key)
             player_id = player_id,
             player_name = "Player_" .. math.random(1000, 9999),
             info = {},
+            is_new = true,
         }
         local ret = skynet.call(db, "lua", "create_player", player_id, player_data)
         if not ret then
