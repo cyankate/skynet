@@ -243,6 +243,9 @@ function M.settle_barrier(player, inst_id, success, stars, progress)
     if type(session) ~= "table" or tostring(session.inst_id) ~= inst_id then
         return false, "关卡会话无效"
     end
+    if session.settling then
+        return false, "结算处理中"
+    end
 
     local barrier_id = num(session.barrier_id)
     local cfg = get_cfg(barrier_id)
@@ -251,20 +254,19 @@ function M.settle_barrier(player, inst_id, success, stars, progress)
         return false, "关卡配置不存在"
     end
 
+    -- 抢占会话：后续重复请求直接失败，发奖失败时可重试
+    session.settling = true
+    player:set_barrier_session(session)
+
     local instanceS = skynet.localname(".instance")
     if instanceS then
-        local in_inst, current_inst_id = skynet.call(instanceS, "lua", "get_player_instance", player.player_id_)
-        if in_inst and tostring(current_inst_id) == inst_id then
-            skynet.call(instanceS, "lua", "complete_instance", inst_id, success, {
-                barrier_id = barrier_id,
-                stars = stars,
-                progress = progress,
-                reason = success and "barrier_clear" or "barrier_fail",
-            })
-        end
+        skynet.call(instanceS, "lua", "complete_instance", inst_id, success, {
+            barrier_id = barrier_id,
+            stars = stars,
+            progress = progress,
+            reason = success and "barrier_clear" or "barrier_fail",
+        })
     end
-
-    M.clear_session(player)
 
     local record, records = get_record(ctn, barrier_id)
     local first_pass = not record.passed
@@ -288,8 +290,12 @@ function M.settle_barrier(player, inst_id, success, stars, progress)
 
     local add_ok, add_err = give_items(player, reward_items, "barrier_settle")
     if not add_ok then
+        session.settling = nil
+        player:set_barrier_session(session)
         return false, add_err or "发放奖励失败"
     end
+
+    M.clear_session(player)
 
     return true, {
         barrier_id = barrier_id,
