@@ -3,7 +3,7 @@
 
 return {
     barrier = {
-        instance_type_name = "single",
+        instance_type_name = "rogue",
         mode_type = "survival",
         mode_config = {
             target_seconds = 180,

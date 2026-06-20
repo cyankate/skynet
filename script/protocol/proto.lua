@@ -234,6 +234,25 @@ local c2s_builder = builder.new()
             chest_index = "integer",
         }
     })
+
+    :protocol("rogue_pick_open", 662, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("rogue_pick_refresh", 663, {
+        request = {
+            inst_id = "string",
+        }
+    })
+
+    :protocol("rogue_pick_select", 664, {
+        request = {
+            inst_id = "string",
+            choice_index = "integer",
+        }
+    })
     
     -- 邮件系统
     :type("item_info", {
@@ -549,11 +568,21 @@ local s2c_builder = builder.new()
             scene_id = "integer",
         }
     })
+    
 
     :protocol("instance_play_data_notify", 524, {
         request = {
             inst_id = "string",
-            data = "binary",
+            inst_no = "integer",
+            status = "integer",
+            create_time = "integer",
+            start_time = "integer",
+            end_time = "integer",
+            duration = "integer",
+            progress = "integer",
+            complete_success = "boolean",
+            fail_reason = "string",
+            extra = "string",
         }
     })
 
@@ -760,6 +789,83 @@ local s2c_builder = builder.new()
         request = {
             stamina = "integer",
             barriers = "*barrier_info",
+        }
+    })
+
+    :type("rogue_option", {
+        ability_id = "integer",
+        name = "string",
+        icon = "string",
+        quality = "integer",
+        type = "string",
+        effect_id = "integer",
+        weapon_id = "integer",
+    })
+
+    :type("rogue_picked_entry", {
+        ability_id = "integer",
+        count = "integer",
+    })
+
+    :type("rogue_pending_pick", {
+        pick_index = "integer",
+        options = "*rogue_option",
+    })
+
+    :type("rogue_sync", {
+        refresh_id = "integer",
+        energy_tier = "integer",
+        pick_times = "integer",
+        max_picks = "integer",
+        energy_needs = "*integer",
+        owned_weapon_ids = "*integer",
+        picked = "*rogue_picked_entry",
+        pending = "rogue_pending_pick",
+    })
+
+    :protocol("rogue_pick_notify", 665, {
+        request = {
+            inst_id = "string",
+            pick_index = "integer",
+            options = "*rogue_option",
+        }
+    })
+
+    :protocol("rogue_pick_open_response", 666, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+            pick_index = "integer",
+        }
+    })
+
+    :protocol("rogue_pick_refresh_response", 667, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+            pick_index = "integer",
+        }
+    })
+
+    :protocol("rogue_pick_select_response", 668, {
+        request = {
+            result = "integer",
+            message = "string",
+            inst_id = "string",
+            ability_id = "integer",
+            effect_id = "integer",
+            pick_times = "integer",
+        }
+    })
+
+    :protocol("rogue_state_notify", 669, {
+        request = {
+            inst_id = "string",
+            pick_times = "integer",
+            picked = "*rogue_picked_entry",
+            sync = "rogue_sync",
         }
     })
 

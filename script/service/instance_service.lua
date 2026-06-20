@@ -437,13 +437,76 @@ function M.sync_player_instance_state(player_id)
     if not inst or not inst:has_player(player_id) then
         return true
     end
-    if inst.pack_data_to_client then
-        protocol_handler.send_to_player(player_id, "instance_play_data_notify", {
-            inst_id = inst_id,
-            data = inst:pack_data_to_client(),
-        })
+    if inst.build_play_data_notify then
+        protocol_handler.send_to_player(player_id, "instance_play_data_notify", inst:build_play_data_notify())
     end
     return true
+end
+
+local function get_rogue_inst(inst_id, player_id)
+    local inst, ok, err = get_instance_or_error(inst_id)
+    if not ok then
+        return nil, ok, err
+    end
+    if not inst.rogue_open_pick then
+        return nil, false, "当前副本不支持肉鸽"
+    end
+    if player_id and not inst:has_player(player_id) then
+        return nil, false, "玩家未在副本中"
+    end
+    return inst, true
+end
+
+function M.rogue_pick_open(inst_id, player_id)
+    local inst, ok, err = get_rogue_inst(inst_id, player_id)
+    if not ok then
+        return ok, err
+    end
+    local open_ok, result = inst:rogue_open_pick()
+    if not open_ok then
+        return false, result
+    end
+    protocol_handler.send_to_player(player_id, "rogue_pick_notify", {
+        inst_id = inst_id,
+        pick_index = result.pick_index,
+        options = result.options,
+    })
+    return true, result
+end
+
+function M.rogue_pick_refresh(inst_id, player_id)
+    local inst, ok, err = get_rogue_inst(inst_id, player_id)
+    if not ok then
+        return ok, err
+    end
+    local refresh_ok, result = inst:rogue_refresh_pick()
+    if not refresh_ok then
+        return false, result
+    end
+    protocol_handler.send_to_player(player_id, "rogue_pick_notify", {
+        inst_id = inst_id,
+        pick_index = result.pick_index,
+        options = result.options,
+    })
+    return true, result
+end
+
+function M.rogue_pick_select(inst_id, player_id, choice_index)
+    local inst, ok, err = get_rogue_inst(inst_id, player_id)
+    if not ok then
+        return ok, err
+    end
+    local select_ok, result = inst:rogue_select_pick(choice_index)
+    if not select_ok then
+        return false, result
+    end
+    protocol_handler.send_to_player(player_id, "rogue_state_notify", {
+        inst_id = inst_id,
+        pick_times = result.pick_times,
+        picked = result.picked,
+        sync = inst:build_rogue_sync(),
+    })
+    return true, result
 end
 
 function M.shutdown()

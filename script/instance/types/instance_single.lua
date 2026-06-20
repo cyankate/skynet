@@ -1,6 +1,6 @@
 local class = require "utils.class"
 local log = require "log"
-local cjson = require "cjson.safe"
+local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local InstanceBase = require "instance.instance_base"
 local mode_factory = require "instance.modes.mode_factory"
@@ -46,11 +46,7 @@ function InstanceSingle:on_enter(player_id)
     if not self.owner_player_id_ then
         self.owner_player_id_ = player_id
     end
-    local inst_pack_data = self:pack_data_to_client()
-    protocol_handler.send_to_player(player_id, "instance_play_data_notify", {
-        inst_id = self.inst_id_,
-        data = inst_pack_data,
-    })
+    protocol_handler.send_to_player(player_id, "instance_play_data_notify", self:build_play_data_notify())
 end
 
 function InstanceSingle:on_exit(player_id)
@@ -99,17 +95,18 @@ function InstanceSingle:on_update(dt)
     self.progress_ = math.min(100, self.progress_ + dt * 5)
 end
 
-function InstanceSingle:pack_data_to_client()
-    local payload = self:build_client_payload_base()
-    payload.owner_player_id = self.owner_player_id_ or 0
-    payload.progress = math.floor(self.progress_)
-    payload.timeout_seconds = self.timeout_seconds_
-    payload.complete_success = self.complete_success_
-    payload.fail_reason = self.fail_reason_
-    payload.complete_data = self.complete_data_
-    payload.mode_type = self.mode_type_
-    payload.mode_data = self.mode_ and self.mode_:build_runtime_data(self) or {}
-    return cjson.encode(payload) or "{}"
+function InstanceSingle:build_extra_data()
+    return {
+        owner_player_id = self.owner_player_id_ or 0,
+        timeout_seconds = self.timeout_seconds_,
+        mode_type = self.mode_type_,
+        mode_data = self.mode_ and self.mode_:build_runtime_data(self) or {},
+        complete_data = self.complete_data_,
+    }
+end
+
+function InstanceSingle:pack_extra_to_client()
+    return tableUtils.serialize_table(self:build_extra_data()) or ""
 end
 
 return InstanceSingle

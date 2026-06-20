@@ -264,7 +264,12 @@ function InstanceBase:get_data(key, default_value)
     return self.data_[key] or default_value
 end
 
-function InstanceBase:build_client_payload_base()
+function InstanceBase:pack_extra_to_client()
+    return nil
+end
+
+function InstanceBase:build_play_data_notify()
+    local extra = self:pack_extra_to_client()
     return {
         inst_id = self.inst_id_,
         inst_no = self.inst_no_ or 0,
@@ -273,9 +278,10 @@ function InstanceBase:build_client_payload_base()
         start_time = self.start_time_ or 0,
         end_time = self.end_time_ or 0,
         duration = self.duration_ or 0,
-        complete_success = self.complete_success_,
-        fail_reason = self.fail_reason_,
-        complete_data = self.complete_data_,
+        progress = math.floor(self.progress_ or 0),
+        complete_success = self.complete_success_ == true,
+        fail_reason = self.fail_reason_ or "",
+        extra = extra or "",
     }
 end
 

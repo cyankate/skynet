@@ -8,7 +8,9 @@ local BARRIER_DATA = require "setting.BARRIER_DATA"
 local BARRIER_DEF = require "define.barrier_def"
 local recovery_mgr = require "system.recovery_mgr"
 local item_mgr = require "system.item_mgr"
+local weapon_mgr = require "system.weapon_mgr"
 local instance_rules = require "match.instance_rules"
+local ROGUE_DEF = require "instance.rogue.rogue_def"
 
 local M = {}
 
@@ -149,6 +151,30 @@ local function give_items(player, items, reason)
     return item_mgr.add_items(player, items, reason)
 end
 
+local function build_weapon_levels(player, weapon_ids)
+    local levels = {}
+    for _, weapon_id in ipairs(weapon_ids or {}) do
+        weapon_id = num(weapon_id)
+        if weapon_id > 0 then
+            levels[weapon_id] = weapon_mgr.get_weapon_level(player, weapon_id)
+        end
+    end
+    return levels
+end
+
+local function build_rogue_join_data(player, barrier_id, cfg)
+    cfg = cfg or get_cfg(barrier_id) or {}
+    local unlocked_weapon_ids = weapon_mgr.get_unlocked_weapon_ids(player)
+    return {
+        barrier_id = barrier_id,
+        rogue_refresh_id = num(cfg.RogueRefreshId) > 0 and num(cfg.RogueRefreshId) or ROGUE_DEF.DEFAULT_REFRESH_ID,
+        energy_needs = type(cfg.EnergyNeed) == "table" and cfg.EnergyNeed or ROGUE_DEF.DEFAULT_ENERGY_NEEDS,
+        lineup_weapon_ids = unlocked_weapon_ids,
+        unlocked_weapon_ids = unlocked_weapon_ids,
+        weapon_levels = build_weapon_levels(player, unlocked_weapon_ids),
+    }
+end
+
 function M.enter_barrier(player, barrier_id)
     barrier_id = num(barrier_id)
     local ok, err = M.can_enter_barrier(player, barrier_id)
@@ -175,7 +201,7 @@ function M.enter_barrier(player, barrier_id)
         result_source = rule.result_source or "client",
         mode_type = rule.mode_type,
         mode_config = rule.mode_config,
-        join_data = { barrier_id = barrier_id },
+        join_data = build_rogue_join_data(player, barrier_id, get_cfg(barrier_id)),
     })
     if not create_ok then
         recovery_mgr.change_count(player, STAMINA_ID, STAMINA_COST)

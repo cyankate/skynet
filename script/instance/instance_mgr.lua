@@ -25,8 +25,10 @@ function instance_mgr.init()
     log.info("instance_mgr: 初始化副本管理器")
     local InstanceSingle = require "instance.types.instance_single"
     local InstanceMulti = require "instance.types.instance_multi"
+    local InstanceRogue = require "instance.types.instance_s_rogue"
     instance_mgr.register_instance_type("single", InstanceSingle)
     instance_mgr.register_instance_type("multi", InstanceMulti)
+    instance_mgr.register_instance_type("rogue", InstanceRogue)
 end
 
 function instance_mgr.register_instance_type(type_name, instance_class)

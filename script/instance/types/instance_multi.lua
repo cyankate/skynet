@@ -1,5 +1,5 @@
 local class = require "utils.class"
-local cjson = require "cjson.safe"
+local tableUtils = require "utils.tableUtils"
 local log = require "log"
 local InstanceBase = require "instance.instance_base"
 local protocol_handler = require "protocol_handler"
@@ -73,11 +73,7 @@ function InstanceMulti:on_quit(player_id)
 end
 
 function InstanceMulti:on_enter(player_id)
-    local inst_pack_data = self:pack_data_to_client()
-    protocol_handler.send_to_player(player_id, "instance_play_data_notify", {
-        inst_id = self.inst_id_,
-        data = inst_pack_data,
-    })
+    protocol_handler.send_to_player(player_id, "instance_play_data_notify", self:build_play_data_notify())
 end
 
 function InstanceMulti:on_update(dt)
@@ -96,22 +92,24 @@ function InstanceMulti:on_complete(success, data_)
     end
 end
 
-function InstanceMulti:pack_data_to_client()
+function InstanceMulti:build_extra_data()
     local members = {}
     for player_id in pairs(self.pjoins_ or {}) do
         table.insert(members, player_id)
     end
-    local payload = self:build_client_payload_base()
-    payload.progress = math.floor(self.progress_)
-    payload.max_players = self.max_players_
-    payload.min_players = self.min_players_
-    payload.members = members
-    payload.complete_success = self.complete_success_
-    payload.fail_reason = self.fail_reason_
-    payload.complete_data = self.complete_data_
-    payload.mode_type = self.mode_type_
-    payload.mode_data = self.mode_ and self.mode_:build_runtime_data(self) or {}
-    return cjson.encode(payload) or "{}"
+    return {
+        max_players = self.max_players_,
+        min_players = self.min_players_,
+        members = members,
+        timeout_seconds = self.timeout_seconds_,
+        mode_type = self.mode_type_,
+        mode_data = self.mode_ and self.mode_:build_runtime_data(self) or {},
+        complete_data = self.complete_data_,
+    }
+end
+
+function InstanceMulti:pack_extra_to_client()
+    return tableUtils.serialize_table(self:build_extra_data()) or ""
 end
 
 return InstanceMulti
