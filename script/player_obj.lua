@@ -8,7 +8,6 @@ local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
 local condition_mgr = require "system.condition_mgr"
 local task_mgr = require "system.task.task_mgr"
-local head_mgr = require "system.head_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -21,7 +20,7 @@ function Player:ctor(_player_id, _player_data)
     self.is_new_ = _player_data.is_new == true
     self.flow_state_ = "idle"
     self.flow_version_ = 0
-    self.barrier_session_ = nil
+    self.instance_session_ = nil
 end
 
 --- 新号初始化：容器 load 完成后写入默认数据
@@ -83,16 +82,28 @@ function Player:set_flow_state(new_state)
     return old_state, self.flow_state_, self.flow_version_
 end
 
+function Player:get_instance_session()
+    return self.instance_session_
+end
+
+function Player:set_instance_session(session)
+    self.instance_session_ = session
+end
+
+function Player:clear_instance_session()
+    self.instance_session_ = nil
+end
+
 function Player:get_barrier_session()
-    return self.barrier_session_
+    return self:get_instance_session()
 end
 
 function Player:set_barrier_session(session)
-    self.barrier_session_ = session
+    self:set_instance_session(session)
 end
 
 function Player:clear_barrier_session()
-    self.barrier_session_ = nil
+    self:clear_instance_session()
 end
 
 function Player:try_set_flow_state(expected_states, new_state)

@@ -143,6 +143,7 @@ local function normalize_options(options)
         entry = entry,
         type_name = type_name,
         team_size = team_size,
+        extra = options.extra,
     }
 end
 

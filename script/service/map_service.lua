@@ -921,7 +921,7 @@ function M.interact_monster(player_id, monster_uid)
 
     local ok, result_or_err = skynet.call(instanceS, "lua", "play_start_direct", player_id, "single", {
         instance_type_name = "single",
-        inst_no = 1001,
+        inst_no = 1,
         ready_mode = "auto",
         result_source = "client",
         mode_type = "survival",

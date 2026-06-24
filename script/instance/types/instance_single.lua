@@ -17,7 +17,6 @@ function InstanceSingle:ctor(inst_id, inst_no, args)
     InstanceBase.ctor(self, inst_id, inst_no, args)
     self.owner_player_id_ = nil
     self.timeout_seconds_ = tonumber(args and args.timeout_seconds) or DEFAULT_TIMEOUT_SECONDS
-    self.progress_ = 0
     self.complete_data_ = nil
     self.complete_success_ = nil
     self.fail_reason_ = nil
@@ -55,7 +54,12 @@ end
 
 function InstanceSingle:on_complete(success, data_)
     self.complete_success_ = success and true or false
-    self.complete_data_ = data_ or {}
+    self.complete_data_ = {}
+    if type(data_) == "table" then
+        for k, v in pairs(data_) do
+            self.complete_data_[k] = v
+        end
+    end
     if not success then
         self.fail_reason_ = self.complete_data_.reason or self.fail_reason_ or "failed"
     end
@@ -91,8 +95,6 @@ function InstanceSingle:on_update(dt)
     if self.mode_ and self.mode_.on_update then
         self.mode_:on_update(self, dt)
     end
-    -- 提供最小可观测进度，便于前端联调展示
-    self.progress_ = math.min(100, self.progress_ + dt * 5)
 end
 
 function InstanceSingle:build_extra_data()

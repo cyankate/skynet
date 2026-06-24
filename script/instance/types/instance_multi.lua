@@ -26,7 +26,6 @@ function InstanceMulti:ctor(inst_id, inst_no, args)
     self.max_players_ = (args and args.team_size) or 3
     self.min_players_ = (args and args.min_players) or 2
     self.timeout_seconds_ = tonumber(args and args.timeout_seconds) or DEFAULT_TIMEOUT_SECONDS
-    self.progress_ = 0
     self.complete_data_ = nil
     self.complete_success_ = nil
     self.fail_reason_ = nil
@@ -80,13 +79,16 @@ function InstanceMulti:on_update(dt)
     if self.mode_ and self.mode_.on_update then
         self.mode_:on_update(self, dt)
     end
-    -- 与单人一致，提供最小可观测进度用于联调
-    self.progress_ = math.min(100, self.progress_ + dt * 3)
 end
 
 function InstanceMulti:on_complete(success, data_)
     self.complete_success_ = success and true or false
-    self.complete_data_ = data_ or {}
+    self.complete_data_ = {}
+    if type(data_) == "table" then
+        for k, v in pairs(data_) do
+            self.complete_data_[k] = v
+        end
+    end
     if not success then
         self.fail_reason_ = self.complete_data_.reason or self.fail_reason_ or "failed"
     end

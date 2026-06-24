@@ -1,6 +1,6 @@
 local skynet = require "skynet"
 local log = require "log"
-local cjson = require "cjson.safe"
+local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local class = require "utils.class"
 local inst_def = require "define.inst_def"
@@ -44,6 +44,7 @@ function InstanceBase:ctor(inst_id, inst_no, args)
     self.event_handlers_ = {}
     -- 定时器
     self.timers_ = {}
+    self.complete_data_ = nil
     
     log.info("InstanceBase: 创建副本 %s", inst_id)
 end
@@ -195,7 +196,6 @@ end
 -- 副本结束
 function InstanceBase:complete(success, data_)
     if self.status_ == InstanceStatus.COMPLETED then
-        -- 幂等：重复结算直接视为成功，避免重复下发结果
         log.warning("InstanceBase: 重复结算被忽略 inst_id=%s", tostring(self.inst_id_))
         return true
     end
@@ -209,28 +209,38 @@ function InstanceBase:complete(success, data_)
     self.duration_ = self.end_time_ - (self.start_time_ or self.create_time_)
     
     self:on_complete(success, data_)
-    local detail = type(data_) == "table" and data_ or {}
-    local end_type = tonumber(detail.end_type)
-    local end_reason = tonumber(detail.end_reason)
+    local complete_data = type(self.complete_data_) == "table" and self.complete_data_ or {}
+    local end_type = tonumber(complete_data.end_type)
+    local end_reason = tonumber(complete_data.end_reason)
     if not end_type then
         end_type = success and InstanceEndType.NORMAL or InstanceEndType.ERROR
     end
     if not end_reason then
         end_reason = success and InstanceEndReason.NORMAL_WIN or InstanceEndReason.ERROR_EXCEPTION
     end
-    local encoded = cjson.encode(data_ or {})
-    local payload = {
-        inst_id = self.inst_id_,
-        success = success and true or false,
-        end_type = end_type,
-        end_reason = end_reason,
-        duration = self.duration_ or 0,
-        data = encoded or "{}",
-    }
     log.info("InstanceBase: 副本结算 inst_id=%s success=%s end_type=%s end_reason=%s duration=%s members=%d",
-        tostring(self.inst_id_), tostring(payload.success), tostring(end_type), tostring(end_reason), tostring(self.duration_ or 0), #collect_member_ids(self))
+        tostring(self.inst_id_), tostring(success and true or false), tostring(end_type), tostring(end_reason), tostring(self.duration_ or 0), #collect_member_ids(self))
     for _, player_id in ipairs(collect_member_ids(self)) do
-        protocol_handler.send_to_player(player_id, "instance_result_notify", payload)
+        local settle_ok, settle_result = protocol_handler.call_agent(player_id, "instance_play_settle", {
+            player_id = player_id,
+            inst_id = self.inst_id_,
+            inst_no = self.inst_no_ or 0,
+            type_name = (self.args_ or {}).type_name,
+            success = success and true or false,
+            complete_data = complete_data,
+        })
+        local extra_data = ""
+        if settle_ok and type(settle_result) == "table" and type(settle_result.settle_data) == "table" then
+            extra_data = tableUtils.serialize_table(settle_result.settle_data) or ""
+        end
+        protocol_handler.send_to_player(player_id, "instance_result_notify", {
+            inst_id = self.inst_id_,
+            success = success and true or false,
+            end_type = end_type,
+            end_reason = end_reason,
+            duration = self.duration_ or 0,
+            extra_data = extra_data,
+        })
     end
     return true
 end

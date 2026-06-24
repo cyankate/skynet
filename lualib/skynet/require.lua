@@ -16,70 +16,103 @@ local context = {
 }
 
 do
-	local require = _G.require
+	local native_require = _G.require
 	local loaded = package.loaded
 	local loading = {}
 
+	local function is_resolved(m)
+		return m ~= nil
+	end
+
+	-- 循环依赖：返回代理，在模块加载完成后再解析字段（运行时访问）
+	local function create_proxy(name)
+		return setmetatable({}, {
+			__index = function(_, k)
+				local m = loaded[name]
+				if type(m) == "table" then
+					return m[k]
+				end
+				if loading[name] then
+					error(string.format(
+						"module '%s' circular require: '%s' not ready yet",
+						name, tostring(k)
+					))
+				end
+				error(string.format("module '%s' not found", name))
+			end,
+		})
+	end
+
+	local function finish_module(name, modfunc, filename, init_list)
+		local m = modfunc(name, filename)
+
+		if init_list then
+			for _, f in ipairs(init_list) do
+				f()
+			end
+		end
+
+		if m == nil then
+			m = true
+		end
+
+		loaded[name] = m
+		return m
+	end
+
 	function M.require(name)
 		local m = loaded[name]
-		if m ~= nil then
+		if is_resolved(m) then
 			return m
 		end
 
 		local co, main = coroutine.running()
-		if main then
-			return require(name)
-		end
-
-		local filename = package.searchpath(name, package.path)
-		if not filename then
-			return require(name)
-		end
-
-		local modfunc = loadfile(filename)
-		if not modfunc then
-			return require(name)
-		end
 
 		local loading_queue = loading[name]
 		if loading_queue then
-			assert(loading_queue.co ~= co, "circular dependency")
-			-- Module is in the init process (require the same mod at the same time in different coroutines) , waiting.
+			-- 同一协程/主线程内的循环 require：返回代理，避免 stack overflow
+			if main or loading_queue.co == co then
+				return create_proxy(name)
+			end
+			-- 不同协程并发加载同一模块：等待先完成的协程
 			local skynet = require "skynet"
-			loading_queue[#loading_queue+1] = co
+			loading_queue[#loading_queue + 1] = co
 			skynet.wait(co)
-			local m = loaded[name]
-			if m == nil then
+			m = loaded[name]
+			if not is_resolved(m) then
 				error(string.format("require %s failed", name))
 			end
 			return m
 		end
 
-		loading_queue = {co = co}
-		loading[name] = loading_queue
-
-		local old_init_list = context[co]
-		local init_list = {}
-		context[co] = init_list
-
-		-- We should call modfunc in lua, because modfunc may yield by calling M.require recursive.
-		local function execute_module()
-			local m = modfunc(name, filename)
-
-			for _, f in ipairs(init_list) do
-				f()
-			end
-
-			if m == nil then
-				m = true
-			end
-
-			loaded[name] = m
+		local filename = package.searchpath(name, package.path)
+		if not filename then
+			return native_require(name)
 		end
 
-		local ok, err = xpcall(execute_module, debug.traceback)
+		local modfunc = loadfile(filename)
+		if not modfunc then
+			return native_require(name)
+		end
 
-		context[co] = old_init_list
+		loading_queue = { co = co }
+		loading[name] = loading_queue
+
+		local init_list
+		local old_init_list
+		if not main then
+			old_init_list = context[co]
+			init_list = {}
+			context[co] = init_list
+		end
+
+		local ok, err = xpcall(function()
+			finish_module(name, modfunc, filename, init_list)
+		end, debug.traceback)
+
+		if not main then
+			context[co] = old_init_list
+		end
 
 		local waiting = #loading_queue
 		if waiting > 0 then
@@ -90,11 +123,12 @@ do
 		end
 		loading[name] = nil
 
-		if ok then
-			return loaded[name]
-		else
+		if not ok then
+			loaded[name] = nil
 			error(err)
 		end
+
+		return loaded[name]
 	end
 end
 

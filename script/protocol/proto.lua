@@ -204,27 +204,13 @@ local c2s_builder = builder.new()
     :protocol("instance_play_start", 522, {
         request = {
             type_name = "string",       -- 统一玩法入口（单人/多人）
+            extra = "string",           -- 客户端意图，Lua table 序列化
         }
     })
 
     :protocol("talent_activate", 541, {
         request = {
             talent_id = "integer",
-        }
-    })
-
-    :protocol("barrier_enter", 655, {
-        request = {
-            barrier_id = "integer",
-        }
-    })
-
-    :protocol("barrier_settle", 656, {
-        request = {
-            inst_id = "string",
-            success = "boolean",
-            stars = "integer",
-            progress = "integer",
         }
     })
 
@@ -578,6 +564,8 @@ local s2c_builder = builder.new()
             pending_confirm = "boolean",
             inst_id = "string",
             scene_id = "integer",
+            inst_no = "integer",
+            extra = "string",
         }
     })
     
@@ -620,7 +608,7 @@ local s2c_builder = builder.new()
             end_type = "integer",
             end_reason = "integer",
             duration = "integer",
-            data = "binary",
+            extra_data = "string",
         }
     })
 
@@ -762,30 +750,6 @@ local s2c_builder = builder.new()
         passed = "boolean",
         best_stars = "integer",
         claimed_chests = "*integer",
-    })
-
-    :protocol("barrier_enter_response", 658, {
-        request = {
-            result = "integer",
-            message = "string",
-            barrier_id = "integer",
-            inst_id = "string",
-            scene_id = "integer",
-            stamina = "integer",
-        }
-    })
-
-    :protocol("barrier_settle_response", 659, {
-        request = {
-            result = "integer",
-            message = "string",
-            barrier_id = "integer",
-            success = "boolean",
-            stars = "integer",
-            progress = "integer",
-            best_stars = "integer",
-            first_pass = "boolean",
-        }
     })
 
     :protocol("barrier_claim_chest_response", 660, {

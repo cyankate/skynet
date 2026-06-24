@@ -222,6 +222,13 @@ function MessageHandler.handle_server_message(name, args)
 			tostring(args and args.end_reason or 0),
 			tostring(args and args.duration or 0)
 		))
+		if args and args.extra_data and args.extra_data ~= "" then
+			local tableUtils = require "utils.tableUtils"
+			local ok, data = pcall(tableUtils.deserialize_table, args.extra_data)
+			if ok and type(data) == "table" then
+				print("[副本结算] extra_data:", data)
+			end
+		end
 		return
 	end
 
@@ -313,8 +320,18 @@ function CommandHandler.process_command(cmd)
 				inst_id = tostring(args[1] or ""),
 			})
 		elseif cmd == "instance_play_start" then
+			local extra = {}
+			if args[2] then
+				extra.inst_no = tonumber(args[2])
+			end
+			local extra_str = ""
+			if next(extra) then
+				local tableUtils = require "utils.tableUtils"
+				extra_str = tableUtils.serialize_table(extra) or ""
+			end
 			NetworkManager.send_request("instance_play_start", {
 				type_name = tostring(args[1] or "single"),
+				extra = extra_str,
 			})
 		elseif cmd == "instance_match_confirm" then
 			NetworkManager.send_request("instance_match_confirm", {

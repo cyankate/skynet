@@ -1,8 +1,7 @@
 --[[
-    主线关卡：线性解锁、体力消耗、进本、结算发奖、星级宝箱。
+    主线关卡：进度记录、体力校验、结算计算、星级宝箱。
 ]]
 
-local skynet = require "skynet"
 local protocol_handler = require "protocol_handler"
 local BARRIER_DATA = require "setting.BARRIER_DATA"
 local BARRIER_DEF = require "define.barrier_def"
@@ -10,7 +9,6 @@ local recovery_mgr = require "system.recovery_mgr"
 local item_mgr = require "system.item_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local condition_mgr = require "system.condition_mgr"
-local instance_rules = require "match.instance_rules"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 
 local M = {}
@@ -36,16 +34,8 @@ local function get_ctn(player)
     return player and player:get_ctn("common")
 end
 
-local function get_cfg(barrier_id)
+function M.get_cfg(barrier_id)
     return BARRIER_DATA[num(barrier_id)]
-end
-
-local function get_max_barrier_id()
-    local max_id = 0
-    for id in pairs(BARRIER_DATA) do
-        max_id = math.max(max_id, num(id))
-    end
-    return max_id
 end
 
 local function load_records(ctn)
@@ -86,8 +76,7 @@ function M.get_record(player, barrier_id)
     if not ctn then
         return nil
     end
-    local record = get_record(ctn, barrier_id)
-    return record
+    return get_record(ctn, barrier_id)
 end
 
 function M.is_barrier_passed(player, barrier_id)
@@ -97,7 +86,7 @@ end
 
 function M.can_enter_barrier(player, barrier_id)
     barrier_id = num(barrier_id)
-    local cfg = get_cfg(barrier_id)
+    local cfg = M.get_cfg(barrier_id)
     if not cfg then
         return false, "关卡配置不存在"
     end
@@ -113,9 +102,9 @@ function M.can_enter_barrier(player, barrier_id)
     if stamina < STAMINA_COST then
         return false, "体力不足"
     end
-    local session = player:get_barrier_session()
+    local session = player:get_instance_session()
     if type(session) == "table" and session.inst_id then
-        return false, "已有进行中的关卡"
+        return false, "已有进行中的副本"
     end
     return true
 end
@@ -145,13 +134,6 @@ local function merge_items(dst, src)
     return dst
 end
 
-local function give_items(player, items, reason)
-    if type(items) ~= "table" or not next(items) then
-        return true, {}
-    end
-    return item_mgr.add_items(player, items, reason)
-end
-
 local function build_weapon_levels(player, weapon_ids)
     local levels = {}
     for _, weapon_id in ipairs(weapon_ids or {}) do
@@ -163,11 +145,12 @@ local function build_weapon_levels(player, weapon_ids)
     return levels
 end
 
-local function build_rogue_join_data(player, barrier_id, cfg)
-    cfg = cfg or get_cfg(barrier_id) or {}
+function M.build_rogue_join_data(player, inst_no, cfg)
+    inst_no = num(inst_no)
+    cfg = cfg or M.get_cfg(inst_no) or {}
     local unlocked_weapon_ids = weapon_mgr.get_unlocked_weapon_ids(player)
     return {
-        barrier_id = barrier_id,
+        inst_no = inst_no,
         rogue_refresh_id = num(cfg.RogueRefreshId) > 0 and num(cfg.RogueRefreshId) or ROGUE_DEF.DEFAULT_REFRESH_ID,
         energy_needs = type(cfg.EnergyNeed) == "table" and cfg.EnergyNeed or ROGUE_DEF.DEFAULT_ENERGY_NEEDS,
         lineup_weapon_ids = unlocked_weapon_ids,
@@ -176,61 +159,7 @@ local function build_rogue_join_data(player, barrier_id, cfg)
     }
 end
 
-function M.enter_barrier(player, barrier_id)
-    barrier_id = num(barrier_id)
-    local ok, err = M.can_enter_barrier(player, barrier_id)
-    if not ok then
-        return false, err
-    end
-
-    local after = recovery_mgr.change_count(player, STAMINA_ID, -STAMINA_COST)
-    if after == nil then
-        return false, "扣除体力失败"
-    end
-
-    local rule = instance_rules.barrier or instance_rules.single
-    local instanceS = skynet.localname(".instance")
-    if not instanceS then
-        recovery_mgr.change_count(player, STAMINA_ID, STAMINA_COST)
-        return false, "副本服务不可用"
-    end
-
-    local create_ok, result_or_err = skynet.call(instanceS, "lua", "play_start_direct", player.player_id_, "barrier", {
-        inst_no = barrier_id,
-        instance_type_name = rule.instance_type_name or "single",
-        ready_mode = rule.ready_mode or "auto",
-        result_source = rule.result_source or "client",
-        mode_type = rule.mode_type,
-        mode_config = rule.mode_config,
-        join_data = build_rogue_join_data(player, barrier_id, get_cfg(barrier_id)),
-    })
-    if not create_ok then
-        recovery_mgr.change_count(player, STAMINA_ID, STAMINA_COST)
-        return false, result_or_err or "进入副本失败"
-    end
-
-    player:set_barrier_session({
-        barrier_id = barrier_id,
-        inst_id = result_or_err.inst_id,
-        scene_id = result_or_err.scene_id or 0,
-        enter_time = os.time(),
-    })
-
-    return true, {
-        barrier_id = barrier_id,
-        inst_id = result_or_err.inst_id,
-        scene_id = result_or_err.scene_id or 0,
-        stamina = after,
-    }
-end
-
-function M.clear_session(player)
-    if player then
-        player:clear_barrier_session()
-    end
-end
-
-local function normalize_stars(stars, success)
+function M.normalize_stars(stars, success)
     stars = num(stars)
     if stars < 0 then
         stars = 0
@@ -244,7 +173,7 @@ local function normalize_stars(stars, success)
     return stars
 end
 
-local function normalize_progress(progress)
+function M.normalize_progress(progress)
     progress = num(progress)
     if progress < 0 then
         progress = 0
@@ -255,47 +184,22 @@ local function normalize_progress(progress)
     return progress
 end
 
-function M.settle_barrier(player, inst_id, success, stars, progress)
-    inst_id = tostring(inst_id or "")
-    success = success and true or false
-    stars = normalize_stars(stars, success)
-    progress = normalize_progress(progress)
-
+function M.calc_settle(player, inst_no, success, stars, progress)
     local ctn = get_ctn(player)
     if not ctn then
         return false, "common container not found"
     end
 
-    local session = player:get_barrier_session()
-    if type(session) ~= "table" or tostring(session.inst_id) ~= inst_id then
-        return false, "关卡会话无效"
-    end
-    if session.settling then
-        return false, "结算处理中"
-    end
-
-    local barrier_id = num(session.barrier_id)
-    local cfg = get_cfg(barrier_id)
+    inst_no = num(inst_no)
+    local cfg = M.get_cfg(inst_no)
     if not cfg then
-        M.clear_session(player)
         return false, "关卡配置不存在"
     end
 
-    -- 抢占会话：后续重复请求直接失败，发奖失败时可重试
-    session.settling = true
-    player:set_barrier_session(session)
+    stars = M.normalize_stars(stars, success)
+    progress = M.normalize_progress(progress)
 
-    local instanceS = skynet.localname(".instance")
-    if instanceS then
-        skynet.call(instanceS, "lua", "complete_instance", inst_id, success, {
-            barrier_id = barrier_id,
-            stars = stars,
-            progress = progress,
-            reason = success and "barrier_clear" or "barrier_fail",
-        })
-    end
-
-    local record, records = get_record(ctn, barrier_id)
+    local record, records = get_record(ctn, inst_no)
     local first_pass = not record.passed
     local reward_items = {}
 
@@ -313,28 +217,18 @@ function M.settle_barrier(player, inst_id, success, stars, progress)
         end
     end
 
-    write_record(ctn, barrier_id, record, records)
-    if success and record.passed then
-        condition_mgr.on_barrier_passed(player, barrier_id)
-    end
-
-    local add_ok, add_err = give_items(player, reward_items, "barrier_settle")
-    if not add_ok then
-        session.settling = nil
-        player:set_barrier_session(session)
-        return false, add_err or "发放奖励失败"
-    end
-
-    M.clear_session(player)
+    write_record(ctn, inst_no, record, records)
 
     return true, {
-        barrier_id = barrier_id,
-        success = success,
-        stars = stars,
-        progress = progress,
-        best_stars = record.best_stars,
-        first_pass = first_pass,
         rewards = reward_items,
+        settle_extra = {
+            inst_no = inst_no,
+            success = success,
+            stars = stars,
+            progress = progress,
+            best_stars = record.best_stars,
+            first_pass = first_pass,
+        },
     }
 end
 
@@ -343,7 +237,7 @@ function M.can_claim_chest(player, barrier_id, chest_index)
     if chest_index < 1 or chest_index > MAX_STARS then
         return false, "宝箱档位无效"
     end
-    local cfg = get_cfg(barrier_id)
+    local cfg = M.get_cfg(barrier_id)
     if not cfg then
         return false, "关卡配置不存在"
     end
@@ -377,7 +271,7 @@ function M.claim_chest(player, barrier_id, chest_index)
     record.claimed_chests[chest_index] = true
     write_record(ctn, barrier_id, record, records)
 
-    local add_ok, add_err = give_items(player, result, "barrier_chest")
+    local add_ok, add_err = item_mgr.add_items(player, result, "barrier_chest")
     if not add_ok then
         record.claimed_chests[chest_index] = nil
         write_record(ctn, barrier_id, record, records)
@@ -436,7 +330,7 @@ local function cleanup_legacy_session(player)
         ctn:set(LEGACY_SESSION_KEY, nil)
     end
     if player then
-        player:clear_barrier_session()
+        player:clear_instance_session()
     end
 end
 
@@ -455,6 +349,72 @@ end
 function M.on_player_loaded(player)
     cleanup_legacy_session(player)
     return true
+end
+
+function M.clear_session(player)
+    if player then
+        player:clear_instance_session()
+    end
+end
+
+function M.before_instance_start(player, ctx)
+    local inst_no = num((ctx.extra or {}).inst_no)
+    if inst_no <= 0 then
+        return false, "inst_no无效"
+    end
+
+    local ok, err = M.can_enter_barrier(player, inst_no)
+    if not ok then
+        return false, err
+    end
+
+    local after = recovery_mgr.change_count(player, STAMINA_ID, -STAMINA_COST)
+    if after == nil then
+        return false, "扣除体力失败"
+    end
+
+    return true, {
+        inst_no = inst_no,
+        join_data = M.build_rogue_join_data(player, inst_no),
+        start_extra = {
+            stamina = after,
+        },
+    }
+end
+
+function M.on_play_start_failed(player, ctx, _err)
+    local inst_no = num((ctx.extra or {}).inst_no)
+    if inst_no > 0 then
+        recovery_mgr.change_count(player, STAMINA_ID, STAMINA_COST)
+    end
+end
+
+function M.before_instance_end(player, ctx)
+    local session = ctx.session or {}
+    local inst_no = num(session.inst_no)
+    local instance_complete_data = type(ctx.complete_data) == "table" and ctx.complete_data or {}
+    local stars = M.normalize_stars(instance_complete_data.stars, ctx.success)
+    local progress = M.normalize_progress(instance_complete_data.progress)
+
+    local settle_ok, settle_data_or_err = M.calc_settle(player, inst_no, ctx.success, stars, progress)
+    if not settle_ok then
+        return false, settle_data_or_err
+    end
+
+    return true, {
+        rewards = settle_data_or_err.rewards,
+        reward_reason = "instance_settle",
+        settle_data = settle_data_or_err.settle_extra,
+    }
+end
+
+function M.after_instance_end(player, ctx, _end_data)
+    local session = ctx.session or {}
+    local inst_no = num(session.inst_no)
+    if ctx.success and inst_no > 0 then
+        condition_mgr.on_barrier_passed(player, inst_no)
+    end
+    M.sync_to_client(player)
 end
 
 return M

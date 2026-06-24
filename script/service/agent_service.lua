@@ -412,6 +412,15 @@ function M.try_set_player_flow(data)
     return true, new_state
 end
 
+function M.instance_play_settle(data)
+    local player, err = get_player_or_err(data and data.player_id)
+    if not player then
+        return false, err
+    end
+    local instance_play_mgr = require "system.instance_play_mgr"
+    return instance_play_mgr.on_complete(player, data)
+end
+
 function M.shutdown()
     for account_key, account in pairs(accounts) do
         if logout_timers[account_key] then

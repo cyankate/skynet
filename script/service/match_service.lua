@@ -4,6 +4,8 @@ local service_ctx = require "runtime.service_ctx"
 local match_mgr = require "match.match_mgr"
 local match_mode_adapter_mgr = require "match.match_mode_adapter_mgr"
 local instance_rules = require "match.instance_rules"
+local BARRIER_DATA = require "setting.BARRIER_DATA"
+local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 
 local M = service_ctx.get("match.match_service", {})
@@ -87,6 +89,20 @@ local function pending_type_name(pending)
     return ((pending or {}).options or {}).type_name or ""
 end
 
+local function resolve_inst_no(extra_raw)
+    local extra = extra_raw
+    if type(extra_raw) == "string" and extra_raw ~= "" then
+        local ok, data = pcall(tableUtils.deserialize_table, extra_raw)
+        if ok and type(data) == "table" then
+            extra = data
+        end
+    end
+    if type(extra) ~= "table" then
+        extra = {}
+    end
+    return tonumber(extra.inst_no) or 0
+end
+
 local function build_instance_options(match_options)
     local opt = match_options or {}
     local type_name = opt.type_name or ""
@@ -99,6 +115,14 @@ local function build_instance_options(match_options)
         return nil, string.format("玩法[%s]队伍人数非法", tostring(type_name))
     end
 
+    local inst_no = resolve_inst_no(opt.extra)
+    if inst_no <= 0 then
+        return nil, "inst_no无效"
+    end
+    if not BARRIER_DATA[inst_no] then
+        return nil, "副本配置不存在"
+    end
+
     return {
         type_name = type_name,
         entry = opt.entry or "match",
@@ -109,7 +133,7 @@ local function build_instance_options(match_options)
         adapter_name = inst_rule.adapter_name or "instance_default",
         result_source = inst_rule.result_source or "server",
         ready_mode = inst_rule.ready_mode,
-        inst_no = tonumber(inst_rule.default_inst_no) or 0,
+        inst_no = inst_no,
         mode_type = inst_rule.mode_type,
         mode_config = inst_rule.mode_config,
     }
