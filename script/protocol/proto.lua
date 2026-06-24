@@ -253,6 +253,18 @@ local c2s_builder = builder.new()
             choice_index = "integer",
         }
     })
+
+    :protocol("task_accept", 670, {
+        request = {
+            task_id = "integer",
+        }
+    })
+
+    :protocol("task_reward", 671, {
+        request = {
+            task_id = "integer",
+        }
+    })
     
     -- 邮件系统
     :type("item_info", {
@@ -866,6 +878,48 @@ local s2c_builder = builder.new()
             pick_times = "integer",
             picked = "*rogue_picked_entry",
             sync = "rogue_sync",
+        }
+    })
+
+    :type("task_progress_entry", {
+        id = "string",
+        value = "integer",
+    })
+
+    :type("task_info", {
+        task_id = "integer",
+        state = "integer",
+        accept_time = "integer",
+        complete_time = "integer",
+        progress = "*task_progress_entry",
+    })
+
+    :protocol("task_accept_response", 670, {
+        request = {
+            result = "integer",
+            message = "string",
+            task_id = "integer",
+            task = "task_info",
+        }
+    })
+
+    :protocol("task_reward_response", 671, {
+        request = {
+            result = "integer",
+            message = "string",
+            task_id = "integer",
+        }
+    })
+
+    :protocol("task_info_notify", 672, {
+        request = {
+            tasks = "*task_info",
+        }
+    })
+
+    :protocol("task_update_notify", 673, {
+        request = {
+            task = "task_info",
         }
     })
 

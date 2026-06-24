@@ -194,6 +194,20 @@ CREATE TABLE IF NOT EXISTS `player_week` (
     PRIMARY KEY (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家周周期数据表';
 
+-- 条件进度表
+CREATE TABLE IF NOT EXISTS `condition` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '条件进度数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家条件进度表';
+
+-- 任务数据表
+CREATE TABLE IF NOT EXISTS `task` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '任务数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家任务数据表';
+
 -- 玩家表
 CREATE TABLE IF NOT EXISTS `player` (
     `player_id` int NOT NULL COMMENT '玩家ID',

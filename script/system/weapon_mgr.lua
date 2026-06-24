@@ -5,6 +5,7 @@
 local attr_calc = require "effect.attr_calc"
 local effect_mgr = require "system.effect_mgr"
 local protocol_handler = require "protocol_handler"
+local condition_mgr = require "system.condition_mgr"
 local log = require "log"
 
 local M = {}
@@ -58,6 +59,7 @@ function M.activate_weapon(player, weapon_id)
         return true
     end
     ctn:set_weapon_unlocked(weapon_id)
+    condition_mgr.on_weapon_obtained(player, weapon_id, M.get_weapon_level(player, weapon_id))
     log.info("player %s unlock weapon %d", tostring(player.player_id_), weapon_id)
     return true
 end

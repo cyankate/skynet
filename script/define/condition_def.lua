@@ -1,50 +1,49 @@
--- 条件定义
 local condition_def = {
-    -- 等级相关
     LEVEL = {
-        REACH = "level.reach",           -- 达到指定等级
-        BETWEEN = "level.between",       -- 等级区间
+        REACH = "level.reach",
+        BETWEEN = "level.between",
     },
-    
-    -- 关卡相关
     CHAPTER = {
-        PASS = "chapter.pass",           -- 通关指定章节
-        BARRIER_PASS = "barrier.pass",   -- 通关指定主线关卡
-        STAGE_PASS = "barrier.pass",     -- 兼容旧名
+        PASS = "chapter.pass",
+        BARRIER_PASS = "barrier.pass",
+        STAGE_PASS = "barrier.pass",
     },
-    
-    -- 装备相关
     EQUIP = {
-        QUALITY_COUNT = "equip.quality_count",  -- 指定品质装备数量
-        LEVEL_SUM = "equip.level_sum",          -- 装备等级总和
+        QUALITY_COUNT = "equip.quality_count",
+        QUALITY_GTE_COUNT = "equip.quality_gte_count",
+        LEVEL_SUM = "equip.level_sum",
     },
 }
 
--- 条件处理器映射表
+local function num(v)
+    return tonumber(v) or 0
+end
+
 condition_def.handlers = {
-    -- 获取条件值处理器
     get_value = {
-        [condition_def.LEVEL.REACH] = function(self, data)
-            return self.conditions.level
+        [condition_def.LEVEL.REACH] = function(ctn, data)
+            return ctn:get_level()
         end,
-        [condition_def.CHAPTER.PASS] = function(self, data)
-            return self.conditions.chapters[data.chapter_id] or false
+        [condition_def.CHAPTER.PASS] = function(ctn, data)
+            return ctn:is_chapter_passed(data.chapter_id)
         end,
-        [condition_def.CHAPTER.BARRIER_PASS] = function(self, data)
-            return self.conditions.barriers[data.barrier_id or data.stage_id] or false
+        [condition_def.CHAPTER.BARRIER_PASS] = function(ctn, data)
+            local barrier_id = data.barrier_id or data.stage_id
+            return ctn:is_barrier_passed(barrier_id)
         end,
-        [condition_def.EQUIP.QUALITY_COUNT] = function(self, data)
-            return self.conditions.equip_quality[data.quality] or 0
+        [condition_def.EQUIP.QUALITY_COUNT] = function(ctn, data)
+            return ctn:get_equip_quality_count(data.quality)
         end,
-        [condition_def.EQUIP.LEVEL_SUM] = function(self, data)
-            return self.conditions.equip_level[data.level] or 0
+        [condition_def.EQUIP.QUALITY_GTE_COUNT] = function(ctn, data)
+            return ctn:get_equip_quality_gte_count(data.min_quality)
+        end,
+        [condition_def.EQUIP.LEVEL_SUM] = function(ctn, data)
+            return ctn:get_equip_level_count(data.level)
         end,
     },
-    
-    -- 判断条件是否满足处理器
     is_met = {
         [condition_def.LEVEL.REACH] = function(current_value, data)
-            return current_value >= data.target_level
+            return num(current_value) >= num(data.target_level)
         end,
         [condition_def.CHAPTER.PASS] = function(current_value, data)
             return current_value == true
@@ -53,25 +52,26 @@ condition_def.handlers = {
             return current_value == true
         end,
         [condition_def.EQUIP.QUALITY_COUNT] = function(current_value, data)
-            return current_value >= data.target_count
+            return num(current_value) >= num(data.target_count)
+        end,
+        [condition_def.EQUIP.QUALITY_GTE_COUNT] = function(current_value, data)
+            return num(current_value) >= num(data.target_count)
         end,
         [condition_def.EQUIP.LEVEL_SUM] = function(current_value, data)
-            return current_value >= data.target_sum
+            return num(current_value) >= num(data.target_sum)
         end,
     },
-    
-    -- 更新条件值处理器
     update = {
-        [condition_def.LEVEL.REACH] = function(self, value)
-            self.conditions.level = value
+        [condition_def.LEVEL.REACH] = function(ctn, value)
+            ctn:set_level(value)
             return condition_def.LEVEL.REACH
         end,
-        [condition_def.CHAPTER.PASS] = function(self, value)
-            self.conditions.chapters[value] = true
+        [condition_def.CHAPTER.PASS] = function(ctn, value)
+            ctn:mark_chapter_passed(value)
             return condition_def.CHAPTER.PASS
         end,
-        [condition_def.CHAPTER.BARRIER_PASS] = function(self, value)
-            self.conditions.barriers[value] = true
+        [condition_def.CHAPTER.BARRIER_PASS] = function(ctn, value)
+            ctn:mark_barrier_passed(value)
             return condition_def.CHAPTER.BARRIER_PASS
         end,
     },

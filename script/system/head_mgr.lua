@@ -4,6 +4,7 @@
 
 local attr_calc = require "effect.attr_calc"
 local effect_mgr = require "system.effect_mgr"
+local condition_mgr = require "system.condition_mgr"
 local HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
 local protocol_handler = require "protocol_handler"
 
@@ -164,6 +165,7 @@ function M.add_head_exp(player, delta)
     M.sync_to_client(player)
     if level_ups > 0 then
         effect_mgr.collect_player_effects(player)
+        condition_mgr.on_head_level_changed(player, level)
     end
 
     return true, {

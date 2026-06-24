@@ -5,6 +5,8 @@ local CtnBag = require "ctn.ctn_bag"
 local CtnCommon = require "ctn.ctn_common"
 local CtnDay = require "ctn.ctn_day"
 local CtnWeek = require "ctn.ctn_week"
+local CtnCondition = require "ctn.ctn_condition"
+local CtnTask = require "ctn.ctn_task"
 local common = require "utils.common"
 local msg_handle = require "net.msg_net"
 local event_def = require "define.event_def"
@@ -17,6 +19,7 @@ local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
+local task_mgr = require "system.task.task_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
 
@@ -68,6 +71,8 @@ function M.load_player_data(player)
     player.ctns_ = {
         bag = CtnBag.new(player.player_id_, "bag", "bag"),
         common = CtnCommon.new(player.player_id_, "common", "common"),
+        condition = CtnCondition.new(player.player_id_, "condition", "condition"),
+        task = CtnTask.new(player.player_id_, "task", "task"),
         day = CtnDay.new(player.player_id_, "player_day", "day"),
         week = CtnWeek.new(player.player_id_, "player_week", "week"),
     }
@@ -175,6 +180,7 @@ function M.send_player_data(player)
     weapon_mgr.sync_to_client(player)
     head_mgr.sync_to_client(player)
     barrier_mgr.sync_to_client(player)
+    task_mgr.sync_to_client(player)
 end
 
 --- 玩家已 loaded：跨服 LOGIN + 客户端全量同步 + 副本状态（重连/顶号/首登 load 完成共用）

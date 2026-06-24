@@ -103,7 +103,7 @@ local function on_barrier_claim_chest(player_id, msg)
         barrier_id = result_or_err.barrier_id,
         chest_index = result_or_err.chest_index,
     })
-    barrier_mgr.sync_to_client(player)
+    barrier_mgr.sync_to_client(player) 
     return true
 end
 

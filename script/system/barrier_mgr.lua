@@ -9,6 +9,7 @@ local BARRIER_DEF = require "define.barrier_def"
 local recovery_mgr = require "system.recovery_mgr"
 local item_mgr = require "system.item_mgr"
 local weapon_mgr = require "system.weapon_mgr"
+local condition_mgr = require "system.condition_mgr"
 local instance_rules = require "match.instance_rules"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 
@@ -313,6 +314,9 @@ function M.settle_barrier(player, inst_id, success, stars, progress)
     end
 
     write_record(ctn, barrier_id, record, records)
+    if success and record.passed then
+        condition_mgr.on_barrier_passed(player, barrier_id)
+    end
 
     local add_ok, add_err = give_items(player, reward_items, "barrier_settle")
     if not add_ok then

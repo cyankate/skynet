@@ -1,24 +1,26 @@
 -- script/system/task/task_def.lua
-local event_def = require "define.event_def"
 
 local task_def = {
-    -- 任务类型
     TASK_TYPE = {
-        MAIN = 1,       -- 主线任务
-        SIDE = 2,       -- 支线任务
-        DAILY = 3,      -- 日常任务
-        ACHIEVE = 4,    -- 成就任务
-        GUILD = 5,      -- 公会任务
+        MAIN = 1,
+        SIDE = 2,
+        DAILY = 3,
+        ACHIEVE = 4,
+        GUILD = 5,
     },
-    
-    -- 任务状态
+
     TASK_STATE = {
-        NONE = 0,       -- 未接取
-        ACCEPTED = 1,   -- 已接取
-        COMPLETED = 2,  -- 已完成
-        REWARDED = 3,   -- 已领奖
+        NONE = 0,
+        ACCEPTED = 1,
+        COMPLETED = 2,
+        REWARDED = 3,
     },
-    
+
+    -- 进度计数方式
+    COUNT_MODE = {
+        LIFETIME = "lifetime",         -- 历史累计（默认）
+        SINCE_ACCEPT = "since_accept", -- 接取后的增量
+    },
 }
 
 return task_def

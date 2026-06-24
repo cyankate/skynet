@@ -6,6 +6,9 @@ local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
+local condition_mgr = require "system.condition_mgr"
+local task_mgr = require "system.task.task_mgr"
+local head_mgr = require "system.head_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -25,6 +28,14 @@ end
 function Player:init_new_player()
     head_mgr.init_player(self)
     barrier_mgr.init_player(self)
+    local condition = self:get_ctn("condition")
+    if condition then
+        condition:init_player()
+    end
+    local task = self:get_ctn("task")
+    if task then
+        task:init_player()
+    end
 end
 
 function Player:on_loaded()
@@ -35,6 +46,8 @@ function Player:on_loaded()
 
     recovery_mgr.init_player(self)
     barrier_mgr.on_player_loaded(self)
+    condition_mgr.sync_from_player(self)
+    task_mgr.on_player_loaded(self)
 
     local rankS = skynet.localname(".rank")
     skynet.send(rankS, "lua", "update_rank", "score", {
@@ -147,15 +160,11 @@ function Player:set_common_data(field_key, value)
 end
 
 function Player:get_level()
-    self:get_common_data("level", 1)
-end 
+    return head_mgr.get_head_level(self)
+end
 
 function Player:get_exp()
-    self:get_common_data("exp", 0)
-end 
-
-function Player:add_exp(_exp)
-    
-end 
+    return head_mgr.get_head_exp(self)
+end
 
 return Player
