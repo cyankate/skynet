@@ -1,9 +1,8 @@
 local M = {}
-local skynet = require "skynet"
-local log = require "log"
 
-function M.print_table(_tbl)
+function M.print_table(_tbl, indent)
     indent = indent or 0
+    local log = require "log"
     local prefix = string.rep("  ", indent) -- 根据层级生成缩进
     if type(_tbl) ~= "table" then
         log.error(prefix .. tostring(_tbl)) -- 如果不是 table，直接打印值

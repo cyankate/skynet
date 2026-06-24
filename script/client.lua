@@ -29,6 +29,31 @@ local ClientState = {
 	pending_responses = {}  -- session => callback function
 }
 
+-- 与 tableUtils.serialize_table 格式一致，供独立客户端序列化 extra（不依赖 skynet）
+local function serialize_extra(tbl)
+	if type(tbl) ~= "table" or not next(tbl) then
+		return ""
+	end
+	local function serialize(value)
+		if type(value) ~= "table" then
+			error("serialize_extra expects table")
+		end
+		local parts = {}
+		for k, v in pairs(value) do
+			local key = type(k) == "string" and string.format("[%q]", k) or string.format("[%s]", tostring(k))
+			if type(v) == "table" then
+				parts[#parts + 1] = string.format("%s=%s", key, serialize(v))
+			elseif type(v) == "string" then
+				parts[#parts + 1] = string.format("%s=%q", key, v)
+			else
+				parts[#parts + 1] = string.format("%s=%s", key, tostring(v))
+			end
+		end
+		return "{" .. table.concat(parts, ",") .. "}"
+	end
+	return "TBL:" .. serialize(tbl)
+end
+
 -- 定义所有模块
 local NetworkManager = {}
 local ProtocolHandler = {}
@@ -324,11 +349,7 @@ function CommandHandler.process_command(cmd)
 			if args[2] then
 				extra.inst_no = tonumber(args[2])
 			end
-			local extra_str = ""
-			if next(extra) then
-				local tableUtils = require "utils.tableUtils"
-				extra_str = tableUtils.serialize_table(extra) or ""
-			end
+			local extra_str = serialize_extra(extra)
 			NetworkManager.send_request("instance_play_start", {
 				type_name = tostring(args[1] or "single"),
 				extra = extra_str,
