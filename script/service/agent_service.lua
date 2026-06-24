@@ -71,7 +71,7 @@ function M.load_player_data(player)
     player.ctns_ = {
         bag = CtnBag.new(player.player_id_, "bag", "bag"),
         common = CtnCommon.new(player.player_id_, "common", "common"),
-        condition = CtnCondition.new(player.player_id_, "condition", "condition"),
+        condition = CtnCondition.new(player.player_id_, "player_condition", "condition"),
         task = CtnTask.new(player.player_id_, "task", "task"),
         day = CtnDay.new(player.player_id_, "player_day", "day"),
         week = CtnWeek.new(player.player_id_, "player_week", "week"),

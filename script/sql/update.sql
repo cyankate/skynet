@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS `task` (
     PRIMARY KEY (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家任务数据表';
 
+[#4]
+-- condition 为 MySQL 保留字，改用 player_condition
+CREATE TABLE IF NOT EXISTS `player_condition` (
+    `player_id` int NOT NULL COMMENT '玩家ID',
+    `data` text COMMENT '条件进度数据',
+    PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家条件进度表';
+
+DROP TABLE IF EXISTS `condition`;
+

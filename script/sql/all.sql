@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS `player_week` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家周周期数据表';
 
 -- 条件进度表
-CREATE TABLE IF NOT EXISTS `condition` (
+CREATE TABLE IF NOT EXISTS `player_condition` (
     `player_id` int NOT NULL COMMENT '玩家ID',
     `data` text COMMENT '条件进度数据',
     PRIMARY KEY (`player_id`)
