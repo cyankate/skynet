@@ -1,6 +1,14 @@
--- event_def.lua：全局事件名（event 服务 subscribe / trigger 使用）
+-- event_def.lua：事件名常量
+-- AGENT.*  → runtime.agent_event（agent 进程内同步 dispatch）
+-- 其余     → .event 服务 subscribe / trigger（跨服务）
 local event_def = {
-    -- 玩家生命周期（多由 agent 触发）
+    -- agent 进程内（agent_event.register / trigger，不经 skynet）
+    AGENT = {
+        --- 养成效果重建完成（head/talent 等变更后 collect_player_effects）
+        EFFECTS_CHANGED = "agent.effects_changed",
+    },
+
+    -- 玩家生命周期（多由 agent 触发，经 .event 广播到其他服务）
     PLAYER = {
         LOGIN = "player.login",
         --- 连接断开（含闪断宽限期内暂离，玩家对象仍在 agent 内存）

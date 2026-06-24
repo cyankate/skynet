@@ -2,6 +2,9 @@
     副本规则配置。
     handler 指向业务模块（如 system.barrier_mgr），约定 hook：
     before_instance_start / on_play_start_failed / before_instance_end / after_instance_end
+
+    before_instance_start 的 ctx 含 player_pack（player:build_instance_pack 结果），
+    业务可在 hook 内修改 ctx.player_pack 或返回 join_data.player_pack 后再进本。
 ]]
 
 local M = {

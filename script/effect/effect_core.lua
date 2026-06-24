@@ -34,6 +34,7 @@ M.SPECIAL = {
     WEAPON_HEAL_TICK = "weapon_heal_tick",
     WEAPON_BUFF_ON_SPAWN = "weapon_buff_on_spawn",
     ROGUE_BLESS_UNLOCK = "rogue_bless_unlock",
+    WEAPON_UNLOCK = "weapon_unlock",
 }
 
 M.OP = {

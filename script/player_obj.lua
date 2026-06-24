@@ -8,6 +8,8 @@ local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
 local condition_mgr = require "system.condition_mgr"
 local task_mgr = require "system.task.task_mgr"
+local effect_mgr = require "system.effect_mgr"
+local weapon_mgr = require "system.weapon_mgr"
 local Player = class("Player")
 
 function Player:ctor(_player_id, _player_data)
@@ -176,6 +178,28 @@ end
 
 function Player:get_exp()
     return head_mgr.get_head_exp(self)
+end
+
+--- 进本前打包：基础信息、武器等级、养成效果 id
+function Player:build_instance_pack()
+    local effects = effect_mgr.get_effects(self)
+    if not effects then
+        return nil
+    end
+
+    local weapon_levels = {}
+    for _, weapon_id in ipairs(weapon_mgr.get_unlocked_weapon_ids(self)) do
+        weapon_levels[weapon_id] = weapon_mgr.get_weapon_level(self, weapon_id)
+    end
+
+    return {
+        player_id = self.player_id_,
+        player_name = self.player_name_,
+        head_id = head_mgr.get_head_id(self),
+        head_level = head_mgr.get_head_level(self),
+        weapon_levels = weapon_levels,
+        effect_ids = effects:get_effect_ids(),
+    }
 end
 
 return Player

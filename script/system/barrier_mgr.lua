@@ -134,28 +134,15 @@ local function merge_items(dst, src)
     return dst
 end
 
-local function build_weapon_levels(player, weapon_ids)
-    local levels = {}
-    for _, weapon_id in ipairs(weapon_ids or {}) do
-        weapon_id = num(weapon_id)
-        if weapon_id > 0 then
-            levels[weapon_id] = weapon_mgr.get_weapon_level(player, weapon_id)
-        end
-    end
-    return levels
-end
-
-function M.build_rogue_join_data(player, inst_no, cfg)
+function M.build_rogue_join_data(player, inst_no, cfg, player_pack)
     inst_no = num(inst_no)
     cfg = cfg or M.get_cfg(inst_no) or {}
-    local unlocked_weapon_ids = weapon_mgr.get_unlocked_weapon_ids(player)
+    player_pack = player_pack or player:build_instance_pack()
     return {
         inst_no = inst_no,
         rogue_refresh_id = num(cfg.RogueRefreshId) > 0 and num(cfg.RogueRefreshId) or ROGUE_DEF.DEFAULT_REFRESH_ID,
         energy_needs = type(cfg.EnergyNeed) == "table" and cfg.EnergyNeed or ROGUE_DEF.DEFAULT_ENERGY_NEEDS,
-        lineup_weapon_ids = unlocked_weapon_ids,
-        unlocked_weapon_ids = unlocked_weapon_ids,
-        weapon_levels = build_weapon_levels(player, unlocked_weapon_ids),
+        player_pack = player_pack,
     }
 end
 
@@ -375,7 +362,7 @@ function M.before_instance_start(player, ctx)
 
     return true, {
         inst_no = inst_no,
-        join_data = M.build_rogue_join_data(player, inst_no),
+        join_data = M.build_rogue_join_data(player, inst_no, M.get_cfg(inst_no), ctx.player_pack),
         start_extra = {
             stamina = after,
         },

@@ -112,24 +112,6 @@ function M.sync_to_client(player)
     return true
 end
 
-function M.calc_player_head_attrs(player)
-    local head_id = M.get_head_id(player)
-    if head_id <= 0 then
-        head_id = DEFAULT_HEAD_ID
-    end
-    local head_level = M.get_head_level(player)
-    local head = attr_calc.build_head(head_id, head_level)
-    local effects = effect_mgr.get_player_effects(player) or {}
-    local attrs = attr_calc.calc_head_attrs(head, effects.attr_mods)
-    return {
-        head_id = head.head_id,
-        level = head.level,
-        exp = M.get_head_exp(player),
-        need_exp = M.get_upgrade_need_exp(head_level),
-        attrs = attrs,
-    }
-end
-
 function M.add_head_exp(player, delta)
     delta = num(delta)
     if delta <= 0 then
@@ -176,7 +158,5 @@ function M.add_head_exp(player, delta)
         need_exp = M.get_upgrade_need_exp(level),
     }
 end
-
-effect_mgr.register_effect_id_collector(M.collect_head_effect_ids)
 
 return M

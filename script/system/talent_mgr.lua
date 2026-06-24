@@ -145,6 +145,4 @@ function M.sync_to_client(player)
     return true
 end
 
-effect_mgr.register_effect_id_collector(M.collect_talent_effect_ids)
-
 return M

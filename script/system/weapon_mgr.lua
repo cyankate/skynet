@@ -42,7 +42,8 @@ function M.calc_player_weapon_attrs(player, weapon_ids)
     for _, weapon_id in ipairs(weapon_ids) do
         table.insert(weapons, attr_calc.build_weapon(weapon_id, M.get_weapon_level(player, weapon_id)))
     end
-    local attr_mods = effect_mgr.collect_player_attr_mods(player)
+    local effects = effect_mgr.get_effects(player)
+    local attr_mods = effects and effects:get_attr_mods() or {}
     return attr_calc.calc_weapons_attrs(weapons, attr_mods), attr_mods
 end
 

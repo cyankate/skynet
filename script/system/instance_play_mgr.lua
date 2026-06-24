@@ -39,15 +39,24 @@ local function validate_inst_no(inst_no)
     return true, inst_no
 end
 
-local function default_before_instance_start(_player, ctx)
+local function attach_player_pack(play_options, player_pack)
+    play_options = play_options or {}
+    play_options.join_data = play_options.join_data or {}
+    if player_pack and not play_options.join_data.player_pack then
+        play_options.join_data.player_pack = player_pack
+    end
+    return play_options
+end
+
+local function default_before_instance_start(player, ctx)
     local inst_no = num((ctx.extra or {}).inst_no)
     if inst_no <= 0 then
         return false, "inst_no无效"
     end
-    return true, {
+    return true, attach_player_pack({
         inst_no = inst_no,
         join_data = ctx.extra or {},
-    }
+    }, ctx.player_pack)
 end
 
 local function invoke_start_hook(rule, player, ctx)
@@ -83,10 +92,12 @@ function M.play_start(player, type_name, extra_raw)
     end
 
     local extra = parse_extra(extra_raw)
+    local player_pack = player:build_instance_pack()
     local ctx = {
         type_name = type_name,
         rule = rule,
         extra = extra,
+        player_pack = player_pack,
     }
 
     local ok, play_options_or_err = invoke_start_hook(rule, player, ctx)
@@ -96,6 +107,8 @@ function M.play_start(player, type_name, extra_raw)
     if type(play_options_or_err) ~= "table" then
         return false, "handler 返回无效"
     end
+
+    play_options_or_err = attach_player_pack(play_options_or_err, ctx.player_pack)
 
     local inst_ok, inst_no_or_err = validate_inst_no(play_options_or_err.inst_no)
     if not inst_ok then

@@ -9,6 +9,7 @@ local ROGUE_REFRESH_DATA = require "setting.ROGUE_REFRESH_DATA"
 local WEAPON_DATA = require "setting.WEAPON_DATA"
 local tableUtils = require "utils.tableUtils"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
+local effect_mgr = require "system.effect_mgr"
 
 local InstanceRogue = class("InstanceRogue", InstanceSingle)
 
@@ -28,11 +29,15 @@ end
 local function build_pick_context(state)
     state = state or {}
     local lineup = {}
-    for _, wid in ipairs(state.lineup_weapon_ids or {}) do
-        lineup[num(wid)] = true
-    end
     local unlocked = {}
-    for _, wid in ipairs(state.unlocked_weapon_ids or {}) do
+    for weapon_id, _ in pairs(state.weapon_levels or {}) do
+        weapon_id = num(weapon_id)
+        if weapon_id > 0 then
+            lineup[weapon_id] = true
+            unlocked[weapon_id] = true
+        end
+    end
+    for _, wid in ipairs(state.effect_unlock_weapon_ids or {}) do
         unlocked[num(wid)] = true
     end
     local owned_weapons = {}
@@ -305,6 +310,7 @@ end
 
 function InstanceRogue:on_destroy()
     self.rogue_state_ = nil
+    self.effects_ = nil
     InstanceRogue.super.on_destroy(self)
 end
 
@@ -324,19 +330,26 @@ function InstanceRogue:init_rogue_state(config)
     if type(energy_needs) ~= "table" or #energy_needs == 0 then
         energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
     end
+    self.effects_ = effect_mgr.from_pack(config.player_pack)
+    local effect_unlock_weapon_ids = self.effects_:get_effect_unlock_weapon_ids()
+    local player_pack = config.player_pack or {}
     self.rogue_state_ = {
         refresh_id = num(config.rogue_refresh_id) > 0 and num(config.rogue_refresh_id) or ROGUE_DEF.DEFAULT_REFRESH_ID,
         energy_needs = energy_needs,
         energy_tier = 1,
-        pick_times = 0, 
-        lineup_weapon_ids = config.lineup_weapon_ids or {},
-        unlocked_weapon_ids = config.unlocked_weapon_ids or {},
-        weapon_levels = config.weapon_levels or {},
+        pick_times = 0,
+        weapon_levels = player_pack.weapon_levels or config.weapon_levels or {},
+        effect_unlock_weapon_ids = effect_unlock_weapon_ids,
         owned_weapon_ids = {},
         owned_colors = {},
         picked = {},
         pending = nil,
+        player_pack = config.player_pack,
     }
+end
+
+function InstanceRogue:get_effects()
+    return self.effects_
 end
 
 function InstanceRogue:get_rogue_max_picks()
@@ -474,6 +487,11 @@ function InstanceRogue:apply_rogue_pick(ability_id)
     local ability = get_ability(ability_id)
     if ability then
         track_weapon_gain(state, ability)
+        local effect_id = num(ability.EffectId)
+        if effect_id > 0 and self.effects_ then
+            self.effects_:add_effect_id(effect_id)
+            state.effect_unlock_weapon_ids = self.effects_:get_effect_unlock_weapon_ids()
+        end
     end
     state.pick_times = num(state.pick_times) + 1
     if state.energy_tier <= #state.energy_needs then
@@ -515,6 +533,8 @@ function InstanceRogue:build_rogue_sync()
         max_picks = self:get_rogue_max_picks(),
         energy_needs = state.energy_needs,
         owned_weapon_ids = state.owned_weapon_ids,
+        effect_unlock_weapon_ids = state.effect_unlock_weapon_ids or {},
+        effects = self.effects_ and self.effects_:build_sync() or nil,
         picked = self:build_rogue_picked_list(),
         pending = pending,
     }
