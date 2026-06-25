@@ -61,7 +61,6 @@ function instance_mgr.create_instance(type_name, args)
         create_time = os.time(),
         type_name = args.type_name or type_name,
         ready_mode = resolve_ready_mode(args),
-        result_source = args.result_source or "server",
         creator_id = args.creator_id,
         ready_players = {},
     }

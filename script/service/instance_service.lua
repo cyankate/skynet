@@ -156,7 +156,6 @@ function M.play_start_direct(player_id, type_name, options)
             ready_mode = opt.ready_mode or "auto",
             creator_id = player_id,
             type_name = type_name,
-            result_source = opt.result_source or "server",
             join_data = opt.join_data or {},
             mode_type = opt.mode_type,
             mode_config = opt.mode_config,

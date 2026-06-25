@@ -7,6 +7,7 @@ local InstanceSingle = require "instance.types.instance_single"
 local ROGUE_ABILITY_DATA = require "setting.ROGUE_ABILITY_DATA"
 local ROGUE_REFRESH_DATA = require "setting.ROGUE_REFRESH_DATA"
 local WEAPON_DATA = require "setting.WEAPON_DATA"
+local BARRIER_DATA = require "setting.BARRIER_DATA"
 local tableUtils = require "utils.tableUtils"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 local effect_mgr = require "system.effect_mgr"
@@ -26,18 +27,20 @@ local function get_ability(ability_id)
     return ROGUE_ABILITY_DATA[num(ability_id)]
 end
 
-local function build_pick_context(state)
+local function build_pick_context(state, player_pack, effects)
     state = state or {}
+    player_pack = player_pack or {}
+    local weapon_levels = player_pack.weapon_levels or {}
     local lineup = {}
     local unlocked = {}
-    for weapon_id, _ in pairs(state.weapon_levels or {}) do
+    for weapon_id, _ in pairs(weapon_levels) do
         weapon_id = num(weapon_id)
         if weapon_id > 0 then
             lineup[weapon_id] = true
             unlocked[weapon_id] = true
         end
     end
-    for _, wid in ipairs(state.effect_unlock_weapon_ids or {}) do
+    for _, wid in ipairs(effects and effects:get_effect_unlock_weapon_ids() or {}) do
         unlocked[num(wid)] = true
     end
     local owned_weapons = {}
@@ -54,7 +57,7 @@ local function build_pick_context(state)
         owned_weapons = owned_weapons,
         owned_colors = owned_colors,
         picked = state.picked or {},
-        weapon_levels = state.weapon_levels or {},
+        weapon_levels = weapon_levels,
         used_option_ids = {},
     }
 end
@@ -242,18 +245,18 @@ local function can_roll_weapon(ctx)
     return #collect_candidates("weapon", ctx) > 0
 end
 
-local function roll_three_options(refresh_id, pick_times, state)
+local function roll_three_options(refresh_id, pick_times, state, player_pack, effects)
     local rule, err = find_refresh_rule(refresh_id, pick_times)
     if not rule then
         return false, err
     end
 
     local pick_type = tostring(rule.Type or "common"):lower()
-    if pick_type == "weapon" and not can_roll_weapon(build_pick_context(state)) then
+    if pick_type == "weapon" and not can_roll_weapon(build_pick_context(state, player_pack, effects)) then
         pick_type = "common"
     end
 
-    local ctx = build_pick_context(state)
+    local ctx = build_pick_context(state, player_pack, effects)
     local options = {}
 
     if pick_type == "weapon" then
@@ -311,6 +314,7 @@ end
 function InstanceRogue:on_destroy()
     self.rogue_state_ = nil
     self.effects_ = nil
+    self.player_pack_ = nil
     InstanceRogue.super.on_destroy(self)
 end
 
@@ -324,27 +328,31 @@ function InstanceRogue:pack_extra_to_client()
     return tableUtils.serialize_table(self:build_extra_data()) or ""
 end
 
-function InstanceRogue:init_rogue_state(config)
-    config = config or {}
-    local energy_needs = config.energy_needs
+function InstanceRogue:init_rogue_state(player_pack)
+    player_pack = type(player_pack) == "table" and player_pack or {}
+    self.player_pack_ = player_pack
+    self.effects_ = effect_mgr.from_pack(player_pack)
+
+    local inst_no = num(self.inst_no_)
+    local cfg = BARRIER_DATA[inst_no] or {}
+    local energy_needs = cfg.EnergyNeed
     if type(energy_needs) ~= "table" or #energy_needs == 0 then
         energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
     end
-    self.effects_ = effect_mgr.from_pack(config.player_pack)
-    local effect_unlock_weapon_ids = self.effects_:get_effect_unlock_weapon_ids()
-    local player_pack = config.player_pack or {}
+    local refresh_id = num(cfg.RogueRefreshId)
+    if refresh_id <= 0 then
+        refresh_id = ROGUE_DEF.DEFAULT_REFRESH_ID
+    end
+
     self.rogue_state_ = {
-        refresh_id = num(config.rogue_refresh_id) > 0 and num(config.rogue_refresh_id) or ROGUE_DEF.DEFAULT_REFRESH_ID,
+        refresh_id = refresh_id,
         energy_needs = energy_needs,
         energy_tier = 1,
         pick_times = 0,
-        weapon_levels = player_pack.weapon_levels or config.weapon_levels or {},
-        effect_unlock_weapon_ids = effect_unlock_weapon_ids,
         owned_weapon_ids = {},
         owned_colors = {},
         picked = {},
         pending = nil,
-        player_pack = config.player_pack,
     }
 end
 
@@ -389,7 +397,7 @@ end
 function InstanceRogue:roll_rogue_options()
     local state = self.rogue_state_
     local next_pick = num(state.pick_times) + 1
-    local ok, result = roll_three_options(state.refresh_id, next_pick, state)
+    local ok, result = roll_three_options(state.refresh_id, next_pick, state, self.player_pack_, self.effects_)
     if not ok then
         return false, result
     end
@@ -490,7 +498,6 @@ function InstanceRogue:apply_rogue_pick(ability_id)
         local effect_id = num(ability.EffectId)
         if effect_id > 0 and self.effects_ then
             self.effects_:add_effect_id(effect_id)
-            state.effect_unlock_weapon_ids = self.effects_:get_effect_unlock_weapon_ids()
         end
     end
     state.pick_times = num(state.pick_times) + 1
@@ -533,7 +540,6 @@ function InstanceRogue:build_rogue_sync()
         max_picks = self:get_rogue_max_picks(),
         energy_needs = state.energy_needs,
         owned_weapon_ids = state.owned_weapon_ids,
-        effect_unlock_weapon_ids = state.effect_unlock_weapon_ids or {},
         effects = self.effects_ and self.effects_:build_sync() or nil,
         picked = self:build_rogue_picked_list(),
         pending = pending,

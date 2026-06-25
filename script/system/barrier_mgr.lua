@@ -9,8 +9,6 @@ local recovery_mgr = require "system.recovery_mgr"
 local item_mgr = require "system.item_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local condition_mgr = require "system.condition_mgr"
-local ROGUE_DEF = require "instance.rogue.rogue_def"
-
 local M = {}
 
 local STAMINA_ID = BARRIER_DEF.STAMINA_RECOVERY_ID
@@ -18,7 +16,6 @@ local STAMINA_COST = BARRIER_DEF.STAMINA_COST
 local MAX_STARS = BARRIER_DEF.MAX_STARS
 
 local RECORDS_KEY = "barrier_records"
-local LEGACY_SESSION_KEY = "barrier_session"
 
 local CHEST_FIELDS = {
     [1] = "RewardBox1",
@@ -134,18 +131,6 @@ local function merge_items(dst, src)
     return dst
 end
 
-function M.build_rogue_join_data(player, inst_no, cfg, player_pack)
-    inst_no = num(inst_no)
-    cfg = cfg or M.get_cfg(inst_no) or {}
-    player_pack = player_pack or player:build_instance_pack()
-    return {
-        inst_no = inst_no,
-        rogue_refresh_id = num(cfg.RogueRefreshId) > 0 and num(cfg.RogueRefreshId) or ROGUE_DEF.DEFAULT_REFRESH_ID,
-        energy_needs = type(cfg.EnergyNeed) == "table" and cfg.EnergyNeed or ROGUE_DEF.DEFAULT_ENERGY_NEEDS,
-        player_pack = player_pack,
-    }
-end
-
 function M.normalize_stars(stars, success)
     stars = num(stars)
     if stars < 0 then
@@ -208,7 +193,7 @@ function M.calc_settle(player, inst_no, success, stars, progress)
 
     return true, {
         rewards = reward_items,
-        settle_extra = {
+        settle_data = {
             inst_no = inst_no,
             success = success,
             stars = stars,
@@ -311,16 +296,6 @@ function M.sync_to_client(player)
     return true
 end
 
-local function cleanup_legacy_session(player)
-    local ctn = get_ctn(player)
-    if ctn and ctn:get(LEGACY_SESSION_KEY) ~= nil then
-        ctn:set(LEGACY_SESSION_KEY, nil)
-    end
-    if player then
-        player:clear_instance_session()
-    end
-end
-
 function M.init_player(player)
     local ctn = get_ctn(player)
     if not ctn then
@@ -329,12 +304,12 @@ function M.init_player(player)
     if ctn:get(RECORDS_KEY) == nil then
         ctn:set(RECORDS_KEY, {})
     end
-    cleanup_legacy_session(player)
+    player:clear_instance_session()
     return true
 end
 
 function M.on_player_loaded(player)
-    cleanup_legacy_session(player)
+    player:clear_instance_session()
     return true
 end
 
@@ -343,12 +318,9 @@ function M.clear_session(player)
         player:clear_instance_session()
     end
 end
-
+ 
 function M.before_instance_start(player, ctx)
     local inst_no = num((ctx.extra or {}).inst_no)
-    if inst_no <= 0 then
-        return false, "inst_no无效"
-    end
 
     local ok, err = M.can_enter_barrier(player, inst_no)
     if not ok then
@@ -360,13 +332,7 @@ function M.before_instance_start(player, ctx)
         return false, "扣除体力失败"
     end
 
-    return true, {
-        inst_no = inst_no,
-        join_data = M.build_rogue_join_data(player, inst_no, M.get_cfg(inst_no), ctx.player_pack),
-        start_extra = {
-            stamina = after,
-        },
-    }
+    return true
 end
 
 function M.on_play_start_failed(player, ctx, _err)
@@ -377,9 +343,8 @@ function M.on_play_start_failed(player, ctx, _err)
 end
 
 function M.before_instance_end(player, ctx)
-    local session = ctx.session or {}
-    local inst_no = num(session.inst_no)
-    local instance_complete_data = type(ctx.complete_data) == "table" and ctx.complete_data or {}
+    local inst_no = num(ctx.inst_no)
+    local instance_complete_data = ctx.complete_data or {}
     local stars = M.normalize_stars(instance_complete_data.stars, ctx.success)
     local progress = M.normalize_progress(instance_complete_data.progress)
 
@@ -391,13 +356,12 @@ function M.before_instance_end(player, ctx)
     return true, {
         rewards = settle_data_or_err.rewards,
         reward_reason = "instance_settle",
-        settle_data = settle_data_or_err.settle_extra,
+        settle_data = settle_data_or_err.settle_data,
     }
 end
 
 function M.after_instance_end(player, ctx, _end_data)
-    local session = ctx.session or {}
-    local inst_no = num(session.inst_no)
+    local inst_no = num(ctx.inst_no)
     if ctx.success and inst_no > 0 then
         condition_mgr.on_barrier_passed(player, inst_no)
     end

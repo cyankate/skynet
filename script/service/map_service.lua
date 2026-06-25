@@ -923,7 +923,6 @@ function M.interact_monster(player_id, monster_uid)
         instance_type_name = "single",
         inst_no = 1,
         ready_mode = "auto",
-        result_source = "client",
         mode_type = "survival",
         mode_config = {
             target_seconds = 180,

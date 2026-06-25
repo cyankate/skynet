@@ -9,8 +9,6 @@ local talent_mgr = require "system.talent_mgr"
 
 local M = setmetatable({}, { __index = effect_core })
 
-M.special_handlers = M.special_handlers or {}
-
 local function num(v)
     return tonumber(v) or 0
 end
@@ -194,60 +192,6 @@ function M.get_effects(player)
         M.collect_player_effects(player)
     end
     return player.effects_
-end
-
-function M.register_special_handler(special_key, handler)
-    M.special_handlers[special_key] = handler
-end
-
-function M.apply_special_handlers(player)
-    local effects = M.get_effects(player)
-    if not effects then
-        return
-    end
-    for _, item in ipairs(effects:get_specials()) do
-        local handler = M.special_handlers[item.special]
-        if handler then
-            handler(player, item)
-        end
-    end
-end
-
-M.register_special_handler(effect_core.SPECIAL.FREE_LOTTERY, function(_player, _item)
-end)
-
-function M.calc_runtime_attrs(player_pack, effects)
-    if type(player_pack) ~= "table" or not effects then
-        return nil
-    end
-    local attr_calc = require "effect.attr_calc"
-    local attr_mods = effects:get_attr_mods()
-
-    local weapons = {}
-    for weapon_id, level in pairs(player_pack.weapon_levels or {}) do
-        weapons[#weapons + 1] = attr_calc.build_weapon(weapon_id, level)
-    end
-    local weapon_result = attr_calc.calc_weapons_attrs(weapons, attr_mods)
-
-    local head_id = num(player_pack.head_id)
-    if head_id <= 0 and type(player_pack.head) == "table" then
-        head_id = num(player_pack.head.head_id)
-    end
-    local head_level = num(player_pack.head_level)
-    if head_level <= 0 and type(player_pack.head) == "table" then
-        head_level = num(player_pack.head.level)
-    end
-    local head = attr_calc.build_head(head_id, head_level)
-    local head_attrs = attr_calc.calc_head_attrs(head, attr_mods)
-
-    return {
-        weapons = weapon_result,
-        head = {
-            head_id = head.head_id,
-            level = head.level,
-            attrs = head_attrs,
-        },
-    }
 end
 
 return M

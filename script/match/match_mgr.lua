@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local default_match_rules = require "match.match_rules"
+local default_play_rules = require "match.play_rules"
 local service_ctx = require "runtime.service_ctx"
 local match_mgr = service_ctx.get("match.match_mgr", {})
 
@@ -10,7 +10,7 @@ local match_mgr = service_ctx.get("match.match_mgr", {})
 1) 管理匹配队列（matching 阶段）；
 2) 管理待确认队伍（pending_confirm 阶段）；
 3) 提供确认/拒绝/超时状态流转；
-4) 提供规则注册与参数归一化（规则来源：match_rules.lua）。
+4) 提供规则注册与参数归一化（规则来源：play_rules.lua）。
 
 状态流转（按玩家视角）：
 idle -> matching -> pending_confirm -> idle
@@ -34,7 +34,9 @@ match_mgr.pending_matches = match_mgr.pending_matches or {} -- match_id -> { pla
 match_mgr.player_pending_match = match_mgr.player_pending_match or {} -- player_id -> match_id
 match_mgr.next_match_id = match_mgr.next_match_id or 0
 match_mgr.confirm_timeout_sec = match_mgr.confirm_timeout_sec or 20
-match_mgr.match_rules = match_mgr.match_rules or default_match_rules
+match_mgr.play_rules = match_mgr.play_rules or default_play_rules
+-- 兼容旧字段名
+match_mgr.match_rules = match_mgr.play_rules
 
 function match_mgr.init()
     -- 当前为内存队列，无需额外初始化
@@ -107,10 +109,12 @@ function match_mgr.register_match_rule(type_name, rule)
     if not max_team_size or max_team_size < 1 then
         return false, "玩法规则缺少有效的 max_team_size"
     end
-    match_mgr.match_rules[type_name] = {
-        entry = entry,
-        max_team_size = max_team_size,
-    }
+    local target = match_mgr.play_rules[type_name]
+    if not target then
+        return false, "玩法类型不存在"
+    end
+    target.entry = entry
+    target.max_team_size = max_team_size
     return true
 end
 
@@ -125,7 +129,7 @@ end
 local function normalize_options(options)
     options = options or {}
     local type_name = options.type_name or "multi"
-    local rule = match_mgr.match_rules[type_name]
+    local rule = match_mgr.play_rules[type_name]
     if not rule then
         return nil, string.format("不支持的玩法类型: %s", tostring(type_name))
     end

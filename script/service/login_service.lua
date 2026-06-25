@@ -101,6 +101,12 @@ function CLIENT.login(fd, msg, session)
     local ip = msg.ip
     local device_id = msg.device_id
 
+    if not account_key or account_key == "" then
+        log.warning("Login rejected: empty account_id, fd=%d", fd)
+        protocol_handler.send_to_client(fd, "error", { code = 1001, message = "账号标识无效" })
+        return
+    end
+
     local is_safe, message = check_security(ip, account_key)
     if not is_safe then
         log.warning("Login rejected due to security concerns: %s, account_key: %s", message, account_key)

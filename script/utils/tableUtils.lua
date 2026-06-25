@@ -34,7 +34,7 @@ end
 function M.serialize_table(tbl)
     local function serialize(tbl)
         if type(tbl) ~= "table" then
-            error("Input must be a table")
+            log.error("Input must be a table")
         end
 
         local result = {}
@@ -63,7 +63,7 @@ function M.deserialize_table(str)
     end
     local func, err = load("return " .. str, "deserialize", "t", {})
     if not func then
-        error("Failed to deserialize string: " .. err)
+        log.error("Failed to deserialize string: " .. err)
     end
     return func()
 end

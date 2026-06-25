@@ -3,7 +3,7 @@ local log = require "log"
 local service_ctx = require "runtime.service_ctx"
 local match_mgr = require "match.match_mgr"
 local match_mode_adapter_mgr = require "match.match_mode_adapter_mgr"
-local instance_rules = require "match.instance_rules"
+local play_rules = require "match.play_rules"
 local BARRIER_DATA = require "setting.BARRIER_DATA"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
@@ -106,8 +106,8 @@ end
 local function build_instance_options(match_options)
     local opt = match_options or {}
     local type_name = opt.type_name or ""
-    local inst_rule = instance_rules[type_name]
-    if not inst_rule then
+    local rule = play_rules[type_name]
+    if not rule then
         return nil, string.format("玩法[%s]缺少副本规则", tostring(type_name))
     end
     local team_size = tonumber(opt.team_size) or 0
@@ -129,13 +129,12 @@ local function build_instance_options(match_options)
         team_size = team_size,
         min_players = team_size,
         max_players = team_size,
-        instance_type_name = inst_rule.instance_type_name,
-        adapter_name = inst_rule.adapter_name or "instance_default",
-        result_source = inst_rule.result_source or "server",
-        ready_mode = inst_rule.ready_mode,
+        instance_type_name = rule.instance_type_name,
+        adapter_name = rule.adapter_name or "instance_default",
+        ready_mode = rule.ready_mode,
         inst_no = inst_no,
-        mode_type = inst_rule.mode_type,
-        mode_config = inst_rule.mode_config,
+        mode_type = rule.mode_type,
+        mode_config = rule.mode_config,
     }
 end
 

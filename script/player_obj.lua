@@ -96,18 +96,6 @@ function Player:clear_instance_session()
     self.instance_session_ = nil
 end
 
-function Player:get_barrier_session()
-    return self:get_instance_session()
-end
-
-function Player:set_barrier_session(session)
-    self:set_instance_session(session)
-end
-
-function Player:clear_barrier_session()
-    self:clear_instance_session()
-end
-
 function Player:try_set_flow_state(expected_states, new_state)
     local current = self.flow_state_ or "idle"
     local allowed = false
