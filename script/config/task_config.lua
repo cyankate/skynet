@@ -15,7 +15,7 @@ return {
             {
                 id = "pass_barrier_1",
                 type = "barrier.pass",
-                params = { barrier_id = 1 },
+                params = { barrier_no = 1 },
                 target = 1,
                 count_mode = "lifetime",
             },

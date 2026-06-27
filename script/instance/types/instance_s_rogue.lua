@@ -7,7 +7,7 @@ local InstanceSingle = require "instance.types.instance_single"
 local ROGUE_ABILITY_DATA = require "setting.ROGUE_ABILITY_DATA"
 local ROGUE_REFRESH_DATA = require "setting.ROGUE_REFRESH_DATA"
 local WEAPON_DATA = require "setting.WEAPON_DATA"
-local BARRIER_DATA = require "setting.BARRIER_DATA"
+local INSTANCE_DATA = require "setting.INSTANCE_DATA"
 local tableUtils = require "utils.tableUtils"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 local effect_mgr = require "system.effect_mgr"
@@ -172,9 +172,13 @@ local function weighted_pick(candidates, ctx)
 end
 
 local function find_refresh_rule(refresh_id, pick_times)
-    local group = ROGUE_REFRESH_DATA[num(refresh_id)]
+    refresh_id = num(refresh_id)
+    if refresh_id <= 0 then
+        return nil, "肉鸽刷新id未配置"
+    end
+    local group = ROGUE_REFRESH_DATA[refresh_id]
     if type(group) ~= "table" then
-        return nil, "肉鸽刷新配置不存在"
+        return nil, string.format("肉鸽刷新配置不存在: refresh_id=%d", refresh_id)
     end
     local common_rule
     for _, rule in pairs(group) do
@@ -328,20 +332,60 @@ function InstanceRogue:pack_extra_to_client()
     return tableUtils.serialize_table(self:build_extra_data()) or ""
 end
 
+local function normalize_energy_needs(raw)
+    if type(raw) ~= "table" then
+        return nil
+    end
+    local list = {}
+    if #raw > 0 then
+        for i = 1, #raw do
+            list[i] = num(raw[i])
+        end
+    else
+        local keys = {}
+        for k in pairs(raw) do
+            keys[#keys + 1] = num(k)
+        end
+        table.sort(keys)
+        for i, k in ipairs(keys) do
+            list[i] = num(raw[k])
+        end
+    end
+    if #list == 0 then
+        return nil
+    end
+    return list
+end
+
+local function get_instance_rogue_cfg(inst_no)
+    inst_no = num(inst_no)
+    local cfg = INSTANCE_DATA[inst_no]
+    if not cfg then
+        return nil, "副本配置不存在"
+    end
+    local refresh_id = num(cfg.RogueRefreshId)
+    if refresh_id <= 0 then
+        return nil, "肉鸽刷新id未配置"
+    end
+    if not ROGUE_REFRESH_DATA[refresh_id] then
+        return nil, string.format("肉鸽刷新配置不存在: refresh_id=%d", refresh_id)
+    end
+    return cfg, refresh_id
+end
+
 function InstanceRogue:init_rogue_state(player_pack)
     player_pack = type(player_pack) == "table" and player_pack or {}
     self.player_pack_ = player_pack
     self.effects_ = effect_mgr.from_pack(player_pack)
 
     local inst_no = num(self.inst_no_)
-    local cfg = BARRIER_DATA[inst_no] or {}
-    local energy_needs = cfg.EnergyNeed
-    if type(energy_needs) ~= "table" or #energy_needs == 0 then
-        energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
+    local cfg, refresh_id = get_instance_rogue_cfg(inst_no)
+    if not cfg then
+        refresh_id = 0
     end
-    local refresh_id = num(cfg.RogueRefreshId)
-    if refresh_id <= 0 then
-        refresh_id = ROGUE_DEF.DEFAULT_REFRESH_ID
+    local energy_needs = cfg and normalize_energy_needs(cfg.SelectNeedEnergy)
+    if not energy_needs then
+        energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
     end
 
     self.rogue_state_ = {
@@ -372,6 +416,9 @@ function InstanceRogue:can_rogue_open_pick()
     local state = self.rogue_state_
     if not state then
         return false, "肉鸽状态不存在"
+    end
+    if num(state.refresh_id) <= 0 then
+        return false, "肉鸽刷新id未配置"
     end
     if state.pending then
         return false, "已有待选择的能力"

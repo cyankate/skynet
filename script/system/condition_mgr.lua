@@ -84,9 +84,9 @@ function M.sync_from_player(player)
 
     ctn:set_level(head_mgr.get_head_level(player), false)
 
-    for barrier_id in pairs(BARRIER_DATA) do
-        if barrier_mgr.is_barrier_passed(player, barrier_id) then
-            ctn:mark_barrier_passed(barrier_id, false)
+    for barrier_no in pairs(BARRIER_DATA) do
+        if barrier_mgr.is_barrier_passed(player, barrier_no) then
+            ctn:mark_barrier_passed(barrier_no, false)
         end
     end
 
@@ -108,12 +108,12 @@ function M.on_head_level_changed(player, level)
     ctn:update_condition(condition_def.LEVEL.REACH, level)
 end
 
-function M.on_barrier_passed(player, barrier_id)
+function M.on_barrier_passed(player, barrier_no)
     local ctn = get_ctn(player)
     if not ctn then
         return
     end
-    ctn:update_condition(condition_def.CHAPTER.BARRIER_PASS, num(barrier_id))
+    ctn:update_condition(condition_def.CHAPTER.BARRIER_PASS, num(barrier_no))
 end
 
 function M.on_chapter_passed(player, chapter_id)

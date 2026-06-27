@@ -4,7 +4,7 @@ local service_ctx = require "runtime.service_ctx"
 local match_mgr = require "match.match_mgr"
 local match_mode_adapter_mgr = require "match.match_mode_adapter_mgr"
 local play_rules = require "match.play_rules"
-local BARRIER_DATA = require "setting.BARRIER_DATA"
+local INSTANCE_DATA = require "setting.INSTANCE_DATA"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 
@@ -119,7 +119,7 @@ local function build_instance_options(match_options)
     if inst_no <= 0 then
         return nil, "inst_no无效"
     end
-    if not BARRIER_DATA[inst_no] then
+    if not INSTANCE_DATA[inst_no] then
         return nil, "副本配置不存在"
     end
 

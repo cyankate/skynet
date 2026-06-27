@@ -28,8 +28,8 @@ condition_def.handlers = {
             return ctn:is_chapter_passed(data.chapter_id)
         end,
         [condition_def.CHAPTER.BARRIER_PASS] = function(ctn, data)
-            local barrier_id = data.barrier_id or data.stage_id
-            return ctn:is_barrier_passed(barrier_id)
+            local barrier_no = data.barrier_no or data.stage_id
+            return ctn:is_barrier_passed(barrier_no)
         end,
         [condition_def.EQUIP.QUALITY_COUNT] = function(ctn, data)
             return ctn:get_equip_quality_count(data.quality)

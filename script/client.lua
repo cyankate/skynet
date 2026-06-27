@@ -346,12 +346,17 @@ function CommandHandler.process_command(cmd)
 			})
 		elseif cmd == "instance_play_start" then
 			local extra = {}
+			local type_name = tostring(args[1] or "single")
 			if args[2] then
-				extra.inst_no = tonumber(args[2])
+				if type_name == "barrier" then
+					extra.barrier_no = tonumber(args[2])
+				else
+					extra.inst_no = tonumber(args[2])
+				end
 			end
 			local extra_str = serialize_extra(extra)
 			NetworkManager.send_request("instance_play_start", {
-				type_name = tostring(args[1] or "single"),
+				type_name = type_name,
 				extra = extra_str,
 			})
 		elseif cmd == "instance_match_confirm" then

@@ -4,13 +4,44 @@
 
 local skynet = require "skynet"
 local play_rules = require "match.play_rules"
-local tableUtils = require "utils.tableUtils"
 local item_mgr = require "system.item_mgr"
+local BARRIER_DATA = require "setting.BARRIER_DATA"
+local INSTANCE_DATA = require "setting.INSTANCE_DATA"
 
 local M = {}
 
 local function num(v)
     return tonumber(v) or 0
+end
+
+local function normalize_play_extra(type_name, extra)
+    extra = extra or {}
+    if type_name == "barrier" then
+        local barrier_no = num(extra.barrier_no)
+        if barrier_no <= 0 then
+            return nil, "关卡参数无效"
+        end
+        local barrier_cfg = BARRIER_DATA[barrier_no]
+        if not barrier_cfg then
+            return nil, "关卡配置不存在"
+        end
+        local inst_no = num(barrier_cfg.InstNo)
+        if inst_no <= 0 or not INSTANCE_DATA[inst_no] then
+            return nil, "副本配置不存在"
+        end
+        extra.barrier_no = barrier_no
+        extra.inst_no = inst_no
+        return extra
+    end
+
+    local inst_no = num(extra.inst_no)
+    if inst_no <= 0 then
+        return nil, "inst_no无效"
+    end
+    if not INSTANCE_DATA[inst_no] then
+        return nil, "副本配置不存在"
+    end
+    return extra
 end
 
 function M.play_start(player, type_name, extra)
@@ -19,11 +50,12 @@ function M.play_start(player, type_name, extra)
         return false, "不支持的玩法类型"
     end
 
-    local extra = extra or {}
-    local inst_no = num(extra.inst_no)
-    if inst_no <= 0 then
-        return false, "inst_no无效"
+    local normalized_extra, normalize_err = normalize_play_extra(type_name, extra or {})
+    if not normalized_extra then
+        return false, normalize_err or "进本参数无效"
     end
+    extra = normalized_extra
+    local inst_no = num(extra.inst_no)
 
     local player_pack = player:build_instance_pack()
     local ctx = {

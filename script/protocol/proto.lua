@@ -216,7 +216,7 @@ local c2s_builder = builder.new()
 
     :protocol("barrier_claim_chest", 657, {
         request = {
-            barrier_id = "integer",
+            barrier_no = "integer",
             chest_index = "integer",
         }
     })
@@ -744,7 +744,7 @@ local s2c_builder = builder.new()
     })
 
     :type("barrier_info", {
-        barrier_id = "integer",
+        barrier_no = "integer",
         name = "string",
         unlocked = "boolean",
         passed = "boolean",
@@ -756,14 +756,13 @@ local s2c_builder = builder.new()
         request = {
             result = "integer",
             message = "string",
-            barrier_id = "integer",
+            barrier_no = "integer",
             chest_index = "integer",
         }
     })
 
     :protocol("barrier_info_notify", 661, {
         request = {
-            stamina = "integer",
             barriers = "*barrier_info",
         }
     })

@@ -85,22 +85,22 @@ function CtnCondition:mark_chapter_passed(chapter_id, notify)
     end
 end
 
-function CtnCondition:is_barrier_passed(barrier_id)
-    barrier_id = tonumber(barrier_id)
-    if not barrier_id then
+function CtnCondition:is_barrier_passed(barrier_no)
+    barrier_no = tonumber(barrier_no)
+    if not barrier_no then
         return false
     end
     local barriers = self:get(BARRIERS_KEY) or {}
-    return barriers[barrier_id] == true
+    return barriers[barrier_no] == true
 end
 
-function CtnCondition:mark_barrier_passed(barrier_id, notify)
-    barrier_id = tonumber(barrier_id)
-    if not barrier_id or self:is_barrier_passed(barrier_id) then
+function CtnCondition:mark_barrier_passed(barrier_no, notify)
+    barrier_no = tonumber(barrier_no)
+    if not barrier_no or self:is_barrier_passed(barrier_no) then
         return
     end
     local barriers = self:get(BARRIERS_KEY) or {}
-    barriers[barrier_id] = true
+    barriers[barrier_no] = true
     self:set(BARRIERS_KEY, barriers)
     if notify ~= false then
         self:check_all_conditions(condition_def.CHAPTER.BARRIER_PASS)

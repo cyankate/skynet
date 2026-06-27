@@ -9,18 +9,18 @@ local function on_barrier_claim_chest(player_id, msg)
         protocol_handler.send_to_player(player_id, "barrier_claim_chest_response", {
             result = 1,
             message = "Player not found",
-            barrier_id = tonumber(msg.barrier_id) or 0,
+            barrier_no = tonumber(msg.barrier_no) or 0,
             chest_index = tonumber(msg.chest_index) or 0,
         })
         return false, "Player not found"
     end
 
-    local ok, result_or_err = barrier_mgr.claim_chest(player, msg.barrier_id, msg.chest_index)
+    local ok, result_or_err = barrier_mgr.claim_chest(player, msg.barrier_no, msg.chest_index)
     if not ok then
         protocol_handler.send_to_player(player_id, "barrier_claim_chest_response", {
             result = 1,
             message = result_or_err or "领取失败",
-            barrier_id = tonumber(msg.barrier_id) or 0,
+            barrier_no = tonumber(msg.barrier_no) or 0,
             chest_index = tonumber(msg.chest_index) or 0,
         })
         return false, result_or_err
@@ -29,7 +29,7 @@ local function on_barrier_claim_chest(player_id, msg)
     protocol_handler.send_to_player(player_id, "barrier_claim_chest_response", {
         result = 0,
         message = "ok",
-        barrier_id = result_or_err.barrier_id,
+        barrier_no = result_or_err.barrier_no,
         chest_index = result_or_err.chest_index,
     })
     barrier_mgr.sync_to_client(player)
