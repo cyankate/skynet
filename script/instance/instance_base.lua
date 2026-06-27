@@ -230,8 +230,14 @@ function InstanceBase:complete(success, data_)
             complete_data = complete_data,
         })
         local extra_data = ""
-        if settle_ok and type(settle_result) == "table" and type(settle_result.settle_data) == "table" then
-            extra_data = tableUtils.serialize_table(settle_result.settle_data) or ""
+        local rewards = {}
+        if settle_ok and type(settle_result) == "table" then
+            if type(settle_result.settle_data) == "table" then
+                extra_data = tableUtils.serialize_table(settle_result.settle_data) or ""
+            end
+            if type(settle_result.rewards) == "table" then
+                rewards = settle_result.rewards
+            end
         end
         protocol_handler.send_to_player(player_id, "instance_result_notify", {
             inst_id = self.inst_id_,
@@ -240,6 +246,7 @@ function InstanceBase:complete(success, data_)
             end_reason = end_reason,
             duration = self.duration_ or 0,
             extra_data = extra_data,
+            rewards = rewards,
         })
     end
     return true

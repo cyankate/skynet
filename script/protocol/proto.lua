@@ -601,6 +601,11 @@ local s2c_builder = builder.new()
         }
     })
 
+    :type("item_info", {
+        item_id = "integer",
+        count = "integer",
+    })
+
     :protocol("instance_result_notify", 527, {
         request = {
             inst_id = "string",
@@ -609,12 +614,8 @@ local s2c_builder = builder.new()
             end_reason = "integer",
             duration = "integer",
             extra_data = "string",
+            rewards = "*item_info",
         }
-    })
-
-    :type("item_info", {
-        item_id = "integer",
-        count = "integer",
     })
 
     :type("item_change_info", {

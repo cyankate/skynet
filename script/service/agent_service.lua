@@ -19,6 +19,7 @@ local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
+local instance_play_mgr = require "system.instance_play_mgr"
 local task_mgr = require "system.task.task_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
@@ -417,7 +418,6 @@ function M.instance_play_settle(data)
     if not player then
         return false, err
     end
-    local instance_play_mgr = require "system.instance_play_mgr"
     return instance_play_mgr.on_complete(player, data)
 end
 

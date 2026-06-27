@@ -118,6 +118,24 @@ local function give_rewards(player, rewards, reason)
     return item_mgr.add_items(player, rewards, reason or "instance_settle")
 end
 
+local function build_reward_list(rewards)
+    local list = {}
+    if type(rewards) ~= "table" then
+        return list
+    end
+    for item_id_raw, count_raw in pairs(rewards) do
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
+        if item_id > 0 and count > 0 then
+            list[#list + 1] = { item_id = item_id, count = count }
+        end
+    end
+    table.sort(list, function(a, b)
+        return a.item_id < b.item_id
+    end)
+    return list
+end
+
 function M.on_complete(player, params)
     params = params or {}
     local inst_id = params.inst_id
@@ -200,6 +218,7 @@ function M.on_complete(player, params)
 
     return true, {
         settle_data = end_data_or_err.settle_data or {},
+        rewards = build_reward_list(end_data_or_err.rewards),
     }
 end
 

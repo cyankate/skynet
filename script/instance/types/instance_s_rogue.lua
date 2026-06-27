@@ -27,9 +27,9 @@ local function get_ability(ability_id)
     return ROGUE_ABILITY_DATA[num(ability_id)]
 end
 
-local function build_pick_context(state, player_pack, effects)
-    state = state or {}
-    player_pack = player_pack or {}
+local function build_pick_context(inst)
+    local player_pack = inst.player_pack_ or {}
+    local effects = inst.effects_
     local weapon_levels = player_pack.weapon_levels or {}
     local lineup = {}
     local unlocked = {}
@@ -44,11 +44,11 @@ local function build_pick_context(state, player_pack, effects)
         unlocked[num(wid)] = true
     end
     local owned_weapons = {}
-    for _, wid in ipairs(state.owned_weapon_ids or {}) do
+    for _, wid in ipairs(inst.owned_weapon_ids_ or {}) do
         owned_weapons[num(wid)] = true
     end
     local owned_colors = {}
-    for _, color in ipairs(state.owned_colors or {}) do
+    for _, color in ipairs(inst.owned_colors_ or {}) do
         owned_colors[tostring(color)] = true
     end
     return {
@@ -56,7 +56,7 @@ local function build_pick_context(state, player_pack, effects)
         unlocked = unlocked,
         owned_weapons = owned_weapons,
         owned_colors = owned_colors,
-        picked = state.picked or {},
+        picked = inst.picked_ or {},
         weapon_levels = weapon_levels,
         used_option_ids = {},
     }
@@ -249,18 +249,19 @@ local function can_roll_weapon(ctx)
     return #collect_candidates("weapon", ctx) > 0
 end
 
-local function roll_three_options(refresh_id, pick_times, state, player_pack, effects)
+local function roll_three_options(inst, pick_times)
+    local refresh_id = num(inst.refresh_id_)
     local rule, err = find_refresh_rule(refresh_id, pick_times)
     if not rule then
         return false, err
     end
 
     local pick_type = tostring(rule.Type or "common"):lower()
-    if pick_type == "weapon" and not can_roll_weapon(build_pick_context(state, player_pack, effects)) then
+    if pick_type == "weapon" and not can_roll_weapon(build_pick_context(inst)) then
         pick_type = "common"
     end
 
-    local ctx = build_pick_context(state, player_pack, effects)
+    local ctx = build_pick_context(inst)
     local options = {}
 
     if pick_type == "weapon" then
@@ -310,28 +311,6 @@ local function build_option_view(ability_id)
     }
 end
 
-function InstanceRogue:on_join(player_id, data_)
-    InstanceRogue.super.on_join(self, player_id, data_)
-    self:init_rogue_state(data_ or self.args_.join_data or {})
-end
-
-function InstanceRogue:on_destroy()
-    self.rogue_state_ = nil
-    self.effects_ = nil
-    self.player_pack_ = nil
-    InstanceRogue.super.on_destroy(self)
-end
-
-function InstanceRogue:build_extra_data()
-    local extra = InstanceRogue.super.build_extra_data(self)
-    extra.rogue_sync = self:build_rogue_sync()
-    return extra
-end
-
-function InstanceRogue:pack_extra_to_client()
-    return tableUtils.serialize_table(self:build_extra_data()) or ""
-end
-
 local function normalize_energy_needs(raw)
     if type(raw) ~= "table" then
         return nil
@@ -373,7 +352,47 @@ local function get_instance_rogue_cfg(inst_no)
     return cfg, refresh_id
 end
 
-function InstanceRogue:init_rogue_state(player_pack)
+local function build_option_list(option_ids)
+    local options = {}
+    for _, ability_id in ipairs(option_ids or {}) do
+        local view = build_option_view(ability_id)
+        if view then
+            options[#options + 1] = view
+        end
+    end
+    return options
+end
+
+function InstanceRogue:on_join(player_id, data_)
+    InstanceRogue.super.on_join(self, player_id, data_)
+    self:init_rogue(data_ or self.args_.join_data or {})
+end
+
+function InstanceRogue:on_destroy()
+    self.player_pack_ = nil
+    self.effects_ = nil
+    self.refresh_id_ = nil
+    self.energy_needs_ = nil
+    self.energy_tier_ = nil
+    self.pick_times_ = nil
+    self.picked_ = nil
+    self.owned_weapon_ids_ = nil
+    self.owned_colors_ = nil
+    self.pending_pick_ = nil
+    InstanceRogue.super.on_destroy(self)
+end
+
+function InstanceRogue:build_extra_data()
+    local extra = InstanceRogue.super.build_extra_data(self)
+    extra.rogue_sync = self:build_rogue_sync()
+    return extra
+end
+
+function InstanceRogue:pack_extra_to_client()
+    return tableUtils.serialize_table(self:build_extra_data()) or ""
+end
+
+function InstanceRogue:init_rogue(player_pack)
     player_pack = type(player_pack) == "table" and player_pack or {}
     self.player_pack_ = player_pack
     self.effects_ = effect_mgr.from_pack(player_pack)
@@ -388,16 +407,14 @@ function InstanceRogue:init_rogue_state(player_pack)
         energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
     end
 
-    self.rogue_state_ = {
-        refresh_id = refresh_id,
-        energy_needs = energy_needs,
-        energy_tier = 1,
-        pick_times = 0,
-        owned_weapon_ids = {},
-        owned_colors = {},
-        picked = {},
-        pending = nil,
-    }
+    self.refresh_id_ = refresh_id
+    self.energy_needs_ = energy_needs
+    self.energy_tier_ = 1
+    self.pick_times_ = 0
+    self.owned_weapon_ids_ = {}
+    self.owned_colors_ = {}
+    self.picked_ = {}
+    self.pending_pick_ = nil
 end
 
 function InstanceRogue:get_effects()
@@ -405,46 +422,29 @@ function InstanceRogue:get_effects()
 end
 
 function InstanceRogue:get_rogue_max_picks()
-    local state = self.rogue_state_
-    if not state or type(state.energy_needs) ~= "table" then
+    if type(self.energy_needs_) ~= "table" then
         return 0
     end
-    return #state.energy_needs
+    return #self.energy_needs_
 end
 
 function InstanceRogue:can_rogue_open_pick()
-    local state = self.rogue_state_
-    if not state then
-        return false, "肉鸽状态不存在"
-    end
-    if num(state.refresh_id) <= 0 then
+    if num(self.refresh_id_) <= 0 then
         return false, "肉鸽刷新id未配置"
     end
-    if state.pending then
+    if self.pending_pick_ then
         return false, "已有待选择的能力"
     end
-    local next_pick = num(state.pick_times) + 1
+    local next_pick = num(self.pick_times_) + 1
     if next_pick > self:get_rogue_max_picks() then
         return false, "本局三选一次数已满"
     end
     return true
 end
 
-local function build_option_list(option_ids)
-    local options = {}
-    for _, ability_id in ipairs(option_ids or {}) do
-        local view = build_option_view(ability_id)
-        if view then
-            options[#options + 1] = view
-        end
-    end
-    return options
-end
-
 function InstanceRogue:roll_rogue_options()
-    local state = self.rogue_state_
-    local next_pick = num(state.pick_times) + 1
-    local ok, result = roll_three_options(state.refresh_id, next_pick, state, self.player_pack_, self.effects_)
+    local next_pick = num(self.pick_times_) + 1
+    local ok, result = roll_three_options(self, next_pick)
     if not ok then
         return false, result
     end
@@ -464,8 +464,7 @@ function InstanceRogue:rogue_open_pick()
     if not roll_ok then
         return false, roll_result
     end
-    local state = self.rogue_state_
-    state.pending = {
+    self.pending_pick_ = {
         pick_index = roll_result.pick_index,
         option_ids = roll_result.option_ids,
         options = roll_result.options,
@@ -478,18 +477,17 @@ function InstanceRogue:rogue_open_pick()
 end
 
 function InstanceRogue:rogue_refresh_pick()
-    local state = self.rogue_state_
-    if not state or not state.pending then
+    if not self.pending_pick_ then
         return false, "没有待刷新选项"
     end
-    if state.pending.selecting then
+    if self.pending_pick_.selecting then
         return false, "选择处理中"
     end
     local roll_ok, roll_result = self:roll_rogue_options()
     if not roll_ok then
         return false, roll_result
     end
-    state.pending = {
+    self.pending_pick_ = {
         pick_index = roll_result.pick_index,
         option_ids = roll_result.option_ids,
         options = roll_result.options,
@@ -501,7 +499,7 @@ function InstanceRogue:rogue_refresh_pick()
     }
 end
 
-local function track_weapon_gain(state, ability)
+function InstanceRogue:track_weapon_gain(ability)
     if tostring(ability.Type or ""):lower() ~= "weapon" then
         return
     end
@@ -509,54 +507,54 @@ local function track_weapon_gain(state, ability)
     if weapon_id <= 0 then
         return
     end
+    self.owned_weapon_ids_ = self.owned_weapon_ids_ or {}
     local exists = false
-    for _, wid in ipairs(state.owned_weapon_ids) do
+    for _, wid in ipairs(self.owned_weapon_ids_) do
         if num(wid) == weapon_id then
             exists = true
             break
         end
     end
     if not exists then
-        state.owned_weapon_ids[#state.owned_weapon_ids + 1] = weapon_id
+        self.owned_weapon_ids_[#self.owned_weapon_ids_ + 1] = weapon_id
     end
     local wcfg = WEAPON_DATA[weapon_id]
     if wcfg and wcfg.Color then
+        self.owned_colors_ = self.owned_colors_ or {}
         local color = tostring(wcfg.Color)
         local color_exists = false
-        for _, c in ipairs(state.owned_colors) do
+        for _, c in ipairs(self.owned_colors_) do
             if tostring(c) == color then
                 color_exists = true
                 break
             end
         end
         if not color_exists then
-            state.owned_colors[#state.owned_colors + 1] = color
+            self.owned_colors_[#self.owned_colors_ + 1] = color
         end
     end
 end
 
 function InstanceRogue:apply_rogue_pick(ability_id)
-    local state = self.rogue_state_
     ability_id = num(ability_id)
-    state.picked[ability_id] = num(state.picked[ability_id]) + 1
+    self.picked_[ability_id] = num(self.picked_[ability_id]) + 1
     local ability = get_ability(ability_id)
     if ability then
-        track_weapon_gain(state, ability)
+        self:track_weapon_gain(ability)
         local effect_id = num(ability.EffectId)
         if effect_id > 0 and self.effects_ then
             self.effects_:add_effect_id(effect_id)
         end
     end
-    state.pick_times = num(state.pick_times) + 1
-    if state.energy_tier <= #state.energy_needs then
-        state.energy_tier = state.energy_tier + 1
+    self.pick_times_ = num(self.pick_times_) + 1
+    if num(self.energy_tier_) <= #self.energy_needs_ then
+        self.energy_tier_ = num(self.energy_tier_) + 1
     end
 end
 
 function InstanceRogue:build_rogue_picked_list()
-    local state = self.rogue_state_
     local list = {}
-    for ability_id, count in pairs(state and state.picked or {}) do
+    for ability_id, count in pairs(self.picked_ or {}) do
         list[#list + 1] = {
             ability_id = num(ability_id),
             count = num(count),
@@ -569,24 +567,23 @@ function InstanceRogue:build_rogue_picked_list()
 end
 
 function InstanceRogue:build_rogue_sync()
-    local state = self.rogue_state_
-    if not state then
+    if type(self.energy_needs_) ~= "table" then
         return nil
     end
     local pending = nil
-    if state.pending then
+    if self.pending_pick_ then
         pending = {
-            pick_index = state.pending.pick_index,
-            options = state.pending.options,
+            pick_index = self.pending_pick_.pick_index,
+            options = self.pending_pick_.options,
         }
     end
     return {
-        refresh_id = state.refresh_id,
-        energy_tier = state.energy_tier,
-        pick_times = state.pick_times,
+        refresh_id = num(self.refresh_id_),
+        energy_tier = num(self.energy_tier_),
+        pick_times = num(self.pick_times_),
         max_picks = self:get_rogue_max_picks(),
-        energy_needs = state.energy_needs,
-        owned_weapon_ids = state.owned_weapon_ids,
+        energy_needs = self.energy_needs_,
+        owned_weapon_ids = self.owned_weapon_ids_,
         effects = self.effects_ and self.effects_:build_sync() or nil,
         picked = self:build_rogue_picked_list(),
         pending = pending,
@@ -594,29 +591,28 @@ function InstanceRogue:build_rogue_sync()
 end
 
 function InstanceRogue:rogue_select_pick(choice_index)
-    local state = self.rogue_state_
     choice_index = num(choice_index)
-    if not state or not state.pending then
+    if not self.pending_pick_ then
         return false, "没有待选择能力"
     end
-    if state.pending.selecting then
+    if self.pending_pick_.selecting then
         return false, "选择处理中"
     end
-    local option_ids = state.pending.option_ids or {}
+    local option_ids = self.pending_pick_.option_ids or {}
     local ability_id = num(option_ids[choice_index])
     if ability_id <= 0 then
         return false, "选择下标无效"
     end
 
-    state.pending.selecting = true
+    self.pending_pick_.selecting = true
     self:apply_rogue_pick(ability_id)
     local ability = get_ability(ability_id)
-    state.pending = nil
+    self.pending_pick_ = nil
 
     return true, {
         ability_id = ability_id,
         effect_id = ability and num(ability.EffectId) or 0,
-        pick_times = state.pick_times,
+        pick_times = num(self.pick_times_),
         picked = self:build_rogue_picked_list(),
     }
 end

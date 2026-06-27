@@ -254,6 +254,9 @@ function MessageHandler.handle_server_message(name, args)
 				print("[副本结算] extra_data:", data)
 			end
 		end
+		if args and type(args.rewards) == "table" then
+			print("[副本结算] rewards:", args.rewards)
+		end
 		return
 	end
 
