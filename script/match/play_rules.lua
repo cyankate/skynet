@@ -2,7 +2,8 @@
     玩法规则（匹配 + 进本 + 结算 hook 合一）。
     entry: direct 直进 | match 走匹配
     handler: 业务模块路径，约定 before_instance_start / on_play_start_failed /
-             before_instance_end / after_instance_end
+             before_instance_settle / on_instance_settled / on_instance_action
+    on_instance_action: 由 instance 服务在需要时主动 call_play_agent 触发
 ]]
 
 local M = {

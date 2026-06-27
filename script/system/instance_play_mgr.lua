@@ -142,11 +142,11 @@ function M.on_complete(player, params)
     if inst_id == nil or inst_id == "" then
         return false, "inst_id无效"
     end
-    local success = params.success and true or false
-    local complete_data = type(params.complete_data) == "table" and params.complete_data or {}
+    local success = params.success == true
+    local complete_data = params.complete_data or {}
 
     local session = player:get_instance_session()
-    local type_name = params.type_name
+    local type_name = params.type_name or ""
     local inst_no = num(params.inst_no)
 
     if type(session) == "table" and session.inst_id then
@@ -156,19 +156,8 @@ function M.on_complete(player, params)
         if session.settling then
             return false, "结算处理中"
         end
-        type_name = session.type_name or type_name
-        inst_no = num(session.inst_no) > 0 and num(session.inst_no) or inst_no
         session.settling = true
         player:set_instance_session(session)
-    end
-
-    type_name = tostring(type_name or "")
-    if type_name == "" then
-        if type(session) == "table" then
-            session.settling = nil
-            player:set_instance_session(session)
-        end
-        return false, "玩法类型未知"
     end
 
     local rule = play_rules[type_name]
@@ -191,7 +180,7 @@ function M.on_complete(player, params)
         complete_data = complete_data,
     }
 
-    local hook_ok, end_data_or_err = play_rules.call_hook(rule, "before_instance_end", player, ctx)
+    local hook_ok, end_data_or_err = play_rules.call_hook(rule, "before_instance_settle", player, ctx)
     if hook_ok == nil then
         hook_ok, end_data_or_err = true, {}
     end
@@ -213,13 +202,58 @@ function M.on_complete(player, params)
         return false, add_err or "发放奖励失败"
     end
 
-    play_rules.call_hook(rule, "after_instance_end", player, ctx, end_data_or_err)
+    play_rules.call_hook(rule, "on_instance_settled", player, ctx, end_data_or_err)
     player:clear_instance_session()
 
     return true, {
         settle_data = end_data_or_err.settle_data or {},
         rewards = build_reward_list(end_data_or_err.rewards),
     }
+end
+
+function M.on_action(player, params)
+    params = params or {}
+    local inst_id = params.inst_id
+    local action = tostring(params.action or "")
+    if inst_id == nil or inst_id == "" or action == "" then
+        return false, "副本交互参数无效"
+    end
+
+    local session = player:get_instance_session()
+    local type_name = tostring(params.type_name or "")
+    if type(session) == "table" and session.inst_id then
+        if session.inst_id ~= inst_id then
+            return false, "副本会话无效"
+        end
+        if session.settling then
+            return false, "结算处理中"
+        end
+    end
+
+    local rule = play_rules[type_name]
+    if not rule then
+        return false, "玩法规则不存在"
+    end
+
+    local ctx = {
+        type_name = type_name,
+        rule = rule,
+        extra = type(session) == "table" and (session.extra or {}) or {},
+        session = session or {},
+        inst_id = inst_id,
+        inst_no = num(params.inst_no),
+        action = action,
+        payload = type(params.payload) == "table" and params.payload or {},
+    }
+
+    local hook_ok, hook_result = play_rules.call_hook(rule, "on_instance_action", player, ctx)
+    if hook_ok == nil then
+        return true
+    end
+    if hook_ok ~= true then
+        return false, hook_result or "副本交互被拒绝"
+    end
+    return true, hook_result
 end
 
 return M

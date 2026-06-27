@@ -355,7 +355,7 @@ function M.on_play_start_failed(player, ctx, _err)
     end
 end
 
-function M.before_instance_end(player, ctx)
+function M.before_instance_settle(player, ctx)
     local extra = ctx.extra or {}
     local barrier_no = num(extra.barrier_no)
     local inst_no = num(ctx.inst_no)
@@ -375,12 +375,20 @@ function M.before_instance_end(player, ctx)
     }
 end
 
-function M.after_instance_end(player, ctx, _end_data)
+function M.on_instance_settled(player, ctx, _end_data)
     local barrier_no = num((ctx.extra or {}).barrier_no)
     if ctx.success and barrier_no > 0 then
         condition_mgr.on_barrier_passed(player, barrier_no)
     end
     M.sync_to_client(player)
+end
+
+function M.on_instance_action(_player, ctx)
+    local action = tostring(ctx.action or "")
+    if action == "rogue_pick_refresh" then
+        -- 由 instance_service.call_play_agent 主动触发时再处理
+    end
+    return true
 end
 
 return M

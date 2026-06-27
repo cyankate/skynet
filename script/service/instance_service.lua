@@ -27,6 +27,14 @@ local function get_instance_or_error(inst_id)
     return inst, true
 end
 
+local function try_destroy_if_empty(inst_id, inst)
+    if tableUtils.table_size(inst.pjoins_) > 0 then
+        return false
+    end
+    M.destroy_instance(inst_id)
+    return true
+end
+
 local function get_agent_flow(player_id)
     local ok, result_or_err = protocol_handler.call_agent(player_id, "get_player_flow", { player_id = player_id })
     if not ok then
@@ -297,14 +305,14 @@ function M.quit_instance(inst_id, player_id)
     end
     if tableUtils.table_size(inst.pjoins_) == 0 then
         local inst_data = instance_mgr.get_instance_data(inst_id)
-        if inst_data and inst_data.type == "multi" then
+        if inst_data and inst_data.type == "multi" and inst:get_status() ~= InstanceStatus.COMPLETED then
             inst:complete(false, {
                 reason = "all_quit",
                 end_type = InstanceEndType.ACTIVE_QUIT,
                 end_reason = InstanceEndReason.QUIT_ALL,
             })
         end
-        M.destroy_instance(inst_id)
+        try_destroy_if_empty(inst_id, inst)
     end
     return true
 end
@@ -440,6 +448,26 @@ function M.sync_player_instance_state(player_id)
         protocol_handler.send_to_player(player_id, "instance_play_data_notify", inst:build_play_data_notify())
     end
     return true
+end
+
+function M.call_play_agent(inst, player_id, action, payload)
+    local args = inst.args_ or {}
+    local type_name = args.type_name
+    if type_name == nil or type_name == "" then
+        return true
+    end
+    local ok, result = protocol_handler.call_agent(player_id, "instance_play_action", {
+        player_id = player_id,
+        inst_id = inst.inst_id_,
+        inst_no = inst.inst_no_ or 0,
+        type_name = type_name,
+        action = action,
+        payload = payload or {},
+    })
+    if not ok then
+        return false, result or "agent交互失败"
+    end
+    return true, result
 end
 
 local function get_rogue_inst(inst_id, player_id)

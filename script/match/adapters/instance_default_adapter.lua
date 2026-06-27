@@ -30,6 +30,7 @@ function adapter.on_all_confirmed(players, options)
 
     local instance_type_name = options.instance_type_name or options.type_name or "multi"
     local create_args = {
+        type_name = options.type_name,
         inst_no = options.inst_no,
         team_size = options.team_size,
         min_players = options.min_players,
