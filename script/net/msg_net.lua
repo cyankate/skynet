@@ -5,9 +5,9 @@ local modules = {
     "net.chat_net",
     "net.friend_net",
     "net.instance_net",
+    "net.play_net",
     "net.guild_net",
     "net.mail_net",
-    "net.combat_net",
     "net.task_net",
     "net.map_net",
 }

@@ -1,8 +1,13 @@
+--[[
+    副本内协议：进退本、准备、模式事件、局内玩法交互等
+]]
+
 local skynet = require "skynet"
-local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
-local play_rules = require "match.play_rules"
-local instance_play_mgr = require "system.instance_play_mgr"
+
+local function get_instance_service()
+    return skynet.localname(".instance")
+end
 
 local function on_instance_enter(player_id, msg)
     if not msg.inst_id then
@@ -12,7 +17,7 @@ local function on_instance_enter(player_id, msg)
         })
         return false, "Invalid message format"
     end
-    local instanceS = skynet.localname(".instance")
+    local instanceS = get_instance_service()
     if not instanceS then
         protocol_handler.send_to_player(player_id, "instance_enter_response", {
             result = 1,
@@ -48,7 +53,7 @@ local function on_instance_exit(player_id, msg)
         })
         return false, "Invalid message format"
     end
-    local instanceS = skynet.localname(".instance")
+    local instanceS = get_instance_service()
     if not instanceS then
         protocol_handler.send_to_player(player_id, "instance_exit_response", {
             result = 1,
@@ -81,7 +86,7 @@ local function on_instance_quit(player_id, msg)
         })
         return false, "Invalid message format"
     end
-    local instanceS = skynet.localname(".instance")
+    local instanceS = get_instance_service()
     if not instanceS then
         protocol_handler.send_to_player(player_id, "instance_quit_response", {
             result = 1,
@@ -114,7 +119,7 @@ local function on_instance_ready(player_id, msg)
         })
         return false, "Invalid message format"
     end
-    local instanceS = skynet.localname(".instance")
+    local instanceS = get_instance_service()
     if not instanceS then
         protocol_handler.send_to_player(player_id, "instance_ready_response", {
             result = 1,
@@ -150,7 +155,7 @@ local function on_instance_mode_event(player_id, msg)
         })
         return false, "Invalid message format"
     end
-    local instanceS = skynet.localname(".instance")
+    local instanceS = get_instance_service()
     if not instanceS then
         protocol_handler.send_to_player(player_id, "instance_mode_event_response", {
             result = 1,
@@ -182,94 +187,120 @@ local function on_instance_mode_event(player_id, msg)
     return true
 end
 
-local function on_instance_match_confirm(player_id, msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
-    end
-    skynet.send(matchS, "lua", "confirm_match", player_id, msg.accept ~= false)
-    return true
-end
-
-local function on_instance_play_start(player_id, msg)
-    local type_name = msg.type_name or "single"
-    local rule = play_rules[type_name]
-    if not rule then
-        protocol_handler.send_to_player(player_id, "instance_play_start_response", {
+local function on_rogue_pick_open(player_id, msg)
+    if not msg.inst_id then
+        protocol_handler.send_to_player(player_id, "rogue_pick_open_response", {
             result = 1,
-            message = "不支持的玩法类型",
-            mode = "",
-            matched = false,
-            pending_confirm = false,
+            message = "参数错误",
             inst_id = "",
-            scene_id = 0,
-            inst_no = 0,
-            extra = "",
         })
-        return false, "Unsupported type_name"
+        return false, "Invalid message format"
     end
-    local entry = rule.entry or "match"
-    if entry == "direct" then
-        local player = user_mgr.get_player_obj(player_id)
-        if not player then
-            protocol_handler.send_to_player(player_id, "instance_play_start_response", {
-                result = 1,
-                message = "Player not found",
-                mode = "direct",
-                matched = false,
-                pending_confirm = false,
-                inst_id = "",
-                scene_id = 0,
-                inst_no = 0,
-                extra = "",
-            })
-            return false, "Player not found"
-        end
-        local ok, result_or_err = instance_play_mgr.play_start(player, type_name, msg.extra)
-        if not ok then
-            protocol_handler.send_to_player(player_id, "instance_play_start_response", {
-                result = 1,
-                message = result_or_err or "进入副本失败",
-                mode = "direct",
-                matched = false,
-                pending_confirm = false,
-                inst_id = "",
-                scene_id = 0,
-                inst_no = 0,
-                extra = "",
-            })
-            return false, result_or_err
-        end
-        protocol_handler.send_to_player(player_id, "instance_play_start_response", {
-            result = 0,
-            message = "进入副本成功",
-            mode = "direct",
-            inst_id = result_or_err.inst_id or "",
-            scene_id = result_or_err.scene_id or 0,
-            inst_no = result_or_err.inst_no or 0,
-            extra = "",
-            matched = true,
-            pending_confirm = false,
+    local instanceS = get_instance_service()
+    if not instanceS then
+        protocol_handler.send_to_player(player_id, "rogue_pick_open_response", {
+            result = 1,
+            message = "副本服务不可用",
+            inst_id = msg.inst_id,
         })
-        return true
+        return false, "Instance service not available"
     end
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+    local ok, result_or_err = skynet.call(instanceS, "lua", "rogue_pick_open", msg.inst_id, player_id)
+    if not ok then
+        protocol_handler.send_to_player(player_id, "rogue_pick_open_response", {
+            result = 1,
+            message = result_or_err or "开抽失败",
+            inst_id = msg.inst_id,
+        })
+        return false, result_or_err
     end
-    skynet.send(matchS, "lua", "start_match", player_id, {
-        type_name = type_name,
-        extra = msg.extra,
+    protocol_handler.send_to_player(player_id, "rogue_pick_open_response", {
+        result = 0,
+        message = "ok",
+        inst_id = msg.inst_id,
+        pick_index = result_or_err.pick_index,
     })
     return true
 end
 
-local function on_instance_match_cancel(player_id, msg)
-    local matchS = skynet.localname(".match")
-    if not matchS then
-        return false, "Match service not available"
+local function on_rogue_pick_refresh(player_id, msg)
+    if not msg.inst_id then
+        protocol_handler.send_to_player(player_id, "rogue_pick_refresh_response", {
+            result = 1,
+            message = "参数错误",
+            inst_id = msg.inst_id or "",
+        })
+        return false, "Invalid message format"
     end
-    skynet.send(matchS, "lua", "cancel_match", player_id)
+    local instanceS = get_instance_service()
+    if not instanceS then
+        protocol_handler.send_to_player(player_id, "rogue_pick_refresh_response", {
+            result = 1,
+            message = "副本服务不可用",
+            inst_id = msg.inst_id,
+        })
+        return false, "Instance service not available"
+    end
+    local ok, result_or_err = skynet.call(instanceS, "lua", "rogue_pick_refresh", msg.inst_id, player_id)
+    if not ok then
+        protocol_handler.send_to_player(player_id, "rogue_pick_refresh_response", {
+            result = 1,
+            message = result_or_err or "刷新失败",
+            inst_id = msg.inst_id,
+        })
+        return false, result_or_err
+    end
+    protocol_handler.send_to_player(player_id, "rogue_pick_refresh_response", {
+        result = 0,
+        message = "ok",
+        inst_id = msg.inst_id,
+        pick_index = result_or_err.pick_index,
+    })
+    return true
+end
+
+local function on_rogue_pick_select(player_id, msg)
+    if not msg.inst_id or not msg.choice_index then
+        protocol_handler.send_to_player(player_id, "rogue_pick_select_response", {
+            result = 1,
+            message = "参数错误",
+            inst_id = msg.inst_id or "",
+        })
+        return false, "Invalid message format"
+    end
+    local instanceS = get_instance_service()
+    if not instanceS then
+        protocol_handler.send_to_player(player_id, "rogue_pick_select_response", {
+            result = 1,
+            message = "副本服务不可用",
+            inst_id = msg.inst_id,
+        })
+        return false, "Instance service not available"
+    end
+    local ok, result_or_err = skynet.call(
+        instanceS,
+        "lua",
+        "rogue_pick_select",
+        msg.inst_id,
+        player_id,
+        msg.choice_index
+    )
+    if not ok then
+        protocol_handler.send_to_player(player_id, "rogue_pick_select_response", {
+            result = 1,
+            message = result_or_err or "选择失败",
+            inst_id = msg.inst_id,
+        })
+        return false, result_or_err
+    end
+    protocol_handler.send_to_player(player_id, "rogue_pick_select_response", {
+        result = 0,
+        message = "ok",
+        inst_id = msg.inst_id,
+        ability_id = result_or_err.ability_id,
+        effect_id = result_or_err.effect_id,
+        pick_times = result_or_err.pick_times,
+    })
     return true
 end
 
@@ -279,7 +310,7 @@ return {
     instance_quit = on_instance_quit,
     instance_ready = on_instance_ready,
     instance_mode_event = on_instance_mode_event,
-    instance_play_start = on_instance_play_start,
-    instance_match_confirm = on_instance_match_confirm,
-    instance_match_cancel = on_instance_match_cancel,
+    rogue_pick_open = on_rogue_pick_open,
+    rogue_pick_refresh = on_rogue_pick_refresh,
+    rogue_pick_select = on_rogue_pick_select,
 }
