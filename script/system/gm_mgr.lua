@@ -119,15 +119,6 @@ function M.execute(player, action, args)
     return handler(player, args)
 end
 
-function M.list_commands()
-    local list = {}
-    for name in pairs(COMMAND_HANDLERS) do
-        list[#list + 1] = name
-    end
-    table.sort(list)
-    return list
-end
-
 function M.list_templates()
     local list = {}
     for action, meta in pairs(COMMAND_META) do

@@ -1044,7 +1044,6 @@ local function register_default_routes()
         if action == "list" then
             local gm_mgr = require "system.gm_mgr"
             return {
-                commands = gm_mgr.list_commands(),
                 templates = gm_mgr.list_templates(),
             }
         end
