@@ -428,8 +428,13 @@ local function error_response(fd, interface, code, message)
     headers["Content-Type"] = "application/json; charset=utf-8"
     headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     headers["X-Response-Time"] = tostring(os.time())
-    
-    response(fd, interface, code, cjson.encode(create_response(code, nil, message)), headers)
+
+    local body = cjson.encode({
+        ok = false,
+        error = tostring(message or "error"),
+        message = tostring(message or "error"),
+    })
+    response(fd, interface, code, body, headers)
 end
 
 -- Token 验证相关函数
@@ -1057,7 +1062,7 @@ local function register_default_routes()
         end
         local agent = skynet.call(registerS, "lua", "get_agent", player_id)
         if not agent then
-            error_response(fd, interface, 404, "Player not online")
+            error_response(fd, interface, 400, "Player not online")
             return
         end
 
