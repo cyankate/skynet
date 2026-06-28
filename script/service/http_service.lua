@@ -1022,9 +1022,67 @@ local function register_default_routes()
         end
     end)
 
-    -- Web 后台：下发命令（占位，后续实现业务）
+    -- Web 后台：下发 GM 命令（action: add_items | activate_weapon | list）
     register_route("POST", "/api/web/command", function(fd, method, url, headers, body, interface)
-        error_response(fd, interface, 501, "Web command API not implemented yet")
+        local ok, data = pcall(cjson.decode, body or "")
+        if not ok or type(data) ~= "table" then
+            error_response(fd, interface, 400, "Invalid JSON body")
+            return
+        end
+
+        local action = data.action
+        if type(action) ~= "string" or action == "" then
+            error_response(fd, interface, 400, "Missing field: action")
+            return
+        end
+
+        if action == "list" then
+            local gm_mgr = require "system.gm_mgr"
+            return {
+                commands = gm_mgr.list_commands(),
+                templates = gm_mgr.list_templates(),
+            }
+        end
+
+        local player_id = tonumber(data.player_id)
+        if not player_id or player_id <= 0 then
+            error_response(fd, interface, 400, "Missing or invalid field: player_id")
+            return
+        end
+
+        local registerS = skynet.localname(".register")
+        if not registerS then
+            error_response(fd, interface, 503, "Register service unavailable")
+            return
+        end
+        local agent = skynet.call(registerS, "lua", "get_agent", player_id)
+        if not agent then
+            error_response(fd, interface, 404, "Player not online")
+            return
+        end
+
+        local args = {}
+        for k, v in pairs(data) do
+            if k ~= "action" and k ~= "player_id" then
+                args[k] = v
+            end
+        end
+
+        local exec_ok, exec_result = skynet.call(agent, "lua", "gm_command", {
+            player_id = player_id,
+            action = action,
+            args = args,
+        })
+        if not exec_ok then
+            error_response(fd, interface, 400, exec_result or "GM command failed")
+            return
+        end
+        return {
+            ok = true,
+            action = action,
+            player_id = player_id,
+            result = exec_result,
+        }
     end)
 
     

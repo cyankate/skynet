@@ -20,6 +20,7 @@ local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
 local barrier_mgr = require "system.barrier_mgr"
 local instance_play_mgr = require "system.instance_play_mgr"
+local gm_mgr = require "system.gm_mgr"
 local task_mgr = require "system.task.task_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
@@ -427,6 +428,15 @@ function M.instance_play_action(data)
         return false, err
     end
     return instance_play_mgr.on_action(player, data)
+end
+
+function M.gm_command(data)
+    data = data or {}
+    local player, err = get_player_or_err(data.player_id)
+    if not player then
+        return false, err or "Player not found"
+    end
+    return gm_mgr.execute(player, data.action, data.args or data)
 end
 
 function M.shutdown()
