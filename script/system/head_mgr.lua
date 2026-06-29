@@ -5,8 +5,10 @@
 local attr_calc = require "effect.attr_calc"
 local effect_mgr = require "system.effect_mgr"
 local condition_mgr = require "system.condition_mgr"
+local weapon_mgr = require "system.weapon_mgr"
 local HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
 local protocol_handler = require "protocol_handler"
+local log = require "log"
 
 local M = {}
 
@@ -148,6 +150,11 @@ function M.add_head_exp(player, delta)
     if level_ups > 0 then
         effect_mgr.collect_player_effects(player)
         condition_mgr.on_head_level_changed(player, level)
+        local unlocked, count = weapon_mgr.try_unlock_by_level(player, level)
+        if unlocked then
+            weapon_mgr.sync_to_client(player)
+            log.info("player %s unlock %d weapons by level %d", tostring(player.player_id_), count, level)
+        end
     end
 
     return true, {

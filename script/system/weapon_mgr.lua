@@ -6,6 +6,7 @@ local attr_calc = require "effect.attr_calc"
 local effect_mgr = require "system.effect_mgr"
 local protocol_handler = require "protocol_handler"
 local condition_mgr = require "system.condition_mgr"
+local WEAPON_DATA = require "setting.WEAPON_DATA"
 local log = require "log"
 
 local M = {}
@@ -94,6 +95,32 @@ function M.has_weapon(player, weapon_id)
         return false
     end
     return ctn:get_weapons()[num(weapon_id)] ~= nil
+end
+
+--- 按车头等级解锁武器：UnlockLevel <= level 且尚未拥有则激活
+function M.try_unlock_by_level(player, level)
+    if not player then
+        return false, 0
+    end
+    level = num(level)
+    if level < 0 then
+        return false, 0
+    end
+
+    local unlocked_count = 0
+    for weapon_id, cfg in pairs(WEAPON_DATA) do
+        weapon_id = num(weapon_id)
+        if weapon_id > 0 and type(cfg) == "table" then
+            local need_level = num(cfg.UnlockLevel)
+            if need_level <= level and not M.has_weapon(player, weapon_id) then
+                local ok = M.activate_weapon(player, weapon_id)
+                if ok then
+                    unlocked_count = unlocked_count + 1
+                end
+            end
+        end
+    end
+    return unlocked_count > 0, unlocked_count
 end
 
 return M

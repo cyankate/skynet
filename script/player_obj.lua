@@ -28,6 +28,7 @@ end
 --- 新号初始化：容器 load 完成后写入默认数据
 function Player:init_new_player()
     head_mgr.init_player(self)
+    weapon_mgr.try_unlock_by_level(self, head_mgr.get_head_level(self))
     barrier_mgr.init_player(self)
     local condition = self:get_ctn("condition")
     if condition then
@@ -46,6 +47,7 @@ function Player:on_loaded()
     self.loaded_ = true
 
     recovery_mgr.init_player(self)
+    weapon_mgr.try_unlock_by_level(self, head_mgr.get_head_level(self))
     barrier_mgr.on_player_loaded(self)
     condition_mgr.sync_from_player(self)
     task_mgr.on_player_loaded(self)
