@@ -1,5 +1,10 @@
 return 
 {
-[1]={["Id"]=1,["Name"]="沙漠废土",["WeaponId"]=1001,["Quality"]=1,["Type"]="weapon",["EffectId"]=4001,["Limit"]=1,["Weight"]=20},
-[2]={["Id"]=2,["Name"]="城市中心",["WeaponId"]=1001,["Quality"]=2,["Type"]="ability",["EffectId"]=4002,["PreCondition"]=1,["Limit"]=3,["Weight"]=10},
-[3]={["Id"]=3,["Name"]="度假岛",["WeaponId"]=1002,["Quality"]=1,["Type"]="weapon",["EffectId"]=4003,["PreCondition"]=2,["Limit"]=1,["Weight"]=20}}
+[1001]={["Id"]=1001,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="weapon",["EffectId"]=1001,["Limit"]=1,["Weight"]=20},
+[1002]={["Id"]=1002,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="ability",["EffectId"]=1002,["Limit"]=5,["Weight"]=20},
+[1003]={["Id"]=1003,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="ability",["EffectId"]=1003,["Limit"]=5,["Weight"]=20},
+[1004]={["Id"]=1004,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="ability",["EffectId"]=1004,["Limit"]=5,["Weight"]=20},
+[1005]={["Id"]=1005,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="ability",["EffectId"]=1005,["Limit"]=5,["Weight"]=20},
+[1006]={["Id"]=1006,["Name"]="散弹",["WeaponId"]=11,["Quality"]=2,["Type"]="ability",["EffectId"]=1006,["PreCondition"]={[1]=2,[2]=4},["Limit"]=1,["Weight"]=20},
+[1101]={["Id"]=1101,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="weapon",["EffectId"]=1101,["Limit"]=1,["Weight"]=20},
+[1102]={["Id"]=1102,["Name"]="散弹",["WeaponId"]=11,["Quality"]=1,["Type"]="weapon",["EffectId"]=1102,["Limit"]=1,["Weight"]=20}}
