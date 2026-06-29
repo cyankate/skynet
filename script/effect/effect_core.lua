@@ -230,12 +230,15 @@ function M.expand_effect_ids(effect_ids)
                 })
             elseif effect_type == EFFECT_TYPE.SPECIAL then
                 local args = cfg.Args
-                table.insert(specials, {
-                    effect_id = effect_id,
-                    special = cfg.Special,
-                    value = num(args and args[1]),
-                    scope = M.parse_target(cfg.Target),
-                })
+                local special_key = args and args[1]
+                if type(special_key) == "string" and special_key ~= "" then
+                    table.insert(specials, {
+                        effect_id = effect_id,
+                        special = special_key,
+                        value = num(args[2]),
+                        scope = M.parse_target(cfg.Target),
+                    })
+                end
             end
         end
     end
