@@ -8,6 +8,8 @@ local protocol_handler = require "protocol_handler"
 local play_rules = require "match.play_rules"
 local instance_play_mgr = require "system.instance_play_mgr"
 local barrier_mgr = require "system.barrier_mgr"
+local log = require "log"
+local tableUtils = require "utils.tableUtils"
 
 local function on_barrier_claim_chest(player_id, msg)
     local player = user_mgr.get_player_obj(player_id)
@@ -43,6 +45,7 @@ local function on_barrier_claim_chest(player_id, msg)
 end
 
 local function on_instance_play_start(player_id, msg)
+    log.error("on_instance_play_start", player_id, tableUtils.serialize_table(msg))
     local type_name = msg.type_name or "single"
     local rule = play_rules[type_name]
     if not rule then
