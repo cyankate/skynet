@@ -11,7 +11,6 @@ local item_mgr = require "system.item_mgr"
 local condition_mgr = require "system.condition_mgr"
 local M = {}
 
-local STAMINA_ID = RECOVERY_ENUM.STAMINA
 local MAX_STARS = 3
 
 local RECORDS_KEY = "barrier_records"
@@ -102,7 +101,7 @@ function M.can_enter_barrier(player, barrier_no)
     if M.get_cfg(barrier_no - 1) and not M.is_barrier_passed(player, barrier_no - 1) then
         return false, "请先通关上一关"
     end
-    local stamina = recovery_mgr.get_count(player, STAMINA_ID)
+    local stamina = recovery_mgr.get_count(player, RECOVERY_ENUM.STAMINA)
     if stamina == nil then
         return false, "体力数据未就绪"
     end
@@ -333,7 +332,7 @@ function M.before_instance_start(player, ctx)
 
     local barrier_cfg = M.get_cfg(barrier_no)
     local stamina_cost = get_stamina_cost(barrier_cfg)
-    local after = recovery_mgr.change_count(player, STAMINA_ID, -stamina_cost)
+    local after = recovery_mgr.change_count(player, RECOVERY_ENUM.STAMINA, -stamina_cost)
     if after == nil then
         return false, "扣除体力失败"
     end
@@ -351,7 +350,7 @@ function M.on_play_start_failed(player, ctx, _err)
         stamina_cost = get_stamina_cost(barrier_cfg)
     end
     if stamina_cost > 0 then
-        recovery_mgr.change_count(player, STAMINA_ID, stamina_cost)
+        recovery_mgr.change_count(player, RECOVERY_ENUM.STAMINA, stamina_cost)
     end
 end
 
