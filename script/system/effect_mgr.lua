@@ -6,6 +6,7 @@ local effect_core = require "effect.effect_core"
 local class = require "utils.class"
 local head_mgr = require "system.head_mgr"
 local talent_mgr = require "system.talent_mgr"
+local protocol_handler = require "protocol_handler"
 
 local M = setmetatable({}, { __index = effect_core })
 
@@ -142,7 +143,6 @@ end
 function EffectContext:build_sync()
     return {
         effect_ids = self:get_effect_ids(),
-        effect_unlock_weapon_ids = self:get_effect_unlock_weapon_ids(),
     }
 end
 
@@ -192,6 +192,25 @@ function M.get_effects(player)
         M.collect_player_effects(player)
     end
     return player.effects_
+end
+
+function M.sync_to_client(player)
+    if not player or not player.player_id_ then
+        return false
+    end
+    local effects = M.get_effects(player)
+    if not effects then
+        return false
+    end
+    local payload = effects:build_sync()
+    protocol_handler.send_to_player(player.player_id_, "effects_notify", payload)
+    return true
+end
+
+function M.refresh_and_sync(player)
+    M.invalidate_player_effects(player)
+    M.collect_player_effects(player)
+    return M.sync_to_client(player)
 end
 
 return M

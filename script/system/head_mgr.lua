@@ -155,6 +155,7 @@ function M.add_head_exp(player, delta)
             weapon_mgr.sync_to_client(player)
             log.info("player %s unlock %d weapons by level %d", tostring(player.player_id_), count, level)
         end
+        effect_mgr.sync_to_client(player)
     end
 
     return true, {

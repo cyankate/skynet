@@ -5,6 +5,7 @@
 local log = require "log"
 local item_mgr = require "system.item_mgr"
 local weapon_mgr = require "system.weapon_mgr"
+local effect_mgr = require "system.effect_mgr"
 
 local M = {}
 
@@ -65,6 +66,7 @@ local function cmd_activate_weapon(player, args)
         return false, err or "激活武器失败"
     end
     weapon_mgr.sync_to_client(player)
+    effect_mgr.sync_to_client(player)
     return true, {
         action = "activate_weapon",
         player_id = player.player_id_,

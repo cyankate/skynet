@@ -650,6 +650,27 @@ local s2c_builder = builder.new()
             exp = "integer",
         }
     })
+
+    :type("effect_info", {
+        effect_ids = "*integer",
+    })
+
+    :protocol("effects_notify", 674, {
+        request = {
+            effect_ids = "*integer",
+        }
+    })
+
+    :type("weapon_info", {
+        weapon_id = "integer",
+        level = "integer",
+    })
+
+    :protocol("weapon_list_notify", 675, {
+        request = {
+            weapons = "*integer",
+        }
+    })
     
     -- 邮件系统
     :type("mail_info", {
@@ -795,6 +816,7 @@ local s2c_builder = builder.new()
         max_picks = "integer",
         energy_needs = "*integer",
         owned_weapon_ids = "*integer",
+        effects = "effect_info",
         picked = "*rogue_picked_entry",
         pending = "rogue_pending_pick",
     })

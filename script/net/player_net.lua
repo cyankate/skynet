@@ -3,6 +3,7 @@ local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
 local talent_mgr = require "system.talent_mgr"
+local effect_mgr = require "system.effect_mgr"
 
 local function normalize_item_msg(msg)
     if type(msg) ~= "table" then
@@ -122,6 +123,7 @@ local function on_talent_activate(player_id, msg)
         level = result_or_err.level or 1,
     })
     talent_mgr.sync_to_client(player)
+    effect_mgr.sync_to_client(player)
     return true
 end
 

@@ -181,6 +181,7 @@ function M.send_player_data(player)
     talent_mgr.sync_to_client(player)
     weapon_mgr.sync_to_client(player)
     head_mgr.sync_to_client(player)
+    effect_mgr.sync_to_client(player)
     barrier_mgr.sync_to_client(player)
     task_mgr.sync_to_client(player)
 end
