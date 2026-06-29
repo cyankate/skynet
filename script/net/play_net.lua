@@ -45,7 +45,7 @@ local function on_barrier_claim_chest(player_id, msg)
 end
 
 local function on_instance_play_start(player_id, msg)
-    log.error("on_instance_play_start", player_id, tableUtils.serialize_table(msg))
+    log.error("on_instance_play_start %s %s", player_id, tableUtils.serialize_table(msg))
     local type_name = msg.type_name or "single"
     local rule = play_rules[type_name]
     if not rule then
