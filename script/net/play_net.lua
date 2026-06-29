@@ -45,8 +45,8 @@ local function on_barrier_claim_chest(player_id, msg)
 end
 
 local function on_instance_play_start(player_id, msg)
-    log.error("on_instance_play_start %s %s", player_id, tableUtils.serialize_table(msg))
     local type_name = msg.type_name or "single"
+    local extra = tableUtils.deserialize_table(msg.extra) or {}
     local rule = play_rules[type_name]
     if not rule then
         protocol_handler.send_to_player(player_id, "instance_play_start_response", {
@@ -79,7 +79,7 @@ local function on_instance_play_start(player_id, msg)
             })
             return false, "Player not found"
         end
-        local ok, result_or_err = instance_play_mgr.play_start(player, type_name, msg.extra)
+        local ok, result_or_err = instance_play_mgr.play_start(player, type_name, extra)
         if not ok then
             protocol_handler.send_to_player(player_id, "instance_play_start_response", {
                 result = 1,
@@ -113,7 +113,7 @@ local function on_instance_play_start(player_id, msg)
     end
     skynet.send(matchS, "lua", "start_match", player_id, {
         type_name = type_name,
-        extra = msg.extra,
+        extra = extra,
     })
     return true
 end
