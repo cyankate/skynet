@@ -312,26 +312,12 @@ local function build_option_view(ability_id)
 end
 
 local function normalize_energy_needs(raw)
-    if type(raw) ~= "table" then
+    if type(raw) ~= "table" or #raw == 0 then
         return nil
     end
     local list = {}
-    if #raw > 0 then
-        for i = 1, #raw do
-            list[i] = num(raw[i])
-        end
-    else
-        local keys = {}
-        for k in pairs(raw) do
-            keys[#keys + 1] = num(k)
-        end
-        table.sort(keys)
-        for i, k in ipairs(keys) do
-            list[i] = num(raw[k])
-        end
-    end
-    if #list == 0 then
-        return nil
+    for i = 1, #raw do
+        list[i] = num(raw[i])
     end
     return list
 end
@@ -567,7 +553,7 @@ function InstanceRogue:build_rogue_picked_list()
 end
 
 function InstanceRogue:build_rogue_sync()
-    if type(self.energy_needs_) ~= "table" then
+    if type(self.picked_) ~= "table" then
         return nil
     end
     local pending = nil
@@ -582,7 +568,6 @@ function InstanceRogue:build_rogue_sync()
         energy_tier = num(self.energy_tier_),
         pick_times = num(self.pick_times_),
         max_picks = self:get_rogue_max_picks(),
-        energy_needs = self.energy_needs_,
         owned_weapon_ids = self.owned_weapon_ids_,
         effects = self.effects_ and self.effects_:build_sync() or nil,
         picked = self:build_rogue_picked_list(),

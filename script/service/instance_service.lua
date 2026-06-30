@@ -529,8 +529,6 @@ function M.rogue_pick_select(inst_id, player_id, choice_index)
     end
     protocol_handler.send_to_player(player_id, "rogue_state_notify", {
         inst_id = inst_id,
-        pick_times = result.pick_times,
-        picked = result.picked,
         sync = inst:build_rogue_sync(),
     })
     return true, result

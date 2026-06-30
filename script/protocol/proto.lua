@@ -814,7 +814,6 @@ local s2c_builder = builder.new()
         energy_tier = "integer",
         pick_times = "integer",
         max_picks = "integer",
-        energy_needs = "*integer",
         owned_weapon_ids = "*integer",
         effects = "effect_info",
         picked = "*rogue_picked_entry",
@@ -861,8 +860,6 @@ local s2c_builder = builder.new()
     :protocol("rogue_state_notify", 669, {
         request = {
             inst_id = "string",
-            pick_times = "integer",
-            picked = "*rogue_picked_entry",
             sync = "rogue_sync",
         }
     })
