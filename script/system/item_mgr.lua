@@ -4,7 +4,7 @@ local skynet = require "skynet"
 local service_ctx = require "runtime.service_ctx"
 
 local ITEM_DEF = require "define.item_def"
-local ITEM_DATA = require "setting.item_data"
+local ITEM_DATA = require "setting.ITEM_DATA"
 local head_mgr = require "system.head_mgr"
 
 local item_mgr = service_ctx.get("system.item_mgr", {})
