@@ -154,6 +154,7 @@ local function unload_account_from_agent(account_key, account)
         user_mgr.del_player_obj(player_id)
         skynet.send(skynet.localname(".register"), "lua", "unregister", player_id)
     end
+    log.info("unload account from agent, account_key=%s, player_id=%d", account_key, player_id)
 end
 
 --- 顶号/rebind 后旧 fd 断开，不应再次走登出逻辑
