@@ -11,7 +11,6 @@ local effect_core
 local ATTRIBUTE_ENUM
 local ATTRIBUTE_LEVEL_DATA
 local WEAPON_DATA
-local WEAPON_UPGRADE_DATA
 local HEAD_UPGRADE_DATA
 
 if SKYNET_LUA_ROOT then
@@ -19,14 +18,12 @@ if SKYNET_LUA_ROOT then
     ATTRIBUTE_ENUM = require "Setting/ATTRIBUTE_ENUM"
     ATTRIBUTE_LEVEL_DATA = require "Setting/ATTRIBUTE_LEVEL_DATA"
     WEAPON_DATA = require "Setting/WEAPON_DATA"
-    WEAPON_UPGRADE_DATA = require "Setting/WEAPON_UPGRADE_DATA"
     HEAD_UPGRADE_DATA = require "Setting/HEAD_UPGRADE_DATA"
 else
     effect_core = require "effect.effect_core"
     ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
     ATTRIBUTE_LEVEL_DATA = require "setting.ATTRIBUTE_LEVEL_DATA"
     WEAPON_DATA = require "setting.WEAPON_DATA"
-    WEAPON_UPGRADE_DATA = require "setting.WEAPON_UPGRADE_DATA"
     HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
 end
 
@@ -126,12 +123,11 @@ local function get_weapon_cfg(weapon_id)
     return WEAPON_DATA[num(weapon_id)]
 end
 
-local function get_weapon_upgrade_cfg(weapon_id, level)
-    local group = WEAPON_UPGRADE_DATA[num(weapon_id)]
-    if not group then
-        return nil
+local function get_weapon_base(weapon_cfg, level)
+    if not weapon_cfg then
+        return {}
     end
-    return group[num(level)]
+    return attr_cfg_to_base(get_attr_level_cfg(weapon_cfg.AttrId, level))
 end
 
 function M.build_weapon(weapon_id, level, extra)
@@ -142,16 +138,14 @@ function M.build_weapon(weapon_id, level, extra)
     end
     extra = extra or {}
 
-    local upgrade_cfg = get_weapon_upgrade_cfg(weapon_id, level)
-    local attr_id = upgrade_cfg and upgrade_cfg.AttrId
-    local base = attr_cfg_to_base(get_attr_level_cfg(attr_id, level))
+    local weapon_cfg = get_weapon_cfg(weapon_id)
+    local base = get_weapon_base(weapon_cfg, level)
 
     for k, v in pairs(extra.base or {}) do
         base[k] = num(v)
     end
 
     local tags = {}
-    local weapon_cfg = get_weapon_cfg(weapon_id)
     local color = weapon_cfg and weapon_cfg.Color
     if color and color ~= "" then
         table.insert(tags, color)
