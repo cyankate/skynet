@@ -156,7 +156,6 @@ function M.build_weapon(weapon_id, level, extra)
 
     return {
         weapon_id = weapon_id,
-        part_id = weapon_id,
         level = level,
         base = base,
         tags = tags,

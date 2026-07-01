@@ -144,7 +144,7 @@ end
 local function init_scope_handlers()
     M.register_scope_handler(TARGET_KEY.WEAPON_ID, ENTITY.WEAPON, function(weapon, values)
         return match_or_list(values, function(weapon_id)
-            return num(weapon.part_id) == num(weapon_id)
+            return num(weapon.weapon_id) == num(weapon_id)
         end)
     end)
 
