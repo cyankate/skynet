@@ -2,8 +2,16 @@
     养成效果核心：配置展开 + scope 匹配（双端可共享）。
 ]]
 
-local ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
-local EFFECT_DATA = require "setting.EFFECT_DATA"
+local ATTRIBUTE_ENUM = nil
+local EFFECT_DATA = nil
+if SKYNET_LUA_ROOT then
+    ATTRIBUTE_ENUM = require "Setting/ATTRIBUTE_ENUM"
+    EFFECT_DATA = require "Setting/EFFECT_DATA"
+else 
+    ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
+    EFFECT_DATA = require "setting.EFFECT_DATA"
+end
+
 
 local M = {}
 

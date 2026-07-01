@@ -6,13 +6,29 @@
         local ctx = calc.build_context(effect_ids)
         local att = calc.get_weapon_attr(weapon_id, level, "ATT", ctx)
 ]]
+        
+local effect_core
+local ATTRIBUTE_ENUM
+local ATTRIBUTE_LEVEL_DATA
+local WEAPON_DATA
+local WEAPON_UPGRADE_DATA
+local HEAD_UPGRADE_DATA
 
-local effect_core = require "effect.effect_core"
-local ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
-local ATTRIBUTE_LEVEL_DATA = require "setting.ATTRIBUTE_LEVEL_DATA"
-local WEAPON_DATA = require "setting.WEAPON_DATA"
-local WEAPON_UPGRADE_DATA = require "setting.WEAPON_UPGRADE_DATA"
-local HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
+if SKYNET_LUA_ROOT then
+    effect_core = require "Skynet/script/attr/effect_core"
+    ATTRIBUTE_ENUM = require "Setting/ATTRIBUTE_ENUM"
+    ATTRIBUTE_LEVEL_DATA = require "Setting/ATTRIBUTE_LEVEL_DATA"
+    WEAPON_DATA = require "Setting/WEAPON_DATA"
+    WEAPON_UPGRADE_DATA = require "Setting/WEAPON_UPGRADE_DATA"
+    HEAD_UPGRADE_DATA = require "Setting/HEAD_UPGRADE_DATA"
+else
+    effect_core = require "effect.effect_core"
+    ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
+    ATTRIBUTE_LEVEL_DATA = require "setting.ATTRIBUTE_LEVEL_DATA"
+    WEAPON_DATA = require "setting.WEAPON_DATA"
+    WEAPON_UPGRADE_DATA = require "setting.WEAPON_UPGRADE_DATA"
+    HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
+end
 
 local M = {}
 
