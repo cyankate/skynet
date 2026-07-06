@@ -11,6 +11,7 @@ local effect_core
 local ATTRIBUTE_ENUM
 local ATTRIBUTE_LEVEL_DATA
 local WEAPON_DATA
+local WEAPON_ATTRIBUTE_DATA
 local HEAD_UPGRADE_DATA
 
 if SKYNET_LUA_ROOT then
@@ -18,12 +19,14 @@ if SKYNET_LUA_ROOT then
     ATTRIBUTE_ENUM = require "Setting/ATTRIBUTE_ENUM"
     ATTRIBUTE_LEVEL_DATA = require "Setting/ATTRIBUTE_LEVEL_DATA"
     WEAPON_DATA = require "Setting/WEAPON_DATA"
+    WEAPON_ATTRIBUTE_DATA = require "Setting/WEAPON_ATTRIBUTE_DATA"
     HEAD_UPGRADE_DATA = require "Setting/HEAD_UPGRADE_DATA"
 else
     effect_core = require "effect.effect_core"
     ATTRIBUTE_ENUM = require "setting.ATTRIBUTE_ENUM"
     ATTRIBUTE_LEVEL_DATA = require "setting.ATTRIBUTE_LEVEL_DATA"
     WEAPON_DATA = require "setting.WEAPON_DATA"
+    WEAPON_ATTRIBUTE_DATA = require "setting.WEAPON_ATTRIBUTE_DATA"
     HEAD_UPGRADE_DATA = require "setting.HEAD_UPGRADE_DATA"
 end
 
@@ -123,11 +126,20 @@ local function get_weapon_cfg(weapon_id)
     return WEAPON_DATA[num(weapon_id)]
 end
 
+local function merge_attr_base(base, attr_cfg)
+    for attr_name, value in pairs(attr_cfg_to_base(attr_cfg)) do
+        base[attr_name] = num(base[attr_name]) + num(value)
+    end
+    return base
+end
+
 local function get_weapon_base(weapon_cfg, level)
     if not weapon_cfg then
         return {}
     end
-    return attr_cfg_to_base(get_attr_level_cfg(weapon_cfg.AttrId, level))
+    local base = attr_cfg_to_base(get_attr_level_cfg(weapon_cfg.AttrId, level))
+    merge_attr_base(base, WEAPON_ATTRIBUTE_DATA[num(weapon_cfg.WeaponAttrId)])
+    return base
 end
 
 function M.build_weapon(weapon_id, level, extra)
