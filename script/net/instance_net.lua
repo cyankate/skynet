@@ -298,7 +298,7 @@ local function on_rogue_pick_select(player_id, msg)
         message = "ok",
         inst_id = msg.inst_id,
         ability_id = result_or_err.ability_id,
-        effect_id = result_or_err.effect_id,
+        effect_ids = result_or_err.effect_ids,
         pick_times = result_or_err.pick_times,
     })
     return true

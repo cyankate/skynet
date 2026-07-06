@@ -791,12 +791,6 @@ local s2c_builder = builder.new()
 
     :type("rogue_option", {
         ability_id = "integer",
-        name = "string",
-        icon = "string",
-        quality = "integer",
-        type = "string",
-        effect_id = "integer",
-        weapon_id = "integer",
     })
 
     :type("rogue_picked_entry", {
@@ -852,7 +846,7 @@ local s2c_builder = builder.new()
             message = "string",
             inst_id = "string",
             ability_id = "integer",
-            effect_id = "integer",
+            effect_ids = "*integer",
             pick_times = "integer",
         }
     })

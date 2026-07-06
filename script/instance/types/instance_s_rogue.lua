@@ -296,18 +296,12 @@ local function roll_three_options(inst, pick_times)
 end
 
 local function build_option_view(ability_id)
-    local ability = get_ability(ability_id)
-    if not ability then
+    ability_id = num(ability_id)
+    if ability_id <= 0 or not get_ability(ability_id) then
         return nil
     end
     return {
-        ability_id = num(ability.Id),
-        name = ability.Name or "",
-        icon = ability.Icon or "",
-        quality = num(ability.Quality),
-        type = tostring(ability.Type or ""),
-        effect_id = num(ability.EffectId),
-        weapon_id = num(ability.WeaponId),
+        ability_id = ability_id,
     }
 end
 
@@ -527,9 +521,10 @@ function InstanceRogue:apply_rogue_pick(ability_id)
     local ability = get_ability(ability_id)
     if ability then
         self:track_weapon_gain(ability)
-        local effect_id = num(ability.EffectId)
-        if effect_id > 0 and self.effects_ then
-            self.effects_:add_effect_id(effect_id)
+        if self.effects_ then
+            for _, effect_id in ipairs(ability.EffectIds or {}) do
+                self.effects_:add_effect_id(effect_id)
+            end
         end
     end
     self.pick_times_ = num(self.pick_times_) + 1
@@ -596,7 +591,7 @@ function InstanceRogue:rogue_select_pick(choice_index)
 
     return true, {
         ability_id = ability_id,
-        effect_id = ability and num(ability.EffectId) or 0,
+        effect_ids = ability and ability.EffectIds or {},
         pick_times = num(self.pick_times_),
         picked = self:build_rogue_picked_list(),
     }
