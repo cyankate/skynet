@@ -2,4 +2,9 @@ return
 {
 [1]={["Id"]=1,["Enum"]="HP"},
 [2]={["Id"]=2,["Enum"]="ATT"},
-[3]={["Id"]=3,["Enum"]="DEF"}}
+[3]={["Id"]=3,["Enum"]="DEF"},
+[4]={["Id"]=4,["Enum"]="BulletCount"},
+[5]={["Id"]=5,["Enum"]="CoolDownTime"},
+[6]={["Id"]=6,["Enum"]="SplitCount"},
+[7]={["Id"]=7,["Enum"]="ApidFireCount"},
+[8]={["Id"]=8,["Enum"]="ThroughCount"}}
