@@ -260,6 +260,7 @@ function item_mgr.has_enough_items(player, items, ext)
 end
 
 function item_mgr.add_items(player, items, reason, ext)
+    ext = ext or {}
     local ctx, analyze_err = analyze_add_items(items)
     if not ctx then
         return false, analyze_err
