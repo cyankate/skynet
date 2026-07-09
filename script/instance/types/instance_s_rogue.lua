@@ -65,12 +65,10 @@ local function build_pick_context(inst)
     local player_pack = inst.player_pack_ or {}
     local effects = inst.effects_
     local weapon_levels = player_pack.weapon_levels or {}
-    local lineup = {}
     local unlocked = {}
-    for weapon_id, _ in pairs(weapon_levels) do
+    for weapon_id, level in pairs(weapon_levels) do
         weapon_id = num(weapon_id)
         if weapon_id > 0 then
-            lineup[weapon_id] = true
             unlocked[weapon_id] = true
         end
     end
@@ -86,7 +84,6 @@ local function build_pick_context(inst)
         owned_colors[tostring(color)] = true
     end
     return {
-        lineup = lineup,
         unlocked = unlocked,
         owned_weapons = owned_weapons,
         owned_colors = owned_colors,
@@ -102,12 +99,38 @@ end
 
 local function check_precondition(ability, ctx)
     local pre = ability.PreCondition
-    if pre == nil or pre == "" then
+    if pre == nil or pre == "" or type(pre) ~= "table" then
         return true
     end
-    local need_id = num(pre)
-    if need_id > 0 then
-        return num(ctx.picked[need_id]) >= 1
+    for i = 1, #pre do
+        local cond = pre[i]
+        if type(cond) ~= "table" then
+            return false
+        end
+        local cond_type = num(cond[1])
+        if cond_type == 1 then
+            local need_id = num(cond[2])
+            local need_count = num(cond[3])
+            if need_id <= 0 or need_count <= 0 or num(ctx.picked[need_id]) < need_count then
+                return false
+            end
+        elseif cond_type == 2 then
+            local need_count = num(cond[2])
+            local weapon_id = num(ability.WeaponId)
+            if need_count <= 0 or weapon_id <= 0
+                or num(ctx.weapon_pick_counts[weapon_id]) < need_count then
+                return false
+            end
+        elseif cond_type == 3 then
+            local need_level = num(cond[2])
+            local weapon_id = num(ability.WeaponId)
+            if need_level <= 0 or weapon_id <= 0
+                or num(ctx.weapon_levels[weapon_id]) < need_level then
+                return false
+            end
+        else
+            return false
+        end
     end
     return true
 end
@@ -117,7 +140,7 @@ local function has_battle_weapon(ctx, weapon_id)
     if weapon_id <= 0 then
         return true
     end
-    return ctx.owned_weapons[weapon_id] or ctx.lineup[weapon_id]
+    return ctx.owned_weapons[weapon_id] == true
 end
 
 local function is_color_blocked(ctx, weapon_id)
