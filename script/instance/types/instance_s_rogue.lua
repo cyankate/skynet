@@ -27,6 +27,40 @@ local function get_ability(ability_id)
     return ROGUE_ABILITY_DATA[num(ability_id)]
 end
 
+local function build_weapon_pick_counts(picked)
+    local counts = {}
+    for ability_id, count in pairs(picked or {}) do
+        local ability = get_ability(ability_id)
+        if ability then
+            local weapon_id = num(ability.WeaponId)
+            if weapon_id > 0 then
+                counts[weapon_id] = num(counts[weapon_id]) + num(count)
+            end
+        end
+    end
+    return counts
+end
+
+local function ability_effective_weight(ability, ctx)
+    local weight = num(ability.Weight)
+    if weight <= 0 or not ctx.hu_lucky then
+        return weight
+    end
+    local n = num(ctx.hu_n)
+    local m = num(ctx.hu_m)
+    if n <= 0 or m <= 1 then
+        return weight
+    end
+    local weapon_id = num(ability.WeaponId)
+    if weapon_id <= 0 then
+        return weight
+    end
+    if num(ctx.weapon_pick_counts[weapon_id]) > n then
+        return weight * m
+    end
+    return weight
+end
+
 local function build_pick_context(inst)
     local player_pack = inst.player_pack_ or {}
     local effects = inst.effects_
@@ -59,6 +93,10 @@ local function build_pick_context(inst)
         picked = inst.picked_ or {},
         weapon_levels = weapon_levels,
         used_option_ids = {},
+        hu_lucky = inst.hu_lucky_ == true,
+        hu_n = num(inst.hu_n_),
+        hu_m = num(inst.hu_m_),
+        weapon_pick_counts = build_weapon_pick_counts(inst.picked_),
     }
 end
 
@@ -145,7 +183,7 @@ local function collect_candidates(pick_type, ctx)
     local list = {}
     for _, ability in pairs(ROGUE_ABILITY_DATA) do
         if can_pick_ability(ability, ctx, pick_type) then
-            list[#list + 1] = { num(ability.Id), num(ability.Weight) }
+            list[#list + 1] = { num(ability.Id), ability_effective_weight(ability, ctx) }
         end
     end
     return list
@@ -157,7 +195,7 @@ local function collect_common_candidates(ctx)
         local ability_type = tostring(ability.Type or ""):lower()
         local sub_type = ability_type == "weapon" and "weapon" or "ability"
         if can_pick_ability(ability, ctx, sub_type) then
-            list[#list + 1] = { num(ability.Id), num(ability.Weight) }
+            list[#list + 1] = { num(ability.Id), ability_effective_weight(ability, ctx) }
         end
     end
     return list
@@ -225,7 +263,10 @@ local function pick_from_args(args, pick_type, ctx)
             local wid = num(ability.WeaponId)
             for _, filter_wid in ipairs(weapon_ids) do
                 if wid == num(filter_wid) and can_pick_ability(ability, ctx, pick_type) then
-                    candidates[#candidates + 1] = { num(ability.Id), num(ability.Weight) }
+                    candidates[#candidates + 1] = {
+                        num(ability.Id),
+                        ability_effective_weight(ability, ctx),
+                    }
                 end
             end
         end
@@ -256,12 +297,12 @@ local function roll_three_options(inst, pick_times)
         return false, err
     end
 
-    local pick_type = tostring(rule.Type or "common"):lower()
-    if pick_type == "weapon" and not can_roll_weapon(build_pick_context(inst)) then
+    local pick_type = rule.Type or "common"
+    local ctx = build_pick_context(inst)
+    if pick_type == "weapon" and not can_roll_weapon(ctx) then
         pick_type = "common"
     end
 
-    local ctx = build_pick_context(inst)
     local options = {}
 
     if pick_type == "weapon" then
@@ -359,6 +400,9 @@ function InstanceRogue:on_destroy()
     self.owned_weapon_ids_ = nil
     self.owned_colors_ = nil
     self.pending_pick_ = nil
+    self.hu_lucky_ = nil
+    self.hu_n_ = nil
+    self.hu_m_ = nil
     InstanceRogue.super.on_destroy(self)
 end
 
@@ -395,6 +439,18 @@ function InstanceRogue:init_rogue(player_pack)
     self.owned_colors_ = {}
     self.picked_ = {}
     self.pending_pick_ = nil
+    self.hu_lucky_ = false
+    self.hu_n_ = 0
+    self.hu_m_ = 1
+    if cfg.HuRandom then
+        self.hu_n_ = num(hu[2])
+        self.hu_m_ = num(hu[3])
+        local prob = num(hu[1])
+        if prob > 0 and self.hu_n_ > 0 and self.hu_m_ > 1
+            and math.random(1, 1000000) <= prob * 1000000 then
+            self.hu_lucky_ = true
+        end
+    end
 end
 
 function InstanceRogue:get_effects()

@@ -1,3 +1,3 @@
 return 
 {
-[1]={["Id"]=1,["Name"]="沙漠废土",["PassReward"]={[802]=100},["SelectNeedEnergy"]={[1]=4,[2]=5,[3]=6,[4]=7,[5]=8},["RogueRefreshId"]=1}}
+[1]={["Id"]=1,["Name"]="沙漠废土",["PassReward"]={[802]=100},["SelectNeedEnergy"]={[1]=1,[2]=2,[3]=3,[4]=4,[5]=5},["RogueRefreshId"]=1,["DifficultyLevel"]=1,["HuRandom"]={[1]=0.3,[2]=3,[3]=2}}}
