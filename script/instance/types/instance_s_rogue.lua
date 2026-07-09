@@ -241,18 +241,12 @@ local function find_refresh_rule(refresh_id, pick_times)
     if type(group) ~= "table" then
         return nil, string.format("肉鸽刷新配置不存在: refresh_id=%d", refresh_id)
     end
-    local common_rule
     for _, rule in pairs(group) do
-        if type(rule) == "table" then
-            if tostring(rule.Type or ""):lower() == "common" then
-                common_rule = rule
-            end
-            if num(rule.Times) == pick_times then
-                return rule
-            end
+        if type(rule) == "table" and num(rule.Times) == pick_times then
+            return rule
         end
     end
-    return common_rule
+    return nil
 end
 
 local function pick_from_args(args, pick_type, ctx)
@@ -269,31 +263,17 @@ local function pick_from_args(args, pick_type, ctx)
         end
     end
 
-    local weapon_ids = {}
     for i = 1, #args do
         local ability = get_ability(args[i])
-        if ability and can_pick_ability(ability, ctx, pick_type) then
-            local id = num(ability.Id)
-            ctx.used_option_ids[id] = true
-            return id
+        if not ability then
+            return nil
         end
-        weapon_ids[#weapon_ids + 1] = num(args[i])
-    end
-
-    if #weapon_ids > 0 then
-        local candidates = {}
-        for _, ability in pairs(ROGUE_ABILITY_DATA) do
-            local wid = num(ability.WeaponId)
-            for _, filter_wid in ipairs(weapon_ids) do
-                if wid == num(filter_wid) and can_pick_ability(ability, ctx, pick_type) then
-                    candidates[#candidates + 1] = {
-                        num(ability.Id),
-                        ability_effective_weight(ability, ctx),
-                    }
-                end
-            end
+        if not can_pick_ability(ability, ctx, pick_type) then
+            return nil
         end
-        return weighted_pick(candidates, ctx)
+        local id = num(ability.Id)
+        ctx.used_option_ids[id] = true
+        return id
     end
 
     return nil
@@ -316,11 +296,17 @@ end
 local function roll_three_options(inst, pick_times)
     local refresh_id = num(inst.refresh_id_)
     local rule, err = find_refresh_rule(refresh_id, pick_times)
-    if not rule then
+    if err then
         return false, err
     end
 
-    local pick_type = rule.Type or "common"
+    local pick_type = "common"
+    if rule then
+        pick_type = rule.Type or "common"
+        if pick_type ~= "weapon" and pick_type ~= "ability" and pick_type ~= "common" then
+            return false, string.format("未知的随机类型: %s", tostring(pick_type))
+        end
+    end
     local ctx = build_pick_context(inst)
     if pick_type == "weapon" and not can_roll_weapon(ctx) then
         pick_type = "common"
