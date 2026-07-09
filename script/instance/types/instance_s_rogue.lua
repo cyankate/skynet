@@ -198,7 +198,7 @@ local function can_pick_ability(ability, ctx, pick_type)
         return true
     end
 
-    return false
+    return false 
 end
 
 local function collect_candidates(pick_type, ctx)
@@ -450,7 +450,8 @@ function InstanceRogue:init_rogue(player_pack)
     self.hu_lucky_ = false
     self.hu_n_ = 0
     self.hu_m_ = 1
-    if cfg.HuRandom then
+    local hu = cfg and cfg.HuRandom
+    if type(hu) == "table" then
         self.hu_n_ = num(hu[2])
         self.hu_m_ = num(hu[3])
         local prob = num(hu[1])
