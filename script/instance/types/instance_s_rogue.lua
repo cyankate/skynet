@@ -19,8 +19,7 @@ local function num(v)
 end
 
 local function is_random_token(v)
-    local s = tostring(v or ""):lower()
-    return s == "random" or s == "-1"
+    return v == "random" or v == -1 or v == "-1"
 end
 
 local function get_ability(ability_id)
@@ -163,7 +162,7 @@ local function can_pick_ability(ability, ctx, pick_type)
     if id <= 0 or ctx.used_option_ids[id] then
         return false
     end
-    local ability_type = tostring(ability.Type or ""):lower()
+    local ability_type = ability.Type
     local weapon_id = num(ability.WeaponId)
     local limit = num(ability.Limit)
     if limit > 0 and num(ctx.picked[id]) >= limit then
@@ -215,7 +214,7 @@ end
 local function collect_common_candidates(ctx)
     local list = {}
     for _, ability in pairs(ROGUE_ABILITY_DATA) do
-        local ability_type = tostring(ability.Type or ""):lower()
+        local ability_type = ability.Type
         local sub_type = ability_type == "weapon" and "weapon" or "ability"
         if can_pick_ability(ability, ctx, sub_type) then
             list[#list + 1] = { num(ability.Id), ability_effective_weight(ability, ctx) }
@@ -545,7 +544,7 @@ function InstanceRogue:rogue_refresh_pick()
 end
 
 function InstanceRogue:track_weapon_gain(ability)
-    if tostring(ability.Type or ""):lower() ~= "weapon" then
+    if ability.Type ~= "weapon" then
         return
     end
     local weapon_id = num(ability.WeaponId)
