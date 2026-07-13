@@ -173,7 +173,6 @@ function M.should_handle_disconnect(account_key, fd)
 end
 
 function M.send_player_data(player)
-    effect_mgr.collect_player_effects(player)
     protocol_handler.send_to_player(player.player_id_, "player_data", {
         player_id = player.player_id_,
         player_name = player.player_name_,
@@ -182,9 +181,9 @@ function M.send_player_data(player)
     talent_mgr.sync_to_client(player)
     weapon_mgr.sync_to_client(player)
     head_mgr.sync_to_client(player)
-    effect_mgr.sync_to_client(player)
     barrier_mgr.sync_to_client(player)
     task_mgr.sync_to_client(player)
+    effect_mgr.refresh_and_sync(player)
 end
 
 --- 玩家已 loaded：跨服 LOGIN + 客户端全量同步 + 副本状态（重连/顶号/首登 load 完成共用）
