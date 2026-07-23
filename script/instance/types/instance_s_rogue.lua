@@ -11,6 +11,7 @@ local INSTANCE_DATA = require "setting.INSTANCE_DATA"
 local tableUtils = require "utils.tableUtils"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 local effect_mgr = require "system.effect_mgr"
+local protocol_handler = require "protocol_handler"
 
 local InstanceRogue = class("InstanceRogue", InstanceSingle)
 
@@ -395,6 +396,18 @@ end
 function InstanceRogue:on_join(player_id, data_)
     InstanceRogue.super.on_join(self, player_id, data_)
     self:init_rogue(data_ or self.args_.join_data or {})
+end
+
+function InstanceRogue:on_enter(player_id)
+    InstanceRogue.super.on_enter(self, player_id)
+    local sync = self:build_rogue_sync()
+    if not sync then
+        return
+    end
+    protocol_handler.send_to_player(player_id, "rogue_state_notify", {
+        inst_id = self.inst_id_,
+        sync = sync,
+    })
 end
 
 function InstanceRogue:on_destroy()
