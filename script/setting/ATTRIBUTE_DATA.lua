@@ -7,4 +7,10 @@ return
 [5]={["Id"]=5,["Enum"]="CoolDownTime"},
 [6]={["Id"]=6,["Enum"]="SplitCount"},
 [7]={["Id"]=7,["Enum"]="ApidFireCount"},
-[8]={["Id"]=8,["Enum"]="ThroughCount"}}
+[8]={["Id"]=8,["Enum"]="ThroughCount"},
+[9]={["Id"]=9,["Enum"]="OutbreakCount"},
+[10]={["Id"]=10,["Enum"]="NumbTime"},
+[11]={["Id"]=11,["Enum"]="RefractionCount"},
+[12]={["Id"]=12,["Enum"]="PathDamageRatio"},
+[13]={["Id"]=13,["Enum"]="SkillTime"},
+[14]={["Id"]=14,["Enum"]="DamageAddRatio"}}

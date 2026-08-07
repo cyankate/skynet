@@ -214,6 +214,12 @@ local c2s_builder = builder.new()
         }
     })
 
+    :protocol("weapon_upgrade", 676, {
+        request = {
+            weapon_id = "integer",
+        }
+    })
+
     :protocol("barrier_claim_chest", 657, {
         request = {
             barrier_no = "integer",
@@ -668,7 +674,16 @@ local s2c_builder = builder.new()
 
     :protocol("weapon_list_notify", 675, {
         request = {
-            weapons = "*integer",
+            weapons = "*weapon_info",
+        }
+    })
+
+    :protocol("weapon_upgrade_response", 677, {
+        request = {
+            result = "integer",
+            message = "string",
+            weapon_id = "integer",
+            level = "integer",
         }
     })
     

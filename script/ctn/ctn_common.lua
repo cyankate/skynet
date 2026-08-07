@@ -61,4 +61,20 @@ function CtnCommon:set_weapon_unlocked(weapon_id)
     return self:set(WEAPONS_KEY, weapons)
 end
 
+function CtnCommon:set_weapon_level(weapon_id, level)
+    weapon_id = tonumber(weapon_id) or 0
+    level = tonumber(level) or 0
+    if weapon_id <= 0 or level <= 0 then
+        return false
+    end
+    local weapons = self:get_weapons()
+    local entry = weapons[weapon_id]
+    if type(entry) ~= "table" then
+        return false
+    end
+    entry.level = level
+    weapons[weapon_id] = entry
+    return self:set(WEAPONS_KEY, weapons)
+end
+
 return CtnCommon

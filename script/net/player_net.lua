@@ -4,6 +4,7 @@ local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
 local talent_mgr = require "system.talent_mgr"
 local effect_mgr = require "system.effect_mgr"
+local weapon_mgr = require "system.weapon_mgr"
 
 local function normalize_item_msg(msg)
     if type(msg) ~= "table" then
@@ -127,6 +128,41 @@ local function on_talent_activate(player_id, msg)
     return true
 end
 
+local function on_weapon_upgrade(player_id, msg)
+    local player = user_mgr.get_player_obj(player_id)
+    local weapon_id = tonumber(msg.weapon_id) or 0
+    if not player then
+        protocol_handler.send_to_player(player_id, "weapon_upgrade_response", {
+            result = 1,
+            message = "Player not found",
+            weapon_id = weapon_id,
+            level = 0,
+        })
+        return false, "Player not found"
+    end
+
+    local ok, result_or_err = weapon_mgr.upgrade_weapon(player, weapon_id)
+    if not ok then
+        protocol_handler.send_to_player(player_id, "weapon_upgrade_response", {
+            result = 1,
+            message = result_or_err or "升级失败",
+            weapon_id = weapon_id,
+            level = weapon_mgr.get_weapon_level(player, weapon_id),
+        })
+        return false, result_or_err
+    end
+
+    protocol_handler.send_to_player(player_id, "weapon_upgrade_response", {
+        result = 0,
+        message = "ok",
+        weapon_id = result_or_err.weapon_id,
+        level = result_or_err.level,
+    })
+    weapon_mgr.sync_to_client(player)
+    effect_mgr.sync_to_client(player)
+    return true
+end
+
 return {
     add_item = on_add_item,
     cost_item = on_cost_item,
@@ -134,4 +170,5 @@ return {
     signin = on_signin,
     add_score = on_add_score,
     talent_activate = on_talent_activate,
+    weapon_upgrade = on_weapon_upgrade,
 }
