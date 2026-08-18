@@ -30,6 +30,28 @@ local function get_ability(ability_id)
     return ROGUE_ABILITY_DATA[num(ability_id)]
 end
 
+local function format_option_ids(option_ids)
+    local parts = {}
+    for i, ability_id in ipairs(option_ids or {}) do
+        ability_id = num(ability_id)
+        local ability = get_ability(ability_id)
+        parts[#parts + 1] = string.format("%d:%d:%s:%s",
+            i,
+            ability_id,
+            ability and tostring(ability.Type) or "?",
+            ability and tostring(ability.Name) or "?")
+    end
+    return table.concat(parts, ",")
+end
+
+local function format_id_list(ids)
+    local parts = {}
+    for i, id in ipairs(ids or {}) do
+        parts[i] = tostring(id)
+    end
+    return table.concat(parts, ",")
+end
+
 local function build_weapon_pick_counts(picked)
     local counts = {}
     for ability_id, count in pairs(picked or {}) do
@@ -575,6 +597,13 @@ function InstanceRogue:init_rogue(player_pack)
     if self.rogue_mode_ == 2 then
         self:grant_init_weapons()
     end
+    log.info("InstanceRogue: 初始化 inst=%s player=%s mode=%d refresh_id=%d hu_lucky=%s owned=%s",
+        tostring(self.inst_id_),
+        tostring(self.owner_player_id_),
+        num(self.rogue_mode_),
+        num(self.refresh_id_),
+        tostring(self.hu_lucky_),
+        format_id_list(self.owned_weapon_ids_))
 end
 
 function InstanceRogue:get_effects()
@@ -657,6 +686,13 @@ end
 function InstanceRogue:rogue_open_pick(color, weapon_id)
     local ok, err = self:can_rogue_open_pick()
     if not ok then
+        log.warning("InstanceRogue: 开抽失败 inst=%s player=%s mode=%d color=%s weapon_id=%s err=%s",
+            tostring(self.inst_id_),
+            tostring(self.owner_player_id_),
+            num(self.rogue_mode_),
+            tostring(color or ""),
+            tostring(weapon_id or 0),
+            tostring(err))
         return false, err
     end
     local roll_ok, roll_result
@@ -666,18 +702,38 @@ function InstanceRogue:rogue_open_pick(color, weapon_id)
         roll_ok, roll_result = self:roll_rogue_options()
     end
     if not roll_ok then
+        log.warning("InstanceRogue: 开抽随机失败 inst=%s player=%s mode=%d color=%s weapon_id=%s err=%s",
+            tostring(self.inst_id_),
+            tostring(self.owner_player_id_),
+            num(self.rogue_mode_),
+            tostring(color or ""),
+            tostring(weapon_id or 0),
+            tostring(roll_result))
         return false, roll_result
     end
+    log.info("InstanceRogue: 推送三选一 inst=%s player=%s mode=%d pick=%d color=%s weapon_id=%s options=%s",
+        tostring(self.inst_id_),
+        tostring(self.owner_player_id_),
+        num(self.rogue_mode_),
+        num(roll_result.pick_index),
+        tostring(color or ""),
+        tostring(weapon_id or 0),
+        format_option_ids(roll_result.option_ids))
     return self:set_pending_pick(roll_result)
 end
 
 function InstanceRogue:rogue_refresh_pick()
     if not self.pending_pick_ then
+        log.warning("InstanceRogue: 刷新失败 inst=%s player=%s err=没有待刷新选项",
+            tostring(self.inst_id_), tostring(self.owner_player_id_))
         return false, "没有待刷新选项"
     end
     if self.pending_pick_.selecting then
+        log.warning("InstanceRogue: 刷新失败 inst=%s player=%s err=选择处理中",
+            tostring(self.inst_id_), tostring(self.owner_player_id_))
         return false, "选择处理中"
     end
+    local old_options = format_option_ids(self.pending_pick_.option_ids)
     local roll_ok, roll_result
     if self:is_mode2() then
         roll_ok, roll_result = self:roll_mode2_pick(
@@ -688,8 +744,20 @@ function InstanceRogue:rogue_refresh_pick()
         roll_ok, roll_result = self:roll_rogue_options()
     end
     if not roll_ok then
+        log.warning("InstanceRogue: 刷新随机失败 inst=%s player=%s pick=%d err=%s",
+            tostring(self.inst_id_),
+            tostring(self.owner_player_id_),
+            num(self.pending_pick_.pick_index),
+            tostring(roll_result))
         return false, roll_result
     end
+    log.info("InstanceRogue: 刷新三选一 inst=%s player=%s mode=%d pick=%d old=%s new=%s",
+        tostring(self.inst_id_),
+        tostring(self.owner_player_id_),
+        num(self.rogue_mode_),
+        num(roll_result.pick_index),
+        old_options,
+        format_option_ids(roll_result.option_ids))
     return self:set_pending_pick(roll_result)
 end
 
@@ -767,6 +835,7 @@ function InstanceRogue:grant_init_weapons()
             by_color[color][#by_color[color] + 1] = weapon_id
         end
     end
+    local granted = {}
     for _, color in ipairs(INIT_COLORS) do
         local weapons = by_color[color]
         if type(weapons) ~= "table" or #weapons == 0 then
@@ -776,12 +845,18 @@ function InstanceRogue:grant_init_weapons()
             local ability_id = find_weapon_ability_id(weapon_id)
             if ability_id then
                 self:grant_ability(ability_id)
+                granted[#granted + 1] = string.format("%s:%d:%d", color, weapon_id, ability_id)
             else
                 self:add_owned_weapon(weapon_id)
+                granted[#granted + 1] = string.format("%s:%d:0", color, weapon_id)
                 log.error("rogue mode2 no weapon ability, weapon_id=%d inst=%s", weapon_id, tostring(self.inst_id_))
             end
         end
     end
+    log.info("InstanceRogue: 模式2初始武器 inst=%s player=%s granted=%s",
+        tostring(self.inst_id_),
+        tostring(self.owner_player_id_),
+        table.concat(granted, ","))
 end
 
 function InstanceRogue:apply_rogue_pick(ability_id)
@@ -834,21 +909,42 @@ end
 function InstanceRogue:rogue_select_pick(choice_index)
     choice_index = num(choice_index)
     if not self.pending_pick_ then
+        log.warning("InstanceRogue: 选择失败 inst=%s player=%s index=%d err=没有待选择能力",
+            tostring(self.inst_id_), tostring(self.owner_player_id_), choice_index)
         return false, "没有待选择能力"
     end
     if self.pending_pick_.selecting then
+        log.warning("InstanceRogue: 选择失败 inst=%s player=%s index=%d err=选择处理中",
+            tostring(self.inst_id_), tostring(self.owner_player_id_), choice_index)
         return false, "选择处理中"
     end
     local option_ids = self.pending_pick_.option_ids or {}
     local ability_id = num(option_ids[choice_index])
     if ability_id <= 0 then
+        log.warning("InstanceRogue: 选择失败 inst=%s player=%s index=%d options=%s err=选择下标无效",
+            tostring(self.inst_id_),
+            tostring(self.owner_player_id_),
+            choice_index,
+            format_option_ids(option_ids))
         return false, "选择下标无效"
     end
 
+    local ability = get_ability(ability_id)
     self.pending_pick_.selecting = true
     self:apply_rogue_pick(ability_id)
-    local ability = get_ability(ability_id)
     self.pending_pick_ = nil
+
+    log.info("InstanceRogue: 选择三选一 inst=%s player=%s mode=%d pick=%d index=%d ability=%d type=%s name=%s weapon_id=%s owned=%s",
+        tostring(self.inst_id_),
+        tostring(self.owner_player_id_),
+        num(self.rogue_mode_),
+        num(self.pick_times_),
+        choice_index,
+        ability_id,
+        ability and tostring(ability.Type) or "?",
+        ability and tostring(ability.Name) or "?",
+        ability and tostring(ability.WeaponId) or "0",
+        format_id_list(self.owned_weapon_ids_))
 
     return true, {
         ability_id = ability_id,
