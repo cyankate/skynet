@@ -86,7 +86,7 @@ function InstanceSingle:on_start()
                 end_type = InstanceEndType.TIMEOUT,
                 end_reason = InstanceEndReason.TIMEOUT_SERVER,
             })
-            log.info("InstanceSingle: 副本超时结束 %s", tostring(inst.inst_id_))
+            log.info(log.DIR.INSTANCE,"InstanceSingle: 副本超时结束 %s", tostring(inst.inst_id_))
         end
     end, 1)
 end

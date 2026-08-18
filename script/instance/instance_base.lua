@@ -46,26 +46,26 @@ function InstanceBase:ctor(inst_id, inst_no, args)
     self.timers_ = {}
     self.complete_data_ = nil
     
-    log.info("InstanceBase: 创建副本 %s", inst_id)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 创建副本 %s", inst_id)
 end
 
 -- 初始化副本
 function InstanceBase:init()
-    log.info("InstanceBase: 初始化副本 %s", self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 初始化副本 %s", self.inst_id_)
     self:on_init()
     self.status_ = InstanceStatus.WAITING
 end
 
 function InstanceBase:join(player_id, data_)
-    log.info("InstanceBase: 玩家 %s 加入副本 %s", player_id, self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 加入副本 %s", player_id, self.inst_id_)
     if self.pjoins_[player_id] then
-        log.warning("InstanceBase: 玩家 %s 已加入副本 %s", player_id, self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 已加入副本 %s", player_id, self.inst_id_)
         return false, "玩家已加入副本"
     end
     
     -- 检查副本状态，只有等待中的副本才允许加入
     if self.status_ ~= InstanceStatus.WAITING then
-        log.warning("InstanceBase: 副本 %s 状态不允许加入，当前状态: %d", self.inst_id_, self.status_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 副本 %s 状态不允许加入，当前状态: %d", self.inst_id_, self.status_)
         return false, "副本状态不允许加入"
     end
     
@@ -80,9 +80,9 @@ function InstanceBase:on_join(player_id, data_)
 end
 
 function InstanceBase:quit(player_id)
-    log.info("InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
     if not self.pjoins_[player_id] then
-        log.warning("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
     end
 
@@ -105,11 +105,11 @@ end
 
 function InstanceBase:enter(player_id)
     if not self.pjoins_[player_id] then
-        log.warning("InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
     end
     if self.penters_[player_id] then
-        log.warning("InstanceBase: 玩家 %s 已进入副本 %s", player_id, self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 已进入副本 %s", player_id, self.inst_id_)
         return false, "玩家已进入副本"
     end
     self.penters_[player_id] = true
@@ -122,9 +122,9 @@ function InstanceBase:on_enter(player_id)
 end
 
 function InstanceBase:exit(player_id)
-    log.info("InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
     if not self.penters_[player_id] then
-        log.warning("InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
         return false, "玩家未进入副本"
     end
     self.penters_[player_id] = nil
@@ -157,11 +157,11 @@ end
 -- 启动副本
 function InstanceBase:start()
     if self.status_ ~= InstanceStatus.WAITING then
-        log.warning("InstanceBase: 副本 %s 状态错误，无法启动", self.inst_id_)
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 副本 %s 状态错误，无法启动", self.inst_id_)
         return false
     end
     
-    log.info("InstanceBase: 启动副本 %s", self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 启动副本 %s", self.inst_id_)
     self.status_ = InstanceStatus.RUNNING
     self.start_time_ = os.time()
     
@@ -175,7 +175,7 @@ function InstanceBase:pause()
         return false
     end
     
-    log.info("InstanceBase: 暂停副本 %s", self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 暂停副本 %s", self.inst_id_)
     self.status_ = InstanceStatus.PAUSED
     self:on_pause()
     return true
@@ -187,7 +187,7 @@ function InstanceBase:resume()
         return false
     end
     
-    log.info("InstanceBase: 恢复副本 %s", self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 恢复副本 %s", self.inst_id_)
     self.status_ = InstanceStatus.RUNNING
     self:on_resume()
     return true
@@ -196,11 +196,11 @@ end
 -- 副本结束
 function InstanceBase:complete(success, data_)
     if self.status_ == InstanceStatus.COMPLETED then
-        log.warning("InstanceBase: 重复结算被忽略 inst_id=%s", tostring(self.inst_id_))
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 重复结算被忽略 inst_id=%s", tostring(self.inst_id_))
         return true
     end
     if self.status_ ~= InstanceStatus.RUNNING and self.status_ ~= InstanceStatus.PAUSED then
-        log.warning("InstanceBase: 非法结算状态 inst_id=%s status=%s", tostring(self.inst_id_), tostring(self.status_))
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 非法结算状态 inst_id=%s status=%s", tostring(self.inst_id_), tostring(self.status_))
         return false
     end
     
@@ -218,7 +218,7 @@ function InstanceBase:complete(success, data_)
     if not end_reason then
         end_reason = success and InstanceEndReason.NORMAL_WIN or InstanceEndReason.ERROR_EXCEPTION
     end
-    log.info("InstanceBase: 副本结算 inst_id=%s success=%s end_type=%s end_reason=%s duration=%s members=%d",
+    log.info(log.DIR.INSTANCE,"InstanceBase: 副本结算 inst_id=%s success=%s end_type=%s end_reason=%s duration=%s members=%d",
         tostring(self.inst_id_), tostring(success and true or false), tostring(end_type), tostring(end_reason), tostring(self.duration_ or 0), #collect_member_ids(self))
     for _, player_id in ipairs(collect_member_ids(self)) do
         local settle_ok, settle_result = protocol_handler.call_agent(player_id, "instance_play_settle", {
@@ -254,7 +254,7 @@ end
 
 -- 销毁副本
 function InstanceBase:destroy()
-    log.info("InstanceBase: 销毁副本 %s", self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 销毁副本 %s", self.inst_id_)
     self.status_ = InstanceStatus.DESTROYING
     
     -- 清理定时器
@@ -317,7 +317,7 @@ function InstanceBase:trigger_event(event_type, ...)
         for _, handler in ipairs(handlers) do
             local ok, err = pcall(handler, ...)
             if not ok then
-                log.error("InstanceBase: 事件处理器执行失败 %s", err)
+                log.error(log.DIR.INSTANCE,"InstanceBase: 事件处理器执行失败 %s", err)
             end
         end
     end
@@ -328,14 +328,14 @@ function InstanceBase:emit_mode_event(event_type, payload)
         return false, "事件类型不能为空"
     end
     if not self.mode_ or not self.mode_.on_event then
-        log.warning("InstanceBase: 模式事件无处理器 inst_id=%s event=%s", tostring(self.inst_id_), tostring(event_type))
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 模式事件无处理器 inst_id=%s event=%s", tostring(self.inst_id_), tostring(event_type))
         return false, "当前副本模式不支持事件驱动"
     end
     if self.status_ ~= InstanceStatus.RUNNING and self.status_ ~= InstanceStatus.PAUSED then
-        log.warning("InstanceBase: 模式事件状态非法 inst_id=%s status=%s event=%s", tostring(self.inst_id_), tostring(self.status_), tostring(event_type))
+        log.warning(log.DIR.INSTANCE,"InstanceBase: 模式事件状态非法 inst_id=%s status=%s event=%s", tostring(self.inst_id_), tostring(self.status_), tostring(event_type))
         return false, "副本状态不允许处理模式事件"
     end
-    log.info("InstanceBase: 模式事件执行 inst_id=%s mode=%s event=%s value=%s target=%s",
+    log.info(log.DIR.INSTANCE,"InstanceBase: 模式事件执行 inst_id=%s mode=%s event=%s value=%s target=%s",
         tostring(self.inst_id_), tostring(self.mode_type_), tostring(event_type), tostring(payload and payload.event_value), tostring(payload and payload.target_id))
     self.mode_:on_event(self, event_type, payload or {})
     return true
@@ -377,7 +377,7 @@ function InstanceBase:update_timers(dt)
             
             local ok, err = pcall(timer.callback, self, timer.current_repeat)
             if not ok then
-                log.error("InstanceBase: 定时器 %s 执行失败 %s", name, err)
+                log.error(log.DIR.INSTANCE,"InstanceBase: 定时器 %s 执行失败 %s", name, err)
             end
             
             -- 检查是否需要移除定时器

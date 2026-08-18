@@ -60,7 +60,7 @@ function InstanceMulti:on_start()
                 end_type = InstanceEndType.TIMEOUT,
                 end_reason = InstanceEndReason.TIMEOUT_SERVER,
             })
-            log.info("InstanceMulti: 副本超时结束 %s", tostring(inst.inst_id_))
+            log.info(log.DIR.INSTANCE,"InstanceMulti: 副本超时结束 %s", tostring(inst.inst_id_))
         end
     end, 1)
 end

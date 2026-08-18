@@ -22,7 +22,7 @@ end
 
 
 function instance_mgr.init()
-    log.info("instance_mgr: 初始化副本管理器")
+    log.info(log.DIR.INSTANCE,"instance_mgr: 初始化副本管理器")
     local InstanceSingle = require "instance.types.instance_single"
     local InstanceMulti = require "instance.types.instance_multi"
     local InstanceRogue = require "instance.types.instance_s_rogue"
@@ -33,7 +33,7 @@ end
 
 function instance_mgr.register_instance_type(type_name, instance_class)
     instance_mgr.instance_types[type_name] = instance_class
-    log.info("instance_mgr: 注册副本类型 %s", type_name)
+    log.info(log.DIR.INSTANCE,"instance_mgr: 注册副本类型 %s", type_name)
 end
 
 function instance_mgr.generate_instance_id()
@@ -45,13 +45,13 @@ function instance_mgr.create_instance(type_name, args)
     args = args or {}
     local instance_class = instance_mgr.instance_types[type_name]
     if not instance_class then
-        log.error("instance_mgr: 未知的副本类型 %s", type_name)
+        log.error(log.DIR.INSTANCE,"instance_mgr: 未知的副本类型 %s", type_name)
         return nil
     end
     local inst_id = instance_mgr.generate_instance_id()
     local inst = instance_class.new(inst_id, args.inst_no, args)
     if not inst then
-        log.error("instance_mgr: 创建副本失败 %s", type_name)
+        log.error(log.DIR.INSTANCE,"instance_mgr: 创建副本失败 %s", type_name)
         return nil
     end
     inst:init()
@@ -69,12 +69,12 @@ end
 
 function instance_mgr.on_player_join(inst_id, player_id, data_)
     -- 预留给后续埋点/事件系统
-    --log.info("instance_mgr: 玩家%s加入副本%s", tostring(player_id), tostring(inst_id))
+    --log.info(log.DIR.INSTANCE,"instance_mgr: 玩家%s加入副本%s", tostring(player_id), tostring(inst_id))
 end
 
 function instance_mgr.on_player_leave(inst_id, player_id)
     -- 预留给后续埋点/事件系统
-    --log.info("instance_mgr: 玩家%s离开副本%s", tostring(player_id), tostring(inst_id))
+    --log.info(log.DIR.INSTANCE,"instance_mgr: 玩家%s离开副本%s", tostring(player_id), tostring(inst_id))
 end
 
 function instance_mgr.destroy_instance(inst_id)
@@ -122,7 +122,7 @@ function instance_mgr.join_instance(inst_id, player_id, data_)
     end
     local mapped_inst_id = instance_mgr.player_instance_map[player_id]
     if mapped_inst_id and mapped_inst_id ~= inst_id then
-        log.warning("instance_mgr: 玩家%s已在副本%s中，拒绝加入副本%s", tostring(player_id), tostring(mapped_inst_id), tostring(inst_id))
+        log.warning(log.DIR.INSTANCE,"instance_mgr: 玩家%s已在副本%s中，拒绝加入副本%s", tostring(player_id), tostring(mapped_inst_id), tostring(inst_id))
         return false, "玩家已在其他副本中"
     end
     local join_ok, join_err = data.inst:join(player_id, data_)
