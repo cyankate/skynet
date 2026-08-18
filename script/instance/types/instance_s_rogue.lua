@@ -12,6 +12,9 @@ local tableUtils = require "utils.tableUtils"
 local ROGUE_DEF = require "instance.rogue.rogue_def"
 local effect_mgr = require "system.effect_mgr"
 local protocol_handler = require "protocol_handler"
+local log = require "log"
+
+local INIT_COLORS = { "red", "yellow", "blue" }
 
 local InstanceRogue = class("InstanceRogue", InstanceSingle)
 
@@ -345,6 +348,93 @@ local function roll_three_options(inst, pick_times)
     return true, options
 end
 
+local function find_weapon_ability_id(weapon_id)
+    weapon_id = num(weapon_id)
+    if weapon_id <= 0 then
+        return nil
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        if ability.Type == "weapon" and num(ability.WeaponId) == weapon_id then
+            return num(ability.Id)
+        end
+    end
+    return nil
+end
+
+local function collect_mode2_weapon_by_color(ctx, color)
+    color = tostring(color or "")
+    local list = {}
+    if color == "" then
+        return list
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        if ability.Type == "weapon" then
+            local id = num(ability.Id)
+            local weapon_id = num(ability.WeaponId)
+            local wcfg = WEAPON_DATA[weapon_id]
+            local limit = num(ability.Limit)
+            if id > 0 and not ctx.used_option_ids[id]
+                and weapon_id > 0 and wcfg and tostring(wcfg.Color) == color
+                and ctx.unlocked[weapon_id] and not ctx.owned_weapons[weapon_id]
+                and (limit <= 0 or num(ctx.picked[id]) < limit)
+                and num(ability.Weight) > 0 then
+                list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
+            end
+        end
+    end
+    return list
+end
+
+local function collect_mode2_ability_by_weapon(ctx, weapon_id)
+    weapon_id = num(weapon_id)
+    local list = {}
+    if weapon_id <= 0 then
+        return list
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        if ability.Type == "ability" then
+            local id = num(ability.Id)
+            local belong_id = num(ability.WeaponId)
+            local limit = num(ability.Limit)
+            if id > 0 and not ctx.used_option_ids[id]
+                and (belong_id == 0 or belong_id == weapon_id)
+                and (limit <= 0 or num(ctx.picked[id]) < limit)
+                and check_precondition(ability, ctx)
+                and num(ability.Weight) > 0 then
+                list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
+            end
+        end
+    end
+    return list
+end
+
+local function roll_mode2_options(inst, color, weapon_id)
+    color = color and tostring(color) or ""
+    weapon_id = num(weapon_id)
+    local ctx = build_pick_context(inst)
+    local option_ids = {}
+    if weapon_id > 0 then
+        while #option_ids < 3 do
+            local id = weighted_pick(collect_mode2_ability_by_weapon(ctx, weapon_id), ctx)
+            if not id then
+                break
+            end
+            option_ids[#option_ids + 1] = id
+        end
+    elseif color ~= "" then
+        local id = weighted_pick(collect_mode2_weapon_by_color(ctx, color), ctx)
+        if id then
+            option_ids[1] = id
+        end
+    else
+        return false, "需要颜色或武器ID"
+    end
+    if #option_ids == 0 then
+        return false, "没有可刷新的能力"
+    end
+    return true, option_ids
+end
+
 local function build_option_view(ability_id)
     ability_id = num(ability_id)
     if ability_id <= 0 or not get_ability(ability_id) then
@@ -372,14 +462,20 @@ local function get_instance_rogue_cfg(inst_no)
     if not cfg then
         return nil, "副本配置不存在"
     end
+    local rogue_mode = num(cfg.RogueMode)
+    if rogue_mode <= 0 then
+        rogue_mode = 1
+    end
     local refresh_id = num(cfg.RogueRefreshId)
-    if refresh_id <= 0 then
-        return nil, "肉鸽刷新id未配置"
+    if rogue_mode == 1 then
+        if refresh_id <= 0 then
+            return nil, "肉鸽刷新id未配置"
+        end
+        if not ROGUE_REFRESH_DATA[refresh_id] then
+            return nil, string.format("肉鸽刷新配置不存在: refresh_id=%d", refresh_id)
+        end
     end
-    if not ROGUE_REFRESH_DATA[refresh_id] then
-        return nil, string.format("肉鸽刷新配置不存在: refresh_id=%d", refresh_id)
-    end
-    return cfg, refresh_id
+    return cfg, refresh_id, rogue_mode
 end
 
 local function build_option_list(option_ids)
@@ -414,6 +510,7 @@ function InstanceRogue:on_destroy()
     self.player_pack_ = nil
     self.effects_ = nil
     self.refresh_id_ = nil
+    self.rogue_mode_ = nil
     self.energy_needs_ = nil
     self.energy_tier_ = nil
     self.pick_times_ = nil
@@ -443,16 +540,18 @@ function InstanceRogue:init_rogue(player_pack)
     self.effects_ = effect_mgr.from_pack(player_pack)
 
     local inst_no = num(self.inst_no_)
-    local cfg, refresh_id = get_instance_rogue_cfg(inst_no)
+    local cfg, refresh_id, rogue_mode = get_instance_rogue_cfg(inst_no)
     if not cfg then
         refresh_id = 0
+        rogue_mode = 1
     end
     local energy_needs = cfg and normalize_energy_needs(cfg.SelectNeedEnergy)
     if not energy_needs then
         energy_needs = ROGUE_DEF.DEFAULT_ENERGY_NEEDS
     end
 
-    self.refresh_id_ = refresh_id
+    self.refresh_id_ = num(refresh_id)
+    self.rogue_mode_ = num(rogue_mode) > 0 and num(rogue_mode) or 1
     self.energy_needs_ = energy_needs
     self.energy_tier_ = 1
     self.pick_times_ = 0
@@ -473,6 +572,9 @@ function InstanceRogue:init_rogue(player_pack)
             self.hu_lucky_ = true
         end
     end
+    if self.rogue_mode_ == 2 then
+        self:grant_init_weapons()
+    end
 end
 
 function InstanceRogue:get_effects()
@@ -486,7 +588,17 @@ function InstanceRogue:get_rogue_max_picks()
     return #self.energy_needs_
 end
 
+function InstanceRogue:is_mode2()
+    return num(self.rogue_mode_) == 2
+end
+
 function InstanceRogue:can_rogue_open_pick()
+    if self:is_mode2() then
+        if self.pending_pick_ then
+            return false, "已有待选择的能力"
+        end
+        return true
+    end
     if num(self.refresh_id_) <= 0 then
         return false, "肉鸽刷新id未配置"
     end
@@ -513,25 +625,50 @@ function InstanceRogue:roll_rogue_options()
     }
 end
 
-function InstanceRogue:rogue_open_pick()
-    local ok, err = self:can_rogue_open_pick()
-    if not ok then
-        return false, err
-    end
-    local roll_ok, roll_result = self:roll_rogue_options()
-    if not roll_ok then
-        return false, roll_result
-    end
+function InstanceRogue:set_pending_pick(roll_result)
     self.pending_pick_ = {
         pick_index = roll_result.pick_index,
         option_ids = roll_result.option_ids,
         options = roll_result.options,
         selecting = false,
+        mode2_color = roll_result.mode2_color,
+        mode2_weapon_id = roll_result.mode2_weapon_id,
     }
     return true, {
         pick_index = roll_result.pick_index,
         options = roll_result.options,
     }
+end
+
+function InstanceRogue:roll_mode2_pick(color, weapon_id)
+    local ok, option_ids = roll_mode2_options(self, color, weapon_id)
+    if not ok then
+        return false, option_ids
+    end
+    return true, {
+        pick_index = num(self.pick_times_) + 1,
+        option_ids = option_ids,
+        options = build_option_list(option_ids),
+        mode2_color = color and tostring(color) or "",
+        mode2_weapon_id = num(weapon_id),
+    }
+end
+
+function InstanceRogue:rogue_open_pick(color, weapon_id)
+    local ok, err = self:can_rogue_open_pick()
+    if not ok then
+        return false, err
+    end
+    local roll_ok, roll_result
+    if self:is_mode2() then
+        roll_ok, roll_result = self:roll_mode2_pick(color, weapon_id)
+    else
+        roll_ok, roll_result = self:roll_rogue_options()
+    end
+    if not roll_ok then
+        return false, roll_result
+    end
+    return self:set_pending_pick(roll_result)
 end
 
 function InstanceRogue:rogue_refresh_pick()
@@ -541,20 +678,19 @@ function InstanceRogue:rogue_refresh_pick()
     if self.pending_pick_.selecting then
         return false, "选择处理中"
     end
-    local roll_ok, roll_result = self:roll_rogue_options()
+    local roll_ok, roll_result
+    if self:is_mode2() then
+        roll_ok, roll_result = self:roll_mode2_pick(
+            self.pending_pick_.mode2_color,
+            self.pending_pick_.mode2_weapon_id
+        )
+    else
+        roll_ok, roll_result = self:roll_rogue_options()
+    end
     if not roll_ok then
         return false, roll_result
     end
-    self.pending_pick_ = {
-        pick_index = roll_result.pick_index,
-        option_ids = roll_result.option_ids,
-        options = roll_result.options,
-        selecting = false,
-    }
-    return true, {
-        pick_index = roll_result.pick_index,
-        options = roll_result.options,
-    }
+    return self:set_pending_pick(roll_result)
 end
 
 function InstanceRogue:track_weapon_gain(ability)
@@ -562,6 +698,14 @@ function InstanceRogue:track_weapon_gain(ability)
         return
     end
     local weapon_id = num(ability.WeaponId)
+    if weapon_id <= 0 then
+        return
+    end
+    self:add_owned_weapon(weapon_id)
+end
+
+function InstanceRogue:add_owned_weapon(weapon_id)
+    weapon_id = num(weapon_id)
     if weapon_id <= 0 then
         return
     end
@@ -593,8 +737,11 @@ function InstanceRogue:track_weapon_gain(ability)
     end
 end
 
-function InstanceRogue:apply_rogue_pick(ability_id)
+function InstanceRogue:grant_ability(ability_id)
     ability_id = num(ability_id)
+    if ability_id <= 0 then
+        return false
+    end
     self.picked_[ability_id] = num(self.picked_[ability_id]) + 1
     local ability = get_ability(ability_id)
     if ability then
@@ -605,8 +752,43 @@ function InstanceRogue:apply_rogue_pick(ability_id)
             end
         end
     end
+    return true
+end
+
+function InstanceRogue:grant_init_weapons()
+    local ctx = build_pick_context(self)
+    local by_color = {}
+    for weapon_id in pairs(ctx.unlocked) do
+        weapon_id = num(weapon_id)
+        local wcfg = WEAPON_DATA[weapon_id]
+        local color = wcfg and tostring(wcfg.Color)
+        if color == "red" or color == "yellow" or color == "blue" then
+            by_color[color] = by_color[color] or {}
+            by_color[color][#by_color[color] + 1] = weapon_id
+        end
+    end
+    for _, color in ipairs(INIT_COLORS) do
+        local weapons = by_color[color]
+        if type(weapons) ~= "table" or #weapons == 0 then
+            log.error("rogue mode2 missing unlocked %s weapon, inst=%s", color, tostring(self.inst_id_))
+        else
+            local weapon_id = weapons[math.random(1, #weapons)]
+            local ability_id = find_weapon_ability_id(weapon_id)
+            if ability_id then
+                self:grant_ability(ability_id)
+            else
+                self:add_owned_weapon(weapon_id)
+                log.error("rogue mode2 no weapon ability, weapon_id=%d inst=%s", weapon_id, tostring(self.inst_id_))
+            end
+        end
+    end
+end
+
+function InstanceRogue:apply_rogue_pick(ability_id)
+    self:grant_ability(ability_id)
     self.pick_times_ = num(self.pick_times_) + 1
-    if num(self.energy_tier_) <= #self.energy_needs_ then
+    if not self:is_mode2() and type(self.energy_needs_) == "table"
+        and num(self.energy_tier_) <= #self.energy_needs_ then
         self.energy_tier_ = num(self.energy_tier_) + 1
     end
 end
@@ -638,6 +820,7 @@ function InstanceRogue:build_rogue_sync()
     end
     return {
         refresh_id = num(self.refresh_id_),
+        rogue_mode = num(self.rogue_mode_),
         energy_tier = num(self.energy_tier_),
         pick_times = num(self.pick_times_),
         max_picks = self:get_rogue_max_picks(),

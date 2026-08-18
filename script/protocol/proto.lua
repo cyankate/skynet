@@ -230,6 +230,8 @@ local c2s_builder = builder.new()
     :protocol("rogue_pick_open", 662, {
         request = {
             inst_id = "string",
+            color = "string",
+            weapon_id = "integer",
         }
     })
 
@@ -820,6 +822,7 @@ local s2c_builder = builder.new()
 
     :type("rogue_sync", {
         refresh_id = "integer",
+        rogue_mode = "integer",
         energy_tier = "integer",
         pick_times = "integer",
         max_picks = "integer",

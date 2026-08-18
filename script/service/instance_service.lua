@@ -484,12 +484,12 @@ local function get_rogue_inst(inst_id, player_id)
     return inst, true
 end
 
-function M.rogue_pick_open(inst_id, player_id)
+function M.rogue_pick_open(inst_id, player_id, color, weapon_id)
     local inst, ok, err = get_rogue_inst(inst_id, player_id)
     if not ok then
         return ok, err
     end
-    local open_ok, result = inst:rogue_open_pick()
+    local open_ok, result = inst:rogue_open_pick(color, weapon_id)
     if not open_ok then
         return false, result
     end
