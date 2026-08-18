@@ -5,8 +5,8 @@ local logger_service = require "service.logger_service"
 
 local CMD = {}
 
-function CMD.logging(source, type_name, color, str)
-    logger_service.logging(source, type_name, color, str)
+function CMD.logging(source, type_name, color, str, dir, prefix)
+    logger_service.logging(source, type_name, color, str, dir, prefix)
 end
 
 function CMD.register_name(source, name)

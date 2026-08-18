@@ -2,6 +2,11 @@ local skynet = require "skynet"
 
 local log = {}
 
+log.DIR = {
+    DEFAULT = { dir = "", prefix = "" },
+    INSTANCE = { dir = "instance", prefix = "instance" },
+}
+
 local LOG_LEVEL = {
     DEBUG   = 1,
     INFO    = 2, 
@@ -32,6 +37,10 @@ local LOG_LEVEL_COLOR = {
     [LOG_LEVEL.SYSTEM] = "\27[94m", -- 蓝色
 }
 
+local function is_dir_cfg(v)
+    return type(v) == "table" and type(v.dir) == "string" and type(v.prefix) == "string"
+end
+
 local function format(fmt, ...)
     local ok, str = pcall(string.format, fmt, ...)
     if ok then
@@ -46,23 +55,29 @@ local function send_log(level, ...)
         return
     end
 
+    local argc = select("#", ...)
+    local offset = 0
+    local dir_cfg = log.DIR.DEFAULT
+    if argc >= 1 and is_dir_cfg(select(1, ...)) then
+        dir_cfg = select(1, ...)
+        offset = 1
+    end
+
     local str
-    if select("#", ...) == 1 then
-        str = tostring(...)
+    if argc - offset <= 1 then
+        str = tostring(select(offset + 1, ...))
     else
-        str = format(...)
+        str = format(select(offset + 1, ...), select(offset + 2, ...))
     end
 
     local info = debug.getinfo(3)
-	if info then
-		local filename = string.match(info.short_src, "[^/.]+.lua$")
-		str = string.format("[%s:%d] %s", filename, info.currentline, str)
+    if info then
+        local filename = string.match(info.short_src, "[^/.]+.lua$")
+        str = string.format("[%s:%d] %s", filename, info.currentline, str)
     end
 
-    -- 加上 ANSI 颜色
     local color = LOG_LEVEL_COLOR[level] or ""
-
-    skynet.send(".logger", "lua", "logging", LOG_LEVEL_DESC[level], color, str)
+    skynet.send(".logger", "lua", "logging", LOG_LEVEL_DESC[level], color, str, dir_cfg.dir, dir_cfg.prefix)
 end
 
 function log.debug(fmt, ...)
