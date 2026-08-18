@@ -80,7 +80,7 @@ function InstanceBase:on_join(player_id, data_)
 end
 
 function InstanceBase:quit(player_id)
-    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 退出副本(quit) %s", player_id, self.inst_id_)
     if not self.pjoins_[player_id] then
         log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
@@ -104,6 +104,7 @@ function InstanceBase:on_quit(player_id)
 end
 
 function InstanceBase:enter(player_id)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 进入副本(enter) %s", player_id, self.inst_id_)
     if not self.pjoins_[player_id] then
         log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未加入副本 %s", player_id, self.inst_id_)
         return false, "玩家未加入副本"
@@ -122,7 +123,7 @@ function InstanceBase:on_enter(player_id)
 end
 
 function InstanceBase:exit(player_id)
-    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 退出副本 %s", player_id, self.inst_id_)
+    log.info(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 离开场景(exit) %s", player_id, self.inst_id_)
     if not self.penters_[player_id] then
         log.warning(log.DIR.INSTANCE,"InstanceBase: 玩家 %s 未进入副本 %s", player_id, self.inst_id_)
         return false, "玩家未进入副本"
