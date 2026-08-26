@@ -205,7 +205,7 @@ local function on_rogue_pick_open(player_id, msg)
         })
         return false, "Instance service not available"
     end
-    local ok, result_or_err = skynet.call(instanceS, "lua", "rogue_pick_open", msg.inst_id, player_id, msg.color, msg.weapon_id)
+    local ok, result_or_err = skynet.call(instanceS, "lua", "rogue_pick_open", msg.inst_id, player_id, msg.type, msg.typeValue)
     if not ok then
         protocol_handler.send_to_player(player_id, "rogue_pick_open_response", {
             result = 1,

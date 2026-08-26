@@ -16,6 +16,12 @@ local log = require "log"
 
 local INIT_COLORS = { "red", "yellow", "blue" }
 
+local MODE2_PICK_MAX = {
+    weapon = 2,
+    ability = 3,
+    evolve = 3,
+}
+
 local InstanceRogue = class("InstanceRogue", InstanceSingle)
 
 local function num(v)
@@ -108,10 +114,15 @@ local function build_pick_context(inst)
     for _, color in ipairs(inst.owned_colors_ or {}) do
         owned_colors[tostring(color)] = true
     end
+    local owned_evolves = {}
+    for _, evolve_id in ipairs(inst.owned_evolve_ids_ or {}) do
+        owned_evolves[num(evolve_id)] = true
+    end
     return {
         unlocked = unlocked,
         owned_weapons = owned_weapons,
         owned_colors = owned_colors,
+        owned_evolves = owned_evolves,
         picked = inst.picked_ or {},
         weapon_levels = weapon_levels,
         used_option_ids = {},
@@ -383,6 +394,27 @@ local function find_weapon_ability_id(weapon_id)
     return nil
 end
 
+local function can_pick_mode2_common(ability, ctx)
+    if type(ability) ~= "table" then
+        return false
+    end
+    local id = num(ability.Id)
+    if id <= 0 or ctx.used_option_ids[id] then
+        return false
+    end
+    local limit = num(ability.Limit)
+    if limit > 0 and num(ctx.picked[id]) >= limit then
+        return false
+    end
+    if not check_precondition(ability, ctx) then
+        return false
+    end
+    if num(ability.Weight) <= 0 then
+        return false
+    end
+    return true
+end
+
 local function collect_mode2_weapon_by_color(ctx, color)
     color = tostring(color or "")
     local list = {}
@@ -394,12 +426,10 @@ local function collect_mode2_weapon_by_color(ctx, color)
             local id = num(ability.Id)
             local weapon_id = num(ability.WeaponId)
             local wcfg = WEAPON_DATA[weapon_id]
-            local limit = num(ability.Limit)
-            if id > 0 and not ctx.used_option_ids[id]
+            if can_pick_mode2_common(ability, ctx)
                 and weapon_id > 0 and wcfg and tostring(wcfg.Color) == color
                 and ctx.unlocked[weapon_id] and not ctx.owned_weapons[weapon_id]
-                and (limit <= 0 or num(ctx.picked[id]) < limit)
-                and num(ability.Weight) > 0 then
+                and not is_color_blocked(ctx, weapon_id) then
                 list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
             end
         end
@@ -407,49 +437,106 @@ local function collect_mode2_weapon_by_color(ctx, color)
     return list
 end
 
-local function collect_mode2_ability_by_weapon(ctx, weapon_id)
+local function collect_mode2_ability(ctx)
+    local seen = {}
+    local list = {}
+    local function try_add(ability)
+        if ability.Type ~= "ability" or not can_pick_mode2_common(ability, ctx) then
+            return
+        end
+        local id = num(ability.Id)
+        if seen[id] then
+            return
+        end
+        seen[id] = true
+        list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        local weapon_id = num(ability.WeaponId)
+        if ability.Type == "ability" and weapon_id > 0
+            and ctx.owned_weapons[weapon_id] and num(ability.EvolveId) == 0 then
+            try_add(ability)
+        end
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        local evolve_id = num(ability.EvolveId)
+        local weapon_id = num(ability.WeaponId)
+        if ability.Type == "ability" and evolve_id > 0 and ctx.owned_evolves[evolve_id]
+            and (weapon_id <= 0 or ctx.owned_weapons[weapon_id]) then
+            try_add(ability)
+        end
+    end
+    for _, ability in pairs(ROGUE_ABILITY_DATA) do
+        if ability.Type == "ability" and num(ability.WeaponId) == 0 then
+            try_add(ability)
+        end
+    end
+    return list
+end
+
+local function collect_mode2_evolve_by_weapon(ctx, weapon_id)
     weapon_id = num(weapon_id)
     local list = {}
     if weapon_id <= 0 then
         return list
     end
     for _, ability in pairs(ROGUE_ABILITY_DATA) do
-        if ability.Type == "ability" then
+        if ability.Type == "evolve" and num(ability.WeaponId) == weapon_id
+            and ctx.owned_weapons[weapon_id]
+            and can_pick_mode2_common(ability, ctx) then
             local id = num(ability.Id)
-            local belong_id = num(ability.WeaponId)
-            local limit = num(ability.Limit)
-            if id > 0 and not ctx.used_option_ids[id]
-                and (belong_id == 0 or belong_id == weapon_id)
-                and (limit <= 0 or num(ctx.picked[id]) < limit)
-                and check_precondition(ability, ctx)
-                and num(ability.Weight) > 0 then
-                list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
-            end
+            list[#list + 1] = { id, ability_effective_weight(ability, ctx) }
         end
     end
     return list
 end
 
-local function roll_mode2_options(inst, color, weapon_id)
-    color = color and tostring(color) or ""
-    weapon_id = num(weapon_id)
-    local ctx = build_pick_context(inst)
+local function roll_weighted_up_to(collect_fn, ctx, max_count, ...)
     local option_ids = {}
-    if weapon_id > 0 then
-        while #option_ids < 3 do
-            local id = weighted_pick(collect_mode2_ability_by_weapon(ctx, weapon_id), ctx)
-            if not id then
-                break
-            end
-            option_ids[#option_ids + 1] = id
+    max_count = num(max_count)
+    if max_count <= 0 then
+        return option_ids
+    end
+    while #option_ids < max_count do
+        local candidates = collect_fn(ctx, ...)
+        local id = weighted_pick(candidates, ctx)
+        if not id then
+            break
         end
-    elseif color ~= "" then
-        local id = weighted_pick(collect_mode2_weapon_by_color(ctx, color), ctx)
-        if id then
-            option_ids[1] = id
+        option_ids[#option_ids + 1] = id
+    end
+    return option_ids
+end
+
+local function normalize_mode2_pick_type(pick_type)
+    pick_type = tostring(pick_type or "")
+    if pick_type == "weapon" or pick_type == "ability" or pick_type == "evolve" then
+        return pick_type
+    end
+    return nil
+end
+
+local function roll_mode2_options(inst, pick_type, type_value)
+    pick_type = normalize_mode2_pick_type(pick_type)
+    if not pick_type then
+        return false, "未知的随机类型"
+    end
+    type_value = tostring(type_value or "")
+    local ctx = build_pick_context(inst)
+    local option_ids
+    if pick_type == "weapon" then
+        if type_value == "" then
+            return false, "需要颜色"
         end
+        option_ids = roll_weighted_up_to(collect_mode2_weapon_by_color, ctx, MODE2_PICK_MAX.weapon, type_value)
+    elseif pick_type == "ability" then
+        option_ids = roll_weighted_up_to(collect_mode2_ability, ctx, MODE2_PICK_MAX.ability)
     else
-        return false, "需要颜色或武器ID"
+        local weapon_id = num(type_value)
+        if weapon_id <= 0 then
+            return false, "需要武器ID"
+        end
+        option_ids = roll_weighted_up_to(collect_mode2_evolve_by_weapon, ctx, MODE2_PICK_MAX.evolve, weapon_id)
     end
     if #option_ids == 0 then
         return false, "没有可刷新的能力"
@@ -539,6 +626,7 @@ function InstanceRogue:on_destroy()
     self.picked_ = nil
     self.owned_weapon_ids_ = nil
     self.owned_colors_ = nil
+    self.owned_evolve_ids_ = nil
     self.pending_pick_ = nil
     self.hu_lucky_ = nil
     self.hu_n_ = nil
@@ -579,6 +667,7 @@ function InstanceRogue:init_rogue(player_pack)
     self.pick_times_ = 0
     self.owned_weapon_ids_ = {}
     self.owned_colors_ = {}
+    self.owned_evolve_ids_ = {}
     self.picked_ = {}
     self.pending_pick_ = nil
     self.hu_lucky_ = false
@@ -660,8 +749,8 @@ function InstanceRogue:set_pending_pick(roll_result)
         option_ids = roll_result.option_ids,
         options = roll_result.options,
         selecting = false,
-        mode2_color = roll_result.mode2_color,
-        mode2_weapon_id = roll_result.mode2_weapon_id,
+        mode2_type = roll_result.mode2_type,
+        mode2_type_value = roll_result.mode2_type_value,
     }
     return true, {
         pick_index = roll_result.pick_index,
@@ -669,8 +758,8 @@ function InstanceRogue:set_pending_pick(roll_result)
     }
 end
 
-function InstanceRogue:roll_mode2_pick(color, weapon_id)
-    local ok, option_ids = roll_mode2_options(self, color, weapon_id)
+function InstanceRogue:roll_mode2_pick(pick_type, type_value)
+    local ok, option_ids = roll_mode2_options(self, pick_type, type_value)
     if not ok then
         return false, option_ids
     end
@@ -678,46 +767,46 @@ function InstanceRogue:roll_mode2_pick(color, weapon_id)
         pick_index = num(self.pick_times_) + 1,
         option_ids = option_ids,
         options = build_option_list(option_ids),
-        mode2_color = color and tostring(color) or "",
-        mode2_weapon_id = num(weapon_id),
+        mode2_type = normalize_mode2_pick_type(pick_type),
+        mode2_type_value = tostring(type_value or ""),
     }
 end
 
-function InstanceRogue:rogue_open_pick(color, weapon_id)
+function InstanceRogue:rogue_open_pick(pick_type, type_value)
     local ok, err = self:can_rogue_open_pick()
     if not ok then
-        log.warning(log.DIR.INSTANCE, "InstanceRogue: 开抽失败 inst=%s player=%s mode=%d color=%s weapon_id=%s err=%s",
+        log.warning(log.DIR.INSTANCE, "InstanceRogue: 开抽失败 inst=%s player=%s mode=%d type=%s typeValue=%s err=%s",
             tostring(self.inst_id_),
             tostring(self.owner_player_id_),
             num(self.rogue_mode_),
-            tostring(color or ""),
-            tostring(weapon_id or 0),
+            tostring(pick_type or ""),
+            tostring(type_value or ""),
             tostring(err))
         return false, err
     end
     local roll_ok, roll_result
     if self:is_mode2() then
-        roll_ok, roll_result = self:roll_mode2_pick(color, weapon_id)
+        roll_ok, roll_result = self:roll_mode2_pick(pick_type, type_value)
     else
         roll_ok, roll_result = self:roll_rogue_options()
     end
     if not roll_ok then
-        log.warning(log.DIR.INSTANCE, "InstanceRogue: 开抽随机失败 inst=%s player=%s mode=%d color=%s weapon_id=%s err=%s",
+        log.warning(log.DIR.INSTANCE, "InstanceRogue: 开抽随机失败 inst=%s player=%s mode=%d type=%s typeValue=%s err=%s",
             tostring(self.inst_id_),
             tostring(self.owner_player_id_),
             num(self.rogue_mode_),
-            tostring(color or ""),
-            tostring(weapon_id or 0),
+            tostring(pick_type or ""),
+            tostring(type_value or ""),
             tostring(roll_result))
         return false, roll_result
     end
-    log.info(log.DIR.INSTANCE, "InstanceRogue: 推送三选一 inst=%s player=%s mode=%d pick=%d color=%s weapon_id=%s options=%s",
+    log.info(log.DIR.INSTANCE, "InstanceRogue: 推送三选一 inst=%s player=%s mode=%d pick=%d type=%s typeValue=%s options=%s",
         tostring(self.inst_id_),
         tostring(self.owner_player_id_),
         num(self.rogue_mode_),
         num(roll_result.pick_index),
-        tostring(color or ""),
-        tostring(weapon_id or 0),
+        tostring(pick_type or ""),
+        tostring(type_value or ""),
         format_option_ids(roll_result.option_ids))
     return self:set_pending_pick(roll_result)
 end
@@ -737,8 +826,8 @@ function InstanceRogue:rogue_refresh_pick()
     local roll_ok, roll_result
     if self:is_mode2() then
         roll_ok, roll_result = self:roll_mode2_pick(
-            self.pending_pick_.mode2_color,
-            self.pending_pick_.mode2_weapon_id
+            self.pending_pick_.mode2_type,
+            self.pending_pick_.mode2_type_value
         )
     else
         roll_ok, roll_result = self:roll_rogue_options()
@@ -770,6 +859,30 @@ function InstanceRogue:track_weapon_gain(ability)
         return
     end
     self:add_owned_weapon(weapon_id)
+end
+
+function InstanceRogue:add_owned_evolve_id(evolve_id)
+    evolve_id = num(evolve_id)
+    if evolve_id <= 0 then
+        return
+    end
+    self.owned_evolve_ids_ = self.owned_evolve_ids_ or {}
+    for _, eid in ipairs(self.owned_evolve_ids_) do
+        if num(eid) == evolve_id then
+            return
+        end
+    end
+    self.owned_evolve_ids_[#self.owned_evolve_ids_ + 1] = evolve_id
+end
+
+function InstanceRogue:track_mode2_selection(pick_type, ability)
+    if not self:is_mode2() or type(ability) ~= "table" then
+        return
+    end
+    pick_type = normalize_mode2_pick_type(pick_type)
+    if pick_type == "evolve" then
+        self:add_owned_evolve_id(ability.EvolveId)
+    end
 end
 
 function InstanceRogue:add_owned_weapon(weapon_id)
@@ -900,6 +1013,7 @@ function InstanceRogue:build_rogue_sync()
         pick_times = num(self.pick_times_),
         max_picks = self:get_rogue_max_picks(),
         owned_weapon_ids = self.owned_weapon_ids_,
+        owned_evolve_ids = self.owned_evolve_ids_,
         effects = self.effects_ and self.effects_:build_sync() or nil,
         picked = self:build_rogue_picked_list(),
         pending = pending,
@@ -930,11 +1044,13 @@ function InstanceRogue:rogue_select_pick(choice_index)
     end
 
     local ability = get_ability(ability_id)
+    local mode2_type = self.pending_pick_.mode2_type
     self.pending_pick_.selecting = true
     self:apply_rogue_pick(ability_id)
+    self:track_mode2_selection(mode2_type, ability)
     self.pending_pick_ = nil
 
-    log.info(log.DIR.INSTANCE, "InstanceRogue: 选择三选一 inst=%s player=%s mode=%d pick=%d index=%d ability=%d type=%s name=%s weapon_id=%s owned=%s",
+    log.info(log.DIR.INSTANCE, "InstanceRogue: 选择三选一 inst=%s player=%s mode=%d pick=%d index=%d ability=%d type=%s name=%s weapon_id=%s owned=%s evolves=%s",
         tostring(self.inst_id_),
         tostring(self.owner_player_id_),
         num(self.rogue_mode_),
@@ -944,7 +1060,8 @@ function InstanceRogue:rogue_select_pick(choice_index)
         ability and tostring(ability.Type) or "?",
         ability and tostring(ability.Name) or "?",
         ability and tostring(ability.WeaponId) or "0",
-        format_id_list(self.owned_weapon_ids_))
+        format_id_list(self.owned_weapon_ids_),
+        format_id_list(self.owned_evolve_ids_))
 
     return true, {
         ability_id = ability_id,

@@ -230,8 +230,8 @@ local c2s_builder = builder.new()
     :protocol("rogue_pick_open", 662, {
         request = {
             inst_id = "string",
-            color = "string",
-            weapon_id = "integer",
+            type = "string",
+            typeValue = "string",
         }
     })
 
@@ -827,6 +827,7 @@ local s2c_builder = builder.new()
         pick_times = "integer",
         max_picks = "integer",
         owned_weapon_ids = "*integer",
+        owned_evolve_ids = "*integer",
         effects = "effect_info",
         picked = "*rogue_picked_entry",
         pending = "rogue_pending_pick",
