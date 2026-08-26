@@ -1,11 +1,6 @@
 return 
 {
-[2000]={["WeaponId"]=2000,["Name"]="散弹",["UnlockLevel"]=0,["Color"]="yellow",["AttrId"]=2000,["WeaponAttrId"]=2000},
-[2001]={["WeaponId"]=2001,["Name"]="闪电塔",["UnlockLevel"]=0,["Color"]="blue",["AttrId"]=2001,["WeaponAttrId"]=2001},
-[2002]={["WeaponId"]=2002,["Name"]="蓄力激光",["UnlockLevel"]=0,["Color"]="red",["AttrId"]=2002,["WeaponAttrId"]=2002},
-[2003]={["WeaponId"]=2003,["Name"]="黄色武器1",["UnlockLevel"]=1,["Color"]="yellow",["AttrId"]=2003,["WeaponAttrId"]=2003},
-[2004]={["WeaponId"]=2004,["Name"]="黄色武器2",["UnlockLevel"]=1,["Color"]="yellow",["AttrId"]=2004,["WeaponAttrId"]=2004},
-[2005]={["WeaponId"]=2005,["Name"]="黄色武器3",["UnlockLevel"]=2,["Color"]="yellow",["AttrId"]=2005,["WeaponAttrId"]=2005},
-[2006]={["WeaponId"]=2006,["Name"]="蓝色武器1",["UnlockLevel"]=4,["Color"]="blue",["AttrId"]=2006,["WeaponAttrId"]=2006},
-[2007]={["WeaponId"]=2007,["Name"]="蓝色武器2",["UnlockLevel"]=5,["Color"]="blue",["AttrId"]=2007,["WeaponAttrId"]=2007},
-[2008]={["WeaponId"]=2008,["Name"]="蓝色武器3",["UnlockLevel"]=7,["Color"]="blue",["AttrId"]=2008,["WeaponAttrId"]=2008}}
+[2001]={["WeaponId"]=2001,["Name"]="散弹",["UnlockLevel"]=0,["Color"]="yellow",["AttrId"]=2001,["WeaponAttrId"]=2001},
+[2011]={["WeaponId"]=2011,["Name"]="闪电塔",["UnlockLevel"]=0,["Color"]="blue",["AttrId"]=2011,["WeaponAttrId"]=2011},
+[2021]={["WeaponId"]=2021,["Name"]="蓄力激光",["UnlockLevel"]=0,["Color"]="red",["AttrId"]=2021,["WeaponAttrId"]=2021},
+[2031]={["WeaponId"]=2031,["Name"]="速射枪",["UnlockLevel"]=0,["Color"]="yellow",["AttrId"]=2031,["WeaponAttrId"]=2031}}
