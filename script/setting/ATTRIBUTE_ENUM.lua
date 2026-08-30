@@ -1,2 +1,2 @@
 return 
-{["ATT"]=2,["ApidFireCount"]=7,["BulletCount"]=4,["CoolDownTime"]=5,["DEF"]=3,["DamageAddRatio"]=14,["FireRateMultiplier"]=15,["HP"]=1,["NumbTime"]=10,["OutbreakCount"]=9,["PathDamageRatio"]=12,["RefractionCount"]=11,["SkillTime"]=13,["SplitCount"]=6,["ThroughCount"]=8}
+{["ATT"]=2,["ApidFireCount"]=7,["BulletCount"]=4,["BulletMoveSpeed"]=17,["CoolDownTime"]=5,["DEF"]=3,["DamageAddRatio"]=14,["DamageRateMultiplier"]=16,["FireRateMultiplier"]=15,["HP"]=1,["NumbTime"]=10,["OutbreakCount"]=9,["PathDamageRatio"]=12,["RefractionCount"]=11,["SkillTime"]=13,["SplitCount"]=6,["ThroughCount"]=8}

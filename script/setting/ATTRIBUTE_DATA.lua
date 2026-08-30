@@ -14,4 +14,6 @@ return
 [12]={["Id"]=12,["Enum"]="PathDamageRatio"},
 [13]={["Id"]=13,["Enum"]="SkillTime"},
 [14]={["Id"]=14,["Enum"]="DamageAddRatio"},
-[15]={["Id"]=15,["Enum"]="FireRateMultiplier"}}
+[15]={["Id"]=15,["Enum"]="FireRateMultiplier"},
+[16]={["Id"]=16,["Enum"]="DamageRateMultiplier"},
+[17]={["Id"]=17,["Enum"]="BulletMoveSpeed"}}
