@@ -4,6 +4,8 @@
 
 local skynet = require "skynet"
 local protocol_handler = require "protocol_handler"
+local user_mgr = require "user_mgr"
+local instance_play_mgr = require "system.instance_play_mgr"
 
 local function get_instance_service()
     return skynet.localname(".instance")
@@ -102,6 +104,10 @@ local function on_instance_quit(player_id, msg)
             inst_id = msg.inst_id,
         })
         return false, err
+    end
+    local player = user_mgr.get_player_obj(player_id)
+    if player then
+        instance_play_mgr.on_quit(player, { inst_id = msg.inst_id })
     end
     protocol_handler.send_to_player(player_id, "instance_quit_response", {
         result = 0,

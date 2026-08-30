@@ -211,6 +211,20 @@ function M.on_complete(player, params)
     }
 end
 
+function M.on_quit(player, params)
+    params = params or {}
+    local session = player:get_instance_session()
+    if type(session) ~= "table" or not session.inst_id then
+        return true
+    end
+    local quit_inst_id = params.inst_id
+    if quit_inst_id ~= nil and quit_inst_id ~= "" and session.inst_id ~= quit_inst_id then
+        return false, "副本会话不匹配"
+    end
+    player:clear_instance_session()
+    return true
+end
+
 function M.on_action(player, params)
     params = params or {}
     local inst_id = params.inst_id
