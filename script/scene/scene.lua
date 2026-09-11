@@ -4,7 +4,6 @@ local log = require "log"
 local GridAOI = require "scene.grid_aoi"
 local Terrain = require "scene.terrain"
 local Simple2DNavMesh = require "scene.pathfinding.simple_2d_navmesh"
-local NPCMgr = require "scene.npc_mgr"
 
 local Scene = class("Scene")
 
@@ -41,9 +40,6 @@ function Scene:ctor(scene_id, config)
     
     -- 同步地形数据到导航网格
     self:sync_terrain_to_navmesh()
-    
-    -- 初始化NPC管理器
-    self.npc_mgr = NPCMgr.new(self)
     
     log.info("场景%d初始化完成: %dx%d, 网格大小: %d", 
              self.scene_id, self.terrain.width, self.terrain.height, self.terrain.grid_size)
@@ -98,14 +94,14 @@ end
 -- 添加实体
 function Scene:add_entity(entity)
     if self.entities[entity.id] then
-        log.error("Entity %d already exists in scene %d", entity.id, self.scene_id)
-        return false
+        return true
     end
-    
-    -- 检查位置是否可通行
-    if not self:is_position_walkable(entity.x, entity.y) then
-        log.error("Cannot add entity %d to scene %d at position (%d,%d): terrain not walkable", 
-            entity.id, self.scene_id, entity.x, entity.y)
+
+    -- 世界掉落/资源点只进 AOI，不走寻路可行走检查
+    local skip_walk = entity.ignore_walkable or entity.type == "item"
+    if not skip_walk and not self:is_position_walkable(entity.x, entity.y) then
+        log.error("Cannot add entity %s to scene %s at position (%s,%s): terrain not walkable",
+            tostring(entity.id), tostring(self.scene_id), tostring(entity.x), tostring(entity.y))
         return false
     end
     
@@ -157,7 +153,7 @@ function Scene:move_entity(entity_id, x, y)
     end
     
     -- 检查移动是否合法
-    if not self:can_move_to(entity.x, entity.y, x, y) then
+    if not entity.ignore_walkable and not self:can_move_to(entity.x, entity.y, x, y) then
         log.error("Scene:move_entity() can't move to, {x: %f, y: %f} -> {x: %f, y: %f}", entity.x, entity.y, x, y)
         return false
     end
@@ -400,8 +396,8 @@ function Scene:serialize()
     
     -- 序列化实体数据
     for id, entity in pairs(self.entities) do
-        -- 只序列化固定实体(怪物、NPC等)
-        if entity.type == "monster" or entity.type == "npc" then
+        -- 只序列化固定实体(怪物等)
+        if entity.type == "monster" then
             data.entities[id] = {
                 id = entity.id,
                 type = entity.type,
@@ -433,10 +429,6 @@ function Scene:deserialize(data)
             local MonsterEntity = require "scene.monster_entity"
             local monster = MonsterEntity.new(entity_data.id, entity_data)
             self:add_entity(monster)
-        elseif entity_data.type == "npc" then
-            local NPCEntity = require "scene.npc_entity"
-            local npc = NPCEntity.new(entity_data.id, entity_data)
-            self:add_entity(npc)
         end
     end
 end

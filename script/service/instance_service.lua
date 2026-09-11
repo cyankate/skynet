@@ -15,8 +15,6 @@ local COMPLETED_INSTANCE_GC_SEC = 120
 
 local M = service_ctx.get("instance.instance", {})
 M.running = (M.running ~= false)
-M.scene_counter = M.scene_counter or 0
-M.instance_scene_map = M.instance_scene_map or {}
 M._inited = M._inited or false
 
 local function get_instance_or_error(inst_id)
@@ -96,14 +94,6 @@ function M.create_instance(type_name, args)
 end
 
 function M.destroy_instance(inst_id)
-    local scene_data = M.instance_scene_map[inst_id]
-    if scene_data then
-        local scene = skynet.localname(".scene")
-        if scene then
-            skynet.call(scene, "lua", "destroy_scene", scene_data.scene_id)
-        end
-        M.instance_scene_map[inst_id] = nil
-    end
     local ok = instance_mgr.destroy_instance(inst_id)
     return ok and true or false, ok and nil or "副本销毁失败"
 end
@@ -142,7 +132,7 @@ function M.create_and_enter_batch(type_name, args, players, join_data_map)
     end
     return true, {
         inst_id = inst_id,
-        scene_id = M.instance_scene_map[inst_id] and M.instance_scene_map[inst_id].scene_id or 0,
+        scene_id = 0,
         players = players,
     }
 end
@@ -183,7 +173,7 @@ function M.play_start_direct(player_id, type_name, options)
         M.destroy_instance(inst_id)
         return false, enter_err or "进入副本失败"
     end
-    return true, { inst_id = inst_id, scene_id = M.instance_scene_map[inst_id] and M.instance_scene_map[inst_id].scene_id or 0 }
+    return true, { inst_id = inst_id, scene_id = 0 }
 end
 
 function M.enter_instance(inst_id, player_id)
@@ -194,28 +184,8 @@ function M.enter_instance(inst_id, player_id)
     if not inst:has_player(player_id) then
         return false, "玩家未加入副本"
     end
-    local scene_data = M.instance_scene_map[inst_id]
-    local scene_entered = false
-    if scene_data then
-        local scene = skynet.localname(".scene")
-        if scene then
-            local enter_ok, enter_err = skynet.call(scene, "lua", "enter_scene", scene_data.scene_id, {
-                id = player_id, type = "player", x = scene_data.spawn_x, y = scene_data.spawn_y, properties = { instance_id = inst_id },
-            })
-            if not enter_ok then
-                return false, enter_err or "进入副本场景失败"
-            end
-            scene_entered = true
-        end
-    end
     local enter_ok, enter_err = inst:enter(player_id)
     if not enter_ok then
-        if scene_entered then
-            local scene = skynet.localname(".scene")
-            if scene and scene_data then
-                skynet.call(scene, "lua", "leave_scene", scene_data.scene_id, player_id)
-            end
-        end
         return false, enter_err or "进入副本失败"
     end
     if instance_mgr.is_auto_start(inst_id) and inst:get_status() ~= InstanceStatus.RUNNING then
@@ -228,13 +198,6 @@ function M.exit_instance(inst_id, player_id)
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
-    end
-    local scene_data = M.instance_scene_map[inst_id]
-    if scene_data then
-        local scene = skynet.localname(".scene")
-        if scene then
-            skynet.call(scene, "lua", "leave_scene", scene_data.scene_id, player_id)
-        end
     end
     local exit_ok, exit_err = instance_mgr.exit_instance(inst_id, player_id)
     if not exit_ok then
@@ -291,13 +254,6 @@ function M.quit_instance(inst_id, player_id)
     local inst, ok, err = get_instance_or_error(inst_id)
     if not ok then
         return ok, err
-    end
-    local scene_data = M.instance_scene_map[inst_id]
-    if scene_data and inst.penters_[player_id] then
-        local scene = skynet.localname(".scene")
-        if scene then
-            skynet.call(scene, "lua", "leave_scene", scene_data.scene_id, player_id)
-        end
     end
     local quit_ok, quit_err = instance_mgr.quit_instance(inst_id, player_id)
     if not quit_ok then
@@ -371,7 +327,7 @@ function M.get_instance_info(inst_id)
         start_time = inst.start_time_,
         end_time = inst.end_time_,
         duration = inst.duration_,
-        scene_id = M.instance_scene_map[inst_id] and M.instance_scene_map[inst_id].scene_id or 0,
+        scene_id = 0,
         join_count = tableUtils.table_size(inst.pjoins_),
         enter_count = tableUtils.table_size(inst.penters_),
     }
@@ -384,7 +340,7 @@ function M.list_instances()
             type = data.type,
             create_time = data.create_time,
             status = data.inst and data.inst:get_status() or 0,
-            scene_id = M.instance_scene_map[inst_id] and M.instance_scene_map[inst_id].scene_id or 0,
+            scene_id = 0,
         }
     end
     return true, list
@@ -536,13 +492,6 @@ end
 
 function M.shutdown()
     M.running = false
-    local scene = skynet.localname(".scene")
-    if scene then
-        for _, data in pairs(M.instance_scene_map) do
-            skynet.call(scene, "lua", "destroy_scene", data.scene_id)
-        end
-    end
-    M.instance_scene_map = {}
     instance_mgr.shutdown()
     return true
 end

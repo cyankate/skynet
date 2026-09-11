@@ -12,6 +12,8 @@ skynet.start(function()
 
     local redis = skynet.newservice("redisS")
 
+    local mongo = skynet.newservice("mongoS")
+
     local debug_console = skynet.newservice("debug_console")
     
     local event = skynet.newservice("eventS")
@@ -44,9 +46,7 @@ skynet.start(function()
 
     local pathfinding = skynet.newservice("pathfindingS")
 
-    local scene = skynet.newservice("sceneS")
-
-    local map = skynet.newservice("mapS")
+    local map = skynet.newservice("mapLaunchS")
 
     local register = skynet.newservice("registerS")
 

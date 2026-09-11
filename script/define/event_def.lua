@@ -21,7 +21,6 @@ local event_def = {
         TASK_COMPLETE = "player.task_complete",
         TASK_REWARD = "player.task_reward",
         COLLECT_ITEM = "player.collect_item",
-        TALK_NPC = "player.talk_npc",
         USE_ITEM = "player.use_item",
         REACH_PLACE = "player.reach_place",
     },

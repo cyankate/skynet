@@ -144,9 +144,14 @@ local function unload_account_from_agent(account_key, account)
     if player then
         M.handle_offline(player)
     end
-    local mapS = skynet.localname(".map")
-    if mapS and player_id then
-        skynet.send(mapS, "lua", "leave_map", player_id)
+    if player and player_id then
+        local shard = require "map.shard"
+        for _, sid in ipairs(shard.all_ids()) do
+            local mapS = skynet.localname(shard.service_name(player.map_id_ or shard.WORLD_MAP_ID, sid))
+            if mapS then
+                skynet.send(mapS, "lua", "leave_map", player_id)
+            end
+        end
     end
     accounts[account_key] = nil
     logout_timers[account_key] = nil
@@ -429,6 +434,25 @@ function M.instance_play_action(data)
         return false, err
     end
     return instance_play_mgr.on_action(player, data)
+end
+
+function M.remember_march(data)
+    data = data or {}
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    player.march_shards_ = player.march_shards_ or {}
+    local uid = tostring(data.march_uid or "")
+    if uid == "" then
+        return true
+    end
+    if data.removed then
+        player.march_shards_[uid] = nil
+    elseif data.shard_id ~= nil then
+        player.march_shards_[uid] = data.shard_id
+    end
+    return true
 end
 
 function M.gm_command(data)

@@ -78,16 +78,6 @@ function scene_mgr.load_scene_config(config_file)
                 scene:load_terrain(scene_config.terrain_data)
             end
             
-            -- 加载NPC数据
-            if scene_config.npcs then
-                for _, npc_data in ipairs(scene_config.npcs) do
-                    local NPCEntity = require "scene.npc_entity"
-                    local npc = NPCEntity.new(npc_data.id, npc_data)
-                    npc:set_position(npc_data.x, npc_data.y)
-                    scene:add_entity(npc)
-                end
-            end
-            
             -- 加载怪物数据
             if scene_config.monsters then
                 for _, monster_data in ipairs(scene_config.monsters) do

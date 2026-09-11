@@ -1,78 +1,83 @@
 local log = require "log"
 local service_ctx = require "runtime.service_ctx"
-local recast = require "scene.pathfinding.recast"
+local shard = require "map.shard"
+local WorldPath = require "map.pathfinding"
 
-local M = service_ctx.get("scene.pathfinding_service", {})
+local M = service_ctx.get("map.pathfinding_service", {})
 
-function M.create_navmesh_from_heightmap(heightmap, config)
-    return recast.create_navmesh_from_heightmap(heightmap, config)
-end
-
-function M.create_navmesh_from_triangles(triangles, config)
-    return recast.create_navmesh_from_triangles(triangles, config)
-end
-
-function M.find_path(navMeshId, start_pos, end_pos, options)
-    log.info(" >>>>>>>>>>>>>>>>>>>>>> find_path %s %s %s %s", navMeshId, start_pos, end_pos, options)
-    return recast.find_path(navMeshId, start_pos, end_pos, options)
-end
-
-function M.find_paths_batch(requests)
-    return recast.find_paths_batch(requests)
-end
-
-function M.add_obstacle(navMeshId, obstacle_data)
-    return recast.add_obstacle(navMeshId, obstacle_data)
-end
-
-function M.remove_obstacle(navMeshId, obstacleId)
-    return recast.remove_obstacle(navMeshId, obstacleId)
-end
-
-function M.get_navmesh_info(navMeshId)
-    return recast.get_navmesh_info(navMeshId)
-end
-
-function M.destroy_navmesh(navMeshId)
-    return recast.destroy_navmesh(navMeshId)
-end
-
-function M.cleanup()
-    recast.cleanup()
-end
-
-function M.get_cache_stats()
-    return {
-        navmesh_count = 0,
-        path_cache_count = 0,
-        memory_usage = 0,
-    }
-end
-
-function M.warmup_cache(navMeshId, common_paths)
-    local warmed_count = 0
-    for _, path_info in ipairs(common_paths) do
-        local path = recast.find_path(navMeshId, path_info.start_pos, path_info.end_pos, path_info.options)
-        if path then
-            warmed_count = warmed_count + 1
-        end
+local function get_world(map_id)
+    if not M.world then
+        return nil, "pathfinding not ready"
     end
-    return warmed_count
+    map_id = tonumber(map_id)
+    if map_id and map_id ~= 0 and map_id ~= M.world.map_id then
+        return nil, "unknown map"
+    end
+    return M.world
+end
+
+function M.find_path(map_id, sx, sy, ex, ey, keep_end)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    local path, path_err = world:find_path(sx, sy, ex, ey, keep_end)
+    if not path then
+        return false, path_err
+    end
+    return true, path
+end
+
+function M.is_walkable(map_id, x, y)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    return true, world:is_walkable(x, y)
+end
+
+function M.add_obstacle(map_id, x, y, radius)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    return true, world:add_obstacle(x, y, radius)
+end
+
+function M.remove_obstacle(map_id, obstacle_id)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    return world:remove_obstacle(obstacle_id)
+end
+
+function M.set_terrain(map_id, x, y, terrain_type)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    world:set_terrain(x, y, terrain_type)
+    return true
+end
+
+function M.get_stats(map_id)
+    local world, err = get_world(map_id)
+    if not world then
+        return false, err
+    end
+    return true, world:get_stats()
 end
 
 function M.init()
-    if M._inited then
+    if M._inited and M.world then
         return true
     end
-
-    local result = recast.init()
-    if not result then
-        log.error("RecastNavigation初始化失败")
-        return false
-    end
-
+    local def = shard.world_def()
+    M.world = WorldPath.new(def)
     M._inited = true
-    log.info("RecastNavigation初始化成功")
+    log.info("map pathfinding ready, map_id=%s size=%dx%d cell=%d",
+        tostring(def.map_id), def.width, def.height, WorldPath.CELL_SIZE)
     return true
 end
 

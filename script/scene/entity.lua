@@ -8,7 +8,6 @@ local Entity = class("Entity")
 local ENTITY_TYPE = {
     PLAYER = 1,    -- 玩家
     MONSTER = 2,   -- 怪物
-    NPC = 3,       -- NPC
     ITEM = 4,      -- 物品
 }
 

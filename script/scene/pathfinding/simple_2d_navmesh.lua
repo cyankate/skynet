@@ -8,7 +8,11 @@ local GridNode = class("GridNode")
 function GridNode:ctor(x, y, walkable, terrain_type)
     self.x = x
     self.y = y
-    self.walkable = walkable or true
+    if walkable == nil then
+        self.walkable = true
+    else
+        self.walkable = walkable and true or false
+    end
     self.terrain_type = terrain_type or 1  -- 1=平地, 2=水域, 3=山地, 4=障碍物
     self.g = 0  -- 从起点到当前节点的代价
     self.h = 0  -- 从当前节点到终点的预估代价
@@ -35,8 +39,10 @@ Simple2DNavMesh.TERRAIN_COST = {
     [6] = 0.5,    -- 传送点
 }
 
--- 不可通行地形
+-- 不可通行地形（与 Terrain 一致：水 / 山 / 障碍）
 Simple2DNavMesh.BLOCKED_TERRAIN = {
+    [2] = true,   -- 水域
+    [3] = true,   -- 山地
     [4] = true,   -- 障碍物
 }
 
@@ -44,12 +50,14 @@ function Simple2DNavMesh:ctor(width, height, grid_size)
     self.width = width
     self.height = height
     self.grid_size = grid_size or 1
-    self.grid_width = math.ceil(width / grid_size)
-    self.grid_height = math.ceil(height / grid_size)
+    self.grid_width = math.ceil(width / self.grid_size)
+    self.grid_height = math.ceil(height / self.grid_size)
     
     -- 网格数据
     self.grid = {}
-    self.dynamic_obstacles = {}
+    self.obstacles = {}
+    self.next_obstacle_id = 0
+    self.search_id = 0
     self.path_cache = {}
     
     -- 初始化网格
@@ -96,10 +104,20 @@ function Simple2DNavMesh:build_neighbors()
     end
 end
 
--- 世界坐标转网格坐标
+-- 世界坐标转网格坐标（含边界夹紧，避免 width 落在最后一格外侧）
 function Simple2DNavMesh:world_to_grid(world_x, world_y)
-    local grid_x = math.floor(world_x / self.grid_size) + 1
-    local grid_y = math.floor(world_y / self.grid_size) + 1
+    local grid_x = math.floor((tonumber(world_x) or 0) / self.grid_size) + 1
+    local grid_y = math.floor((tonumber(world_y) or 0) / self.grid_size) + 1
+    if grid_x < 1 then
+        grid_x = 1
+    elseif grid_x > self.grid_width then
+        grid_x = self.grid_width
+    end
+    if grid_y < 1 then
+        grid_y = 1
+    elseif grid_y > self.grid_height then
+        grid_y = self.grid_height
+    end
     return grid_x, grid_y
 end
 
@@ -113,10 +131,12 @@ end
 -- 获取网格节点
 function Simple2DNavMesh:get_node(world_x, world_y)
     local grid_x, grid_y = self:world_to_grid(world_x, world_y)
-    if grid_x >= 1 and grid_x <= self.grid_width and grid_y >= 1 and grid_y <= self.grid_height then
-        return self.grid[grid_y][grid_x]
-    end
-    return nil
+    return self.grid[grid_y] and self.grid[grid_y][grid_x]
+end
+
+function Simple2DNavMesh:is_walkable(world_x, world_y)
+    local node = self:get_node(world_x, world_y)
+    return node and node.walkable and true or false
 end
 
 -- 设置地形类型
@@ -135,31 +155,41 @@ function Simple2DNavMesh:set_terrain_batch(terrain_data)
     end
 end
 
--- 添加动态障碍物
+-- 添加动态障碍物，返回 obstacle_id
 function Simple2DNavMesh:add_obstacle(world_x, world_y, radius)
+    self.next_obstacle_id = (self.next_obstacle_id or 0) + 1
     local obstacle = {
-        x = world_x,
-        y = world_y,
-        radius = radius,
-        affected_nodes = {}  -- 记录受影响的节点
+        id = self.next_obstacle_id,
+        x = tonumber(world_x) or 0,
+        y = tonumber(world_y) or 0,
+        radius = tonumber(radius) or 0,
+        affected_nodes = {},
     }
-    table.insert(self.dynamic_obstacles, obstacle)
-    
-    -- 只更新受影响的网格节点
+    self.obstacles[obstacle.id] = obstacle
     self:update_obstacle_affected_nodes(obstacle)
+    return obstacle.id
 end
 
--- 移除动态障碍物
-function Simple2DNavMesh:remove_obstacle(world_x, world_y, radius)
-    for i = #self.dynamic_obstacles, 1, -1 do
-        local obstacle = self.dynamic_obstacles[i]
-        if obstacle.x == world_x and obstacle.y == world_y and obstacle.radius == radius then
-            -- 恢复受影响的节点
+-- 按 id 移除；兼容旧调用 remove_obstacle(x, y, radius)
+function Simple2DNavMesh:remove_obstacle(id_or_x, y, radius)
+    local obstacle
+    if y == nil then
+        obstacle = self.obstacles[id_or_x]
+        if obstacle then
             self:restore_obstacle_affected_nodes(obstacle)
-            table.remove(self.dynamic_obstacles, i)
-            break
+            self.obstacles[id_or_x] = nil
+            return true
+        end
+        return false
+    end
+    for id, ob in pairs(self.obstacles) do
+        if ob.x == id_or_x and ob.y == y and ob.radius == radius then
+            self:restore_obstacle_affected_nodes(ob)
+            self.obstacles[id] = nil
+            return true
         end
     end
+    return false
 end
 
 -- 检查障碍物是否与格子重叠
@@ -309,8 +339,8 @@ function Simple2DNavMesh:update_all_obstacle_affected_nodes()
     end
     
     -- 重新应用所有动态障碍物
-    for _, obstacle in ipairs(self.dynamic_obstacles) do
-        obstacle.affected_nodes = {}  -- 清空之前的记录
+    for _, obstacle in pairs(self.obstacles) do
+        obstacle.affected_nodes = {}
         self:update_obstacle_affected_nodes(obstacle)
     end
 end
@@ -319,7 +349,6 @@ end
 function Simple2DNavMesh:find_path(start_x, start_y, end_x, end_y, options)
     options = options or {}
     
-    -- 检查缓存
     local cache_key = string.format("%.1f_%.1f_%.1f_%.1f", start_x, start_y, end_x, end_y)
     if self.path_cache[cache_key] then
         return self.path_cache[cache_key]
@@ -335,20 +364,28 @@ function Simple2DNavMesh:find_path(start_x, start_y, end_x, end_y, options)
     if not start_node.walkable or not end_node.walkable then
         return nil, "起点或终点不可通行"
     end
+
+    if start_node == end_node then
+        local path = { { x = start_x, y = start_y } }
+        if start_x ~= end_x or start_y ~= end_y then
+            path[#path + 1] = { x = end_x, y = end_y }
+        end
+        self.path_cache[cache_key] = path
+        return path
+    end
     
-    -- A*算法实现
-    local open_set = MinHeap.new(function(a, b) 
-        return a.f < b.f 
+    self.search_id = (self.search_id or 0) + 1
+    local search_id = self.search_id
+    local open_set = MinHeap.new(function(a, b)
+        return a.f < b.f
     end)
     local closed_set = {}
-    local came_from = {}
-    local max_iterations = self.grid_width * self.grid_height  -- 最大迭代次数
+    local max_iterations = self.grid_width * self.grid_height
     local iterations = 0
-    
-    -- 重置所有节点的状态
-    for y = 1, self.grid_height do
-        for x = 1, self.grid_width do
-            local node = self.grid[y][x]
+
+    local function touch(node)
+        if node.search_id ~= search_id then
+            node.search_id = search_id
             node.g = math.huge
             node.h = 0
             node.f = math.huge
@@ -356,7 +393,7 @@ function Simple2DNavMesh:find_path(start_x, start_y, end_x, end_y, options)
         end
     end
     
-    -- 初始化起点
+    touch(start_node)
     start_node.g = 0
     start_node.h = self:heuristic(start_node, end_node)
     start_node.f = start_node:get_f()
@@ -364,77 +401,64 @@ function Simple2DNavMesh:find_path(start_x, start_y, end_x, end_y, options)
     
     while not open_set:empty() and iterations < max_iterations do
         iterations = iterations + 1
-        
-        -- 找到f值最小的节点
         local current = open_set:pop()
-        closed_set[current] = true  -- 使用哈希表提高查找效率
+        closed_set[current] = true
         
-        -- 到达终点
         if current == end_node then
-            local path = self:reconstruct_path(came_from, end_node, start_x, start_y, end_x, end_y)
-            
-            -- 路径平滑
-            if options.smooth then
-                path = self:smooth_path(path, options.smooth_factor or 0.3)
+            local path = self:reconstruct_path(end_node, start_x, start_y, end_x, end_y)
+            if options.smooth ~= false then
+                path = self:smooth_path(path)
             end
-            
-            -- 缓存结果
             self.path_cache[cache_key] = path
             return path
         end
         
-        -- 检查邻居节点
         for _, neighbor in ipairs(current.neighbors) do
-            if not neighbor.walkable or closed_set[neighbor] then
-                goto continue
-            end
-            
-            -- 计算新代价
-            local tentative_g = current.g + self:calc_move_cost(current, neighbor)
-            
-            -- 检查是否已在开放列表中
-            local in_open_set = false
-            for _, open_node in ipairs(open_set.items) do
-                if open_node == neighbor then
-                    in_open_set = true
-                    break
+            if neighbor.walkable and not closed_set[neighbor] then
+                local dx = neighbor.x - current.x
+                local dy = neighbor.y - current.y
+                local corner_ok = true
+                if dx ~= 0 and dy ~= 0 then
+                    local side_a = self.grid[current.y][neighbor.x]
+                    local side_b = self.grid[neighbor.y][current.x]
+                    if not side_a or not side_a.walkable or not side_b or not side_b.walkable then
+                        corner_ok = false
+                    end
+                end
+                if corner_ok then
+                    touch(neighbor)
+                    local tentative_g = current.g + self:calc_move_cost(current, neighbor)
+                    if tentative_g < neighbor.g then
+                        neighbor.g = tentative_g
+                        neighbor.h = self:heuristic(neighbor, end_node)
+                        neighbor.parent = current
+                        neighbor.f = neighbor:get_f()
+                        if open_set.item_positions[neighbor.id] then
+                            open_set:update_key(neighbor.id, neighbor.f)
+                        else
+                            open_set:push(neighbor)
+                        end
+                    end
                 end
             end
-            
-            if in_open_set then
-                -- 节点已在开放列表中，检查是否需要更新
-                if tentative_g < neighbor.g then
-                    neighbor.g = tentative_g
-                    neighbor.parent = current
-                    neighbor.f = neighbor:get_f()
-                    open_set:update_key(neighbor.id, neighbor.f)
-                end
-            else
-                -- 新节点，添加到开放列表
-                neighbor.g = tentative_g
-                neighbor.h = self:heuristic(neighbor, end_node)
-                neighbor.parent = current
-                neighbor.f = neighbor:get_f()
-                open_set:push(neighbor)
-            end
-            
-            ::continue::
         end
     end
     
-    -- 没找到路径
     if iterations >= max_iterations then
         return nil, "寻路超时，可能陷入死循环"
-    else
-        return nil, "找不到路径"
     end
+    return nil, "找不到路径"
 end
 
--- 启发式函数（曼哈顿距离）
+-- 八方向启发式（octile）
 function Simple2DNavMesh:heuristic(node1, node2)
     local dx = math.abs(node2.x - node1.x)
     local dy = math.abs(node2.y - node1.y)
-    return (dx + dy) * self.grid_size
+    local d = self.grid_size
+    if dx < dy then
+        dx, dy = dy, dx
+    end
+    return d * (dx - dy) + d * 1.41421356 * dy
 end
 
 -- 计算移动代价
@@ -450,7 +474,7 @@ function Simple2DNavMesh:calc_move_cost(from_node, to_node)
 end
 
 -- 重构路径
-function Simple2DNavMesh:reconstruct_path(came_from, end_node, start_x, start_y, end_x, end_y)
+function Simple2DNavMesh:reconstruct_path(end_node, start_x, start_y, end_x, end_y)
     local path = {}
     local current = end_node
     
@@ -460,7 +484,6 @@ function Simple2DNavMesh:reconstruct_path(came_from, end_node, start_x, start_y,
         current = current.parent
     end
     
-    -- 添加精确的起点和终点
     if #path > 0 then
         path[1] = {x = start_x, y = start_y}
         path[#path] = {x = end_x, y = end_y}
@@ -469,33 +492,21 @@ function Simple2DNavMesh:reconstruct_path(came_from, end_node, start_x, start_y,
     return path
 end
 
--- 路径平滑
-function Simple2DNavMesh:smooth_path(path, smooth_factor)
+-- 视线拉直：能直线走就丢掉中间格
+function Simple2DNavMesh:smooth_path(path)
     if not path or #path < 3 then
         return path
     end
-    
-    smooth_factor = smooth_factor or 0.3
-    local smoothed_path = {path[1]}
-    
-    for i = 2, #path - 1 do
-        local prev = path[i - 1]
-        local current = path[i]
-        local next = path[i + 1]
-        
-        -- 检查直线是否可行
-        if self:is_line_walkable(prev.x, prev.y, next.x, next.y) then
-            -- 可以直线通过，跳过中间点
-        else
-            -- 需要保留中间点，但可以稍微平滑
-            local smooth_x = current.x * (1 - smooth_factor) + (prev.x + next.x) * smooth_factor * 0.5
-            local smooth_y = current.y * (1 - smooth_factor) + (prev.y + next.y) * smooth_factor * 0.5
-            table.insert(smoothed_path, {x = smooth_x, y = smooth_y})
+    local smoothed = { path[1] }
+    local anchor = 1
+    for i = 2, #path do
+        if not self:is_line_walkable(path[anchor].x, path[anchor].y, path[i].x, path[i].y) then
+            smoothed[#smoothed + 1] = path[i - 1]
+            anchor = i - 1
         end
     end
-    
-    table.insert(smoothed_path, path[#path])
-    return smoothed_path
+    smoothed[#smoothed + 1] = path[#path]
+    return smoothed
 end
 
 -- 检查直线是否可行
@@ -559,6 +570,10 @@ function Simple2DNavMesh:get_stats()
         end
     end
     
+    local obstacle_count = 0
+    for _ in pairs(self.obstacles) do
+        obstacle_count = obstacle_count + 1
+    end
     return {
         grid_width = self.grid_width,
         grid_height = self.grid_height,
@@ -566,7 +581,7 @@ function Simple2DNavMesh:get_stats()
         walkable_nodes = walkable_nodes,
         walkable_ratio = walkable_nodes / total_nodes,
         terrain_distribution = terrain_stats,
-        dynamic_obstacles = #self.dynamic_obstacles,
+        dynamic_obstacles = obstacle_count,
         cache_size = 0  -- 可以添加缓存大小统计
     }
 end

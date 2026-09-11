@@ -306,6 +306,26 @@ local c2s_builder = builder.new()
         }
     })
 
+    :protocol("map_march_start", 800, {
+        request = {
+            x = "integer",
+            y = "integer",
+        }
+    })
+
+    :protocol("map_march_attack", 801, {
+        request = {
+            march_uid = "string",
+            target_uid = "string",
+        }
+    })
+
+    :protocol("map_march_cancel", 802, {
+        request = {
+            march_uid = "string",
+        }
+    })
+
 proto.c2s = sprotoparser.parse(c2s_builder:to_string())
 
 -- 注册 C2S 协议 schema（用于验证）
@@ -916,6 +936,111 @@ local s2c_builder = builder.new()
     :protocol("task_update_notify", 673, {
         request = {
             task = "task_info",
+        }
+    })
+
+    :type("map_entity_monster", {
+        uid = "string",
+        x = "integer",
+        y = "integer",
+        kind = "string",
+        region_id = "integer",
+        visibility_layer = "integer",
+        owner_player_id = "integer",
+    })
+
+    :type("map_entity_item", {
+        uid = "string",
+        x = "integer",
+        y = "integer",
+        item_id = "integer",
+        count = "integer",
+        region_id = "integer",
+        visibility_layer = "integer",
+        owner_player_id = "integer",
+    })
+
+    :type("map_march_info", {
+        uid = "string",
+        owner_player_id = "integer",
+        x = "integer",
+        y = "integer",
+        hp = "integer",
+        max_hp = "integer",
+        state = "string",
+        target_uid = "string",
+        battle_id = "string",
+        shard_id = "integer",
+    })
+
+    :protocol("map_visible_sync_notify", 805, {
+        request = {
+            map_id = "integer",
+            region_id = "integer",
+            monsters = "*map_entity_monster",
+            items = "*map_entity_item",
+            marches = "*map_march_info",
+        }
+    })
+
+    :protocol("map_march_start_response", 800, {
+        request = {
+            result = "integer",
+            message = "string",
+            march_uid = "string",
+            x = "integer",
+            y = "integer",
+            dest_x = "integer",
+            dest_y = "integer",
+            hp = "integer",
+            max_hp = "integer",
+            state = "string",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_march_attack_response", 801, {
+        request = {
+            result = "integer",
+            message = "string",
+            march_uid = "string",
+            target_uid = "string",
+            state = "string",
+            battle_id = "string",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_march_cancel_response", 802, {
+        request = {
+            result = "integer",
+            message = "string",
+            march_uid = "string",
+            removed = "boolean",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_march_sync_notify", 803, {
+        request = {
+            map_id = "integer",
+            marches = "*map_march_info",
+            removed_uid = "string",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_march_battle_notify", 804, {
+        request = {
+            map_id = "integer",
+            battle_id = "string",
+            phase = "string",
+            attacker_uid = "string",
+            defender_uid = "string",
+            attacker_hp = "integer",
+            defender_hp = "integer",
+            reason = "string",
+            shard_id = "integer",
         }
     })
 
