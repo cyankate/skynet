@@ -5,7 +5,7 @@ local shard = require "map.shard"
 
 -- 只负责拉起各 chunk 分片 mapS，不常驻转发。协议直连 .map.{map_id}.{shard_id}
 skynet.start(function()
-    local def = shard.world_def()
+    local def = shard.default_def()
     for _, sid in ipairs(shard.all_ids()) do
         skynet.newservice("mapS", def.map_id, sid)
         local name = shard.service_name(def.map_id, sid)

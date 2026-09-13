@@ -147,7 +147,7 @@ local function unload_account_from_agent(account_key, account)
     if player and player_id then
         local shard = require "map.shard"
         for _, sid in ipairs(shard.all_ids()) do
-            local mapS = skynet.localname(shard.service_name(player.map_id_ or shard.WORLD_MAP_ID, sid))
+            local mapS = skynet.localname(shard.service_name(player.map_id_ or shard.DEFAULT_MAP_ID, sid))
             if mapS then
                 skynet.send(mapS, "lua", "leave_map", player_id)
             end

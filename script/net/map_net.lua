@@ -51,7 +51,7 @@ local function call_march_map(player, player_id, march_uid, cmd, ...)
             return nil
         end
         tried[sid] = true
-        local addr = shard_addr((player and player.map_id_) or shard.WORLD_MAP_ID, sid)
+        local addr = shard_addr((player and player.map_id_) or shard.DEFAULT_MAP_ID, sid)
         if not addr then
             return nil
         end
@@ -87,7 +87,7 @@ local function player_map_addr(player)
     if not player or player.map_shard_id_ == nil then
         return nil
     end
-    return shard_addr(player.map_id_ or shard.WORLD_MAP_ID, player.map_shard_id_)
+    return shard_addr(player.map_id_ or shard.DEFAULT_MAP_ID, player.map_shard_id_)
 end
 
 local function call_player_map(player, player_id, cmd, ...)
@@ -99,7 +99,7 @@ local function call_player_map(player, player_id, cmd, ...)
         end
     end
     for _, sid in ipairs(shard.all_ids()) do
-        local a = shard_addr(shard.WORLD_MAP_ID, sid)
+        local a = shard_addr(shard.DEFAULT_MAP_ID, sid)
         if a and a ~= addr then
             local ok, result = skynet.call(a, "lua", cmd, player_id, ...)
             if not (ok == false and result == "player not in map") then
@@ -112,7 +112,7 @@ end
 
 local function leave_all(player, player_id)
     for _, sid in ipairs(shard.all_ids()) do
-        local a = shard_addr((player and player.map_id_) or shard.WORLD_MAP_ID, sid)
+        local a = shard_addr((player and player.map_id_) or shard.DEFAULT_MAP_ID, sid)
         if a then
             pcall(skynet.call, a, "lua", "leave_map", player_id)
         end
@@ -121,7 +121,7 @@ local function leave_all(player, player_id)
 end
 
 local function on_map_list(player_id, msg)
-    local def = shard.world_def()
+    local def = shard.default_def()
     protocol_handler.send_to_player(player_id, "map_list_response", {
         result = 0,
         message = "ok",
@@ -129,7 +129,6 @@ local function on_map_list(player_id, msg)
             {
                 map_id = def.map_id,
                 name = def.name,
-                region_count = def.region_count,
             },
         },
     })
@@ -138,7 +137,7 @@ end
 
 local function on_map_enter(player_id, msg)
     local player = user_mgr.get_player_obj(player_id)
-    local def = shard.world_def()
+    local def = shard.default_def()
     local start = def.start or {}
     local sid = shard.shard_id_of_pos(start.x or 1, start.y or 1, def)
     leave_all(player, player_id)
@@ -151,7 +150,6 @@ local function on_map_enter(player_id, msg)
             scene_id = 0,
             x = 0,
             y = 0,
-            region_id = 0,
             shard_id = sid,
         })
         return false, "Map service not available"
@@ -166,7 +164,6 @@ local function on_map_enter(player_id, msg)
             scene_id = 0,
             x = 0,
             y = 0,
-            region_id = 0,
             shard_id = sid,
         })
         return false, result
@@ -179,7 +176,6 @@ local function on_map_enter(player_id, msg)
         scene_id = result.scene_id,
         x = result.x,
         y = result.y,
-        region_id = result.region_id,
         shard_id = result.shard_id or sid,
     })
     protocol_handler.send_to_player(player_id, "main_scene_enter_notify", {
@@ -326,7 +322,7 @@ local function on_map_state(player_id, msg)
     end
     if not result or (result.map_id or 0) <= 0 then
         for _, sid in ipairs(shard.all_ids()) do
-            local a = shard_addr(shard.WORLD_MAP_ID, sid)
+            local a = shard_addr(shard.DEFAULT_MAP_ID, sid)
             if a and a ~= addr then
                 local st = skynet.call(a, "lua", "get_state", player_id)
                 if st and (st.map_id or 0) > 0 then
@@ -340,15 +336,12 @@ local function on_map_state(player_id, msg)
     result = result or {
         map_id = 0,
         scene_id = 0,
-        region_id = 0,
         x = 0,
         y = 0,
-        explored_region_count = 0,
-        total_region_count = 0,
-        fog_percent = 100,
         monsters = {},
         items = {},
         marches = {},
+        buildings = {},
         shard_id = 0,
     }
     protocol_handler.send_to_player(player_id, "map_state_response", {
@@ -356,15 +349,12 @@ local function on_map_state(player_id, msg)
         message = "ok",
         map_id = result.map_id,
         scene_id = result.scene_id,
-        region_id = result.region_id,
         x = result.x,
         y = result.y,
-        explored_region_count = result.explored_region_count,
-        total_region_count = result.total_region_count,
-        fog_percent = result.fog_percent,
         monsters = result.monsters,
         items = result.items,
         marches = result.marches or {},
+        buildings = result.buildings or {},
         shard_id = result.shard_id or 0,
     })
     return true
@@ -378,32 +368,6 @@ local function on_map_leave(player_id, msg)
         message = "ok",
         map_id = 0,
         shard_id = 0,
-    })
-    return true
-end
-
-local function on_map_unlock_region(player_id, msg)
-    local player = user_mgr.get_player_obj(player_id)
-    local ok, result = call_player_map(player, player_id, "unlock_region", tonumber(msg and msg.region_id) or 0)
-    if not ok then
-        protocol_handler.send_to_player(player_id, "map_unlock_region_response", {
-            result = 1,
-            message = result or "区域解锁失败",
-            map_id = player and player.map_id_ or 0,
-            region_id = tonumber(msg and msg.region_id) or 0,
-            key_count = 0,
-            shard_id = player and player.map_shard_id_ or 0,
-        })
-        return false, result
-    end
-    remember(player, result)
-    protocol_handler.send_to_player(player_id, "map_unlock_region_response", {
-        result = 0,
-        message = "ok",
-        map_id = result.map_id or 0,
-        region_id = result.region_id or tonumber(msg and msg.region_id) or 0,
-        key_count = result.key_count or 0,
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -509,7 +473,6 @@ return {
     map_pick_item = on_map_pick_item,
     map_state = on_map_state,
     map_leave = on_map_leave,
-    map_unlock_region = on_map_unlock_region,
     map_march_start = on_map_march_start,
     map_march_attack = on_map_march_attack,
     map_march_cancel = on_map_march_cancel,

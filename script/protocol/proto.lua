@@ -306,6 +306,51 @@ local c2s_builder = builder.new()
         }
     })
 
+    -- 大地图 C2S（528-560；避开 talent 541）
+    :protocol("map_list", 529, {
+        request = {}
+    })
+
+    :protocol("map_enter", 531, {
+        request = {
+            map_id = "integer",
+        }
+    })
+
+    :protocol("map_move", 533, {
+        request = {
+            x = "integer",
+            y = "integer",
+        }
+    })
+
+    :protocol("map_interact_monster", 535, {
+        request = {
+            monster_uid = "string",
+        }
+    })
+
+    :protocol("map_battle_result", 537, {
+        request = {
+            monster_uid = "string",
+            win = "boolean",
+        }
+    })
+
+    :protocol("map_leave", 544, {
+        request = {}
+    })
+
+    :protocol("map_state", 546, {
+        request = {}
+    })
+
+    :protocol("map_pick_item", 550, {
+        request = {
+            item_uid = "string",
+        }
+    })
+
     :protocol("map_march_start", 800, {
         request = {
             x = "integer",
@@ -941,30 +986,35 @@ local s2c_builder = builder.new()
 
     :type("map_entity_monster", {
         uid = "string",
-        x = "integer",
-        y = "integer",
+        x = "double",
+        y = "double",
         kind = "string",
-        region_id = "integer",
-        visibility_layer = "integer",
         owner_player_id = "integer",
     })
 
     :type("map_entity_item", {
         uid = "string",
-        x = "integer",
-        y = "integer",
+        x = "double",
+        y = "double",
         item_id = "integer",
         count = "integer",
-        region_id = "integer",
-        visibility_layer = "integer",
+        owner_player_id = "integer",
+    })
+
+    :type("map_entity_building", {
+        uid = "string",
+        x = "double",
+        y = "double",
+        building_id = "integer",
+        level = "integer",
         owner_player_id = "integer",
     })
 
     :type("map_march_info", {
         uid = "string",
         owner_player_id = "integer",
-        x = "integer",
-        y = "integer",
+        x = "double",
+        y = "double",
         hp = "integer",
         max_hp = "integer",
         state = "string",
@@ -973,13 +1023,156 @@ local s2c_builder = builder.new()
         shard_id = "integer",
     })
 
-    :protocol("map_visible_sync_notify", 805, {
+    :type("map_info", {
+        map_id = "integer",
+        name = "string",
+    })
+
+    :protocol("main_scene_enter_notify", 528, {
+        request = {
+            scene_id = "integer",
+            x = "integer",
+            y = "integer",
+        }
+    })
+
+    :protocol("map_list_response", 530, {
+        request = {
+            result = "integer",
+            message = "string",
+            maps = "*map_info",
+        }
+    })
+
+    :protocol("map_enter_response", 532, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            scene_id = "integer",
+            x = "integer",
+            y = "integer",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_move_response", 534, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            x = "integer",
+            y = "integer",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_interact_monster_response", 536, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            monster_uid = "string",
+            battle_type = "string",
+            inst_id = "string",
+            scene_id = "integer",
+            accepted = "boolean",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_battle_result_response", 538, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            monster_uid = "string",
+            win = "boolean",
+            removed = "boolean",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_monster_removed_notify", 539, {
         request = {
             map_id = "integer",
-            region_id = "integer",
+            monster_uid = "string",
+            x = "integer",
+            y = "integer",
+            killer_player_id = "integer",
+        }
+    })
+
+    :protocol("map_leave_response", 545, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_state_response", 547, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            scene_id = "integer",
+            x = "integer",
+            y = "integer",
             monsters = "*map_entity_monster",
             items = "*map_entity_item",
             marches = "*map_march_info",
+            buildings = "*map_entity_building",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_pick_item_response", 551, {
+        request = {
+            result = "integer",
+            message = "string",
+            map_id = "integer",
+            item_uid = "string",
+            item_id = "integer",
+            count = "integer",
+            removed = "boolean",
+            shard_id = "integer",
+        }
+    })
+
+    :protocol("map_item_removed_notify", 553, {
+        request = {
+            map_id = "integer",
+            item_uid = "string",
+            x = "integer",
+            y = "integer",
+            picker_player_id = "integer",
+        }
+    })
+
+    :protocol("map_visible_sync_notify", 805, {
+        request = {
+            map_id = "integer",
+            monsters = "*map_entity_monster",
+            items = "*map_entity_item",
+            marches = "*map_march_info",
+            buildings = "*map_entity_building",
+        }
+    })
+
+    :protocol("map_visible_delta_notify", 806, {
+        request = {
+            map_id = "integer",
+            enter_monsters = "*map_entity_monster",
+            enter_items = "*map_entity_item",
+            enter_marches = "*map_march_info",
+            enter_buildings = "*map_entity_building",
+            leave_uids = "*string",
+            update_monsters = "*map_entity_monster",
+            update_items = "*map_entity_item",
+            update_marches = "*map_march_info",
+            update_buildings = "*map_entity_building",
         }
     })
 

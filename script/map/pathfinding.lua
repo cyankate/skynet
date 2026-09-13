@@ -3,18 +3,18 @@
 local class = require "utils.class"
 local Simple2DNavMesh = require "scene.pathfinding.simple_2d_navmesh"
 
-local WorldPath = class("WorldPath")
+local MapPath = class("MapPath")
 
-WorldPath.CELL_SIZE = 8
-WorldPath.SNAP_CELLS = 24
+MapPath.CELL_SIZE = 8
+MapPath.SNAP_CELLS = 24
 
-function WorldPath:ctor(def)
+function MapPath:ctor(def)
     self.def = def
     self.map_id = def.map_id
-    self.nav = Simple2DNavMesh.new(def.width, def.height, WorldPath.CELL_SIZE)
+    self.nav = Simple2DNavMesh.new(def.width, def.height, MapPath.CELL_SIZE)
 end
 
-function WorldPath:clamp(x, y)
+function MapPath:clamp(x, y)
     local w = self.def.width or 2048
     local h = self.def.height or 2048
     x = tonumber(x) or 1
@@ -32,19 +32,19 @@ function WorldPath:clamp(x, y)
     return x, y
 end
 
-function WorldPath:is_walkable(x, y)
+function MapPath:is_walkable(x, y)
     x, y = self:clamp(x, y)
     return self.nav:is_walkable(x, y)
 end
 
-function WorldPath:snap_walkable(x, y)
+function MapPath:snap_walkable(x, y)
     x, y = self:clamp(x, y)
     if self.nav:is_walkable(x, y) then
         return x, y
     end
     local gx, gy = self.nav:world_to_grid(x, y)
     local best, best_d2
-    for r = 1, WorldPath.SNAP_CELLS do
+    for r = 1, MapPath.SNAP_CELLS do
         for dy = -r, r do
             for dx = -r, r do
                 if math.abs(dx) == r or math.abs(dy) == r then
@@ -68,7 +68,7 @@ function WorldPath:snap_walkable(x, y)
     return nil
 end
 
-function WorldPath:find_path(sx, sy, ex, ey, keep_end)
+function MapPath:find_path(sx, sy, ex, ey, keep_end)
     sx, sy = self:clamp(sx, sy)
     ex, ey = self:clamp(ex, ey)
     local nsx, nsy = self:snap_walkable(sx, sy)
@@ -92,23 +92,23 @@ function WorldPath:find_path(sx, sy, ex, ey, keep_end)
     return path
 end
 
-function WorldPath:add_obstacle(x, y, radius)
+function MapPath:add_obstacle(x, y, radius)
     x, y = self:clamp(x, y)
     return self.nav:add_obstacle(x, y, tonumber(radius) or 0)
 end
 
-function WorldPath:remove_obstacle(obstacle_id)
+function MapPath:remove_obstacle(obstacle_id)
     return self.nav:remove_obstacle(obstacle_id)
 end
 
-function WorldPath:set_terrain(x, y, terrain_type)
+function MapPath:set_terrain(x, y, terrain_type)
     x, y = self:clamp(x, y)
     self.nav:set_terrain(x, y, terrain_type)
     self.nav:clear_path_cache()
 end
 
-function WorldPath:get_stats()
+function MapPath:get_stats()
     return self.nav:get_stats()
 end
 
-return WorldPath
+return MapPath

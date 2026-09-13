@@ -4,7 +4,7 @@ local chunk = require "map.chunk"
 local service_ctx = require "runtime.service_ctx"
 
 -- 地图世界权威冷库（格子上的、不属于某个玩家的数据）。
--- 玩家坐标 / 迷雾 / 私有怪物不进这里。
+-- 玩家坐标 / 私有怪物不进这里。
 local M = {}
 
 local COLLECTION = "map_entity"
@@ -28,7 +28,6 @@ local TOP_KEYS = {
 
 local RUNTIME_KEYS = {
     in_aoi = true,
-    id = true,
     view_range = true,
     is_ghost = true,
     owner_shard_id = true,
@@ -118,7 +117,6 @@ function M.from_doc(doc)
     if obj.type == "item" then
         obj.type = M.TYPE_RESOURCE
     end
-    obj.id = obj.uid
     return obj
 end
 

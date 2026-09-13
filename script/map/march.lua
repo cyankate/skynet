@@ -64,10 +64,9 @@ function M.new(opts)
     opts = opts or {}
     local x = tonumber(opts.x) or 1
     local y = tonumber(opts.y) or 1
-    local uid = tostring(opts.uid or "")
+    local uid = opts.uid or ""
     return {
         uid = uid,
-        id = uid,
         type = aoi_object.TYPE.MARCH,
         view_range = 0,
         is_ghost = false,
@@ -92,7 +91,6 @@ function M.new(opts)
         map_id = opts.map_id,
         shard_id = opts.shard_id,
         owner_shard_id = opts.owner_shard_id or opts.shard_id,
-        visibility_layer = 2,
         alive = opts.alive ~= false,
         in_aoi = false,
         last_notify_x = x,
@@ -134,21 +132,7 @@ function M.current_dest(m)
 end
 
 function M.pack_visible(m, shard_id)
-    if not m then
-        return nil
-    end
-    return {
-        uid = m.uid,
-        owner_player_id = m.owner_player_id or 0,
-        x = math.floor((m.x or 0) + 0.5),
-        y = math.floor((m.y or 0) + 0.5),
-        hp = m.hp or 0,
-        max_hp = m.max_hp or M.MAX_HP,
-        state = m.state or "",
-        target_uid = m.target_uid or "",
-        battle_id = m.battle_id or "",
-        shard_id = shard_id or m.shard_id or 0,
-    }
+    return aoi_object.pack_visible(m, { shard_id = shard_id })
 end
 
 function M.from_ghost(obj)
@@ -156,7 +140,7 @@ function M.from_ghost(obj)
         return nil
     end
     return {
-        uid = tostring(aoi_object.uid_of(obj)),
+        uid = obj.uid,
         x = obj.x,
         y = obj.y,
         hp = tonumber(obj.hp) or M.MAX_HP,

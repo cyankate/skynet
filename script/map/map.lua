@@ -6,13 +6,14 @@ local shard = require "map.shard"
 local map_store = require "map.map_store"
 local MapAOI = require "map.map_aoi"
 local aoi_object = require "map.aoi_object"
+local view_sync = require "map.view_sync"
 
 local Map = class("Map")
 
 -- 一张连续大世界共用一个 map_id（同一套坐标 / chunk / 行军）。
 -- 多个 map_id 只用于不相接的空间：不同王国、赛季图、副本地图。
 function Map.default_defs()
-    local def = shard.world_def()
+    local def = shard.default_def()
     return {
         [def.map_id] = def,
     }
@@ -22,14 +23,12 @@ function Map:ctor(def, shard_id)
     self.def = def
     self.map_id = def.map_id
     self.shard_id = tonumber(shard_id) or 0
-    self.aoi = nil
+    self.aoi = MapAOI.new(def.width, def.height, def.grid_size or 50)
     self.public_monsters = {}
     self.public_monsters_ready = false
     self.public_items = {}
     self.public_items_ready = false
     self.store_ephemeral = false
-    self.public_region_opened = {}
-    self._meta_opened = nil
     self.ghost_replicas = {}  -- uid => { [neighbor_shard] = true }
     self.ghost_payloads = {}  -- uid => 真身 obj 引用（仅贴边投影时有）
 end
@@ -51,68 +50,38 @@ function Map:rand_spawn()
     return math.random(x0, x1), math.random(y0, y1)
 end
 
-function Map:region_id(x, y)
-    local region_count = math.max(1, tonumber(self.def.region_count) or 1)
-    local side = math.max(1, math.floor(math.sqrt(region_count)))
-    local cell_w = math.max(1, math.floor(self.def.width / side))
-    local cell_h = math.max(1, math.floor(self.def.height / side))
-    local col = math.max(0, math.min(side - 1, math.floor((x - 1) / cell_w)))
-    local row = math.max(0, math.min(side - 1, math.floor((y - 1) / cell_h)))
-    local region_id = row * side + col + 1
-    if region_id > region_count then
-        region_id = region_count
-    end
-    return region_id
-end
-
-function Map:region_side()
-    local region_count = math.max(1, tonumber(self.def.region_count) or 1)
-    return math.max(1, math.floor(math.sqrt(region_count))), region_count
-end
-
-function Map:is_adjacent_region(from_region_id, to_region_id)
-    if from_region_id == to_region_id then
-        return true
-    end
-    local side = self:region_side()
-    local a = from_region_id - 1
-    local b = to_region_id - 1
-    if a < 0 or b < 0 then
-        return false
-    end
-    local ar, ac = math.floor(a / side), a % side
-    local br, bc = math.floor(b / side), b % side
-    return math.abs(ar - br) + math.abs(ac - bc) == 1
-end
-
-function Map:ensure_aoi()
-    if self.aoi then
-        return true
-    end
-    self.aoi = MapAOI.new(self.def.width, self.def.height, self.def.grid_size or 50)
-    return true
-end
-
-function Map:on_aoi_changed(x, y, etype)
-end
-
-function Map:_emit_aoi(x, y, etype, old_x, old_y)
-    if x == nil then
+-- 非观察者实体进/离视野：同步周围观察者对该 uid 的可见性
+-- 观察者自身不推（客户端自己知道自己在哪）
+local function sync_visible(map, x, y, uid, otype)
+    if x == nil or not uid then
         return
     end
-    self:on_aoi_changed(x, y, etype)
-    if old_x ~= nil and (old_x ~= x or old_y ~= y) then
-        self:on_aoi_changed(old_x, old_y, etype)
+    if otype == aoi_object.TYPE.OBSERVER then
+        return
     end
+    view_sync.sync_obj_visible_around(map, { x = x, y = y }, uid)
+end
+
+-- 移动时新旧位置都要扫：旧位置补 leave，新位置补 enter，合并去重
+local function sync_visible_move(map, x, y, old_x, old_y, uid, otype)
+    if otype == aoi_object.TYPE.OBSERVER then
+        return
+    end
+    if x == nil or not uid then
+        return
+    end
+    view_sync.sync_obj_visible_around(map, {
+        { x = x, y = y },
+        old_x ~= nil and (old_x ~= x or old_y ~= y) and { x = old_x, y = old_y } or nil,
+    }, uid)
 end
 
 function Map:enter_obj(obj)
-    self:ensure_aoi()
     local ok, err, x, y, otype, old_x, old_y = self.aoi:enter(obj)
     if ok then
         self:sync_ghosts(obj)
         if x ~= nil then
-            self:_emit_aoi(x, y, otype, old_x, old_y)
+            sync_visible_move(self, x, y, old_x, old_y, obj and obj.uid, otype)
         end
     end
     return ok, err
@@ -120,54 +89,48 @@ end
 
 function Map:leave_obj(uid)
     self:clear_ghosts(uid)
-    if not self.aoi then
-        return true
-    end
     local ok, err, x, y, otype = self.aoi:leave(uid)
     if ok and x ~= nil then
-        self:_emit_aoi(x, y, otype)
+        sync_visible(self, x, y, uid, otype)
     end
     return ok, err
 end
 
 function Map:move_obj(uid, x, y)
-    if not self.aoi then
-        return false, "aoi not ready"
-    end
     local ok, err, nx, ny, otype, old_x, old_y = self.aoi:move(uid, x, y)
     if ok then
         local obj = self.aoi:get(uid)
         if obj then
             self:sync_ghosts(obj)
         end
-        self:_emit_aoi(nx, ny, otype, old_x, old_y)
+        sync_visible_move(self, nx, ny, old_x, old_y, uid, otype)
     end
     return ok, err
 end
 
 function Map:list_surrounding(uid)
-    if not self.aoi then
-        return {}
-    end
     return self.aoi:list_surrounding(uid)
 end
 
 function Map:around(x, y, view_range)
-    if not self.aoi then
-        return {}
-    end
     return self.aoi:around(x, y, view_range)
+end
+
+function Map:observers_around(x, y, view_range)
+    return self.aoi:observers_around(x, y, view_range)
 end
 
 function Map:should_ghost(obj)
     return aoi_object.should_project(obj)
 end
 
+-- ghost 投影：实体贴边时向邻居 shard 同步一份镜像，跨片视野/交互用
+-- 真身 enter 时若已有 ghost，ghost 让位（enter 里处理）
 function Map:sync_ghosts(obj)
     if not self:should_ghost(obj) then
         return
     end
-    local id = aoi_object.uid_of(obj)
+    local id = obj.uid
     local want = {}
     for _, nid in ipairs(shard.halo_neighbors(self.shard_id, obj.x, obj.y, shard.HALO_RANGE, self.def)) do
         want[nid] = true
@@ -199,54 +162,46 @@ function Map:sync_ghosts(obj)
 end
 
 function Map:clear_ghosts(uid)
-    local id = tostring(uid)
-    local old = self.ghost_replicas[id]
-    local obj = self.ghost_payloads[id]
+    local old = self.ghost_replicas[uid]
+    local obj = self.ghost_payloads[uid]
     local x = obj and obj.x or 0
     local y = obj and obj.y or 0
     if old then
         for nid, _ in pairs(old) do
             local addr = shard.addr(self.map_id, nid)
             if addr then
-                skynet.send(addr, "lua", "ghost_remove", id, x, y)
+                skynet.send(addr, "lua", "ghost_remove", uid, x, y)
             end
         end
     end
-    self.ghost_replicas[id] = nil
-    self.ghost_payloads[id] = nil
+    self.ghost_replicas[uid] = nil
+    self.ghost_payloads[uid] = nil
 end
 
 function Map:apply_ghost_upsert(payload)
     if not payload then
         return false, "invalid payload"
     end
-    self:ensure_aoi()
     aoi_object.ensure(payload, {
         is_ghost = true,
         view_range = shard.HALO_RANGE,
     })
     local ok, err, x, y, otype, old_x, old_y = self.aoi:enter(payload)
     if ok and x ~= nil then
-        self:_emit_aoi(x, y, otype, old_x, old_y)
+        sync_visible_move(self, x, y, old_x, old_y, payload.uid, otype)
     end
     return ok, err
 end
 
 function Map:apply_ghost_remove(uid)
-    if not self.aoi then
-        return true
-    end
     local ok, err, x, y, otype = self.aoi:remove_ghost(uid)
     if ok and x ~= nil then
-        self:_emit_aoi(x, y, otype)
+        sync_visible(self, x, y, uid, otype)
     end
     return ok, err
 end
 
 function Map:get_obj(uid)
-    if not self.aoi then
-        return nil
-    end
     return self.aoi:get(uid)
 end
 
@@ -256,6 +211,17 @@ function Map:resync_border_ghosts()
     end
 end
 
+-- 邻居晚启动时，请对方把贴边投影再推一遍（ghost 恢复）
+function Map:request_neighbor_ghost_resync()
+    for _, nid in ipairs(self:neighbor_ids()) do
+        local addr = shard.addr(self.map_id, nid)
+        if addr then
+            skynet.send(addr, "lua", "resync_border_ghosts")
+        end
+    end
+end
+
+-- 进 AOI 并标记；alive=false 的实体不进（如已死亡怪物）
 function Map:attach(obj, otype)
     if not obj or not obj.uid or obj.in_aoi then
         return
@@ -324,10 +290,8 @@ function Map:seed_public_monsters()
             view_range = 0,
             is_ghost = false,
             chunk_id = chunk.from_pos(x, y, self.def.chunk_size),
-            region_id = self:region_id(x, y),
             alive = true,
             kind = "public",
-            visibility_layer = 2,
             owner_player_id = 0,
             version = 1,
         }
@@ -355,11 +319,9 @@ function Map:seed_public_items()
             view_range = 0,
             is_ghost = false,
             chunk_id = chunk.from_pos(x, y, self.def.chunk_size),
-            region_id = self:region_id(x, y),
             alive = true,
             item_id = 10001 + ((i - 1) % 3),
             count = 1,
-            visibility_layer = 2,
             owner_player_id = 0,
             version = 1,
         }
@@ -446,70 +408,6 @@ function Map:load_public_items()
     return objs
 end
 
-function Map:load_opened_regions()
-    local list, err = map_store.load(self.map_id, map_store.TYPE_META)
-    if err then
-        self.store_ephemeral = true
-        return
-    end
-    for _, obj in ipairs(list or {}) do
-        if obj.uid == "opened_regions" then
-            self._meta_opened = obj
-            local opened = {}
-            for _, rid in ipairs(obj.opened_ids or {}) do
-                opened[tonumber(rid) or rid] = true
-            end
-            self.public_region_opened = opened
-            return
-        end
-    end
-end
-
-function Map:save_opened_regions()
-    if not self.store_ephemeral then
-        local list = map_store.load(self.map_id, map_store.TYPE_META)
-        for _, obj in ipairs(list or {}) do
-            if obj.uid == "opened_regions" then
-                self._meta_opened = obj
-                for _, rid in ipairs(obj.opened_ids or {}) do
-                    self.public_region_opened[tonumber(rid) or rid] = true
-                end
-                break
-            end
-        end
-    end
-    local opened_ids = {}
-    for rid, on in pairs(self.public_region_opened) do
-        if on then
-            opened_ids[#opened_ids + 1] = tonumber(rid) or rid
-        end
-    end
-    table.sort(opened_ids, function(a, b)
-        return tostring(a) < tostring(b)
-    end)
-    local ent = self._meta_opened
-    if not ent then
-        ent = {
-            uid = "opened_regions",
-            type = map_store.TYPE_META,
-            map_id = self.map_id,
-            chunk_id = 0,
-            x = 0,
-            y = 0,
-            owner_player_id = 0,
-            version = 1,
-        }
-        ent._id = map_store.make_id(self.map_id, map_store.TYPE_META, ent.uid)
-        self._meta_opened = ent
-    end
-    ent.opened_ids = opened_ids
-    self:save(ent)
-end
-
-function Map:public_items()
-    return self.public_items
-end
-
 function Map:get_public_item(uid)
     return self.public_items[uid]
 end
@@ -533,24 +431,7 @@ function Map:save_item(item)
     return self:save(item)
 end
 
-function Map:is_public_region_opened(region_id)
-    return self.public_region_opened[region_id] and true or false
-end
-
-function Map:open_public_region(region_id, persist)
-    if self.public_region_opened[region_id] then
-        return false
-    end
-    self.public_region_opened[region_id] = true
-    if persist ~= false then
-        self:save_opened_regions()
-    end
-    return true
-end
-
 function Map:bootstrap()
-    self:ensure_aoi()
-    self:load_opened_regions()
     self:load_public_monsters()
     self:load_public_items()
     self:attach_all(self.public_monsters, aoi_object.TYPE.MONSTER)
@@ -558,6 +439,7 @@ function Map:bootstrap()
     local this = self
     skynet.timeout(100, function()
         this:resync_border_ghosts()
+        this:request_neighbor_ghost_resync()
     end)
 end
 

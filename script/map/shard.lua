@@ -5,21 +5,20 @@ local chunk = require "map.chunk"
 -- 坐标不局部化：每个 scene 仍用全图宽高。权威实体在所属分片，贴边邻居以 ghost 进 AOI。
 local M = {}
 
-M.WORLD_MAP_ID = 1001
+M.DEFAULT_MAP_ID = 1001
 M.SHARD_COLS = 2
 M.SHARD_ROWS = 2
 -- 贴边只读投影半径，需 >= 玩家视野，邻居实体进出才能进本片 AOI
 M.HALO_RANGE = 120
 
-function M.world_def()
+function M.default_def()
     return {
-        map_id = M.WORLD_MAP_ID,
+        map_id = M.DEFAULT_MAP_ID,
         name = "苍穹大陆",
         width = 2048,
         height = 2048,
         grid_size = 50,
         chunk_size = chunk.default_size(),
-        region_count = 16,
         start = { x = 120, y = 120 },
         shard_cols = M.SHARD_COLS,
         shard_rows = M.SHARD_ROWS,
