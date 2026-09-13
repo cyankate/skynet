@@ -138,6 +138,12 @@ function CMD.accept_march_handoff(snap)
     return march_runtime.accept_march_handoff(snap)
 end
 
+-- P1: 压测入口（debug console 调：call .map.1.0 "stress_test" 100 1000）
+function CMD.stress_test(observer_count, obj_count)
+    local view_sync = require "map.view_sync"
+    return view_sync._stress_test(ctx.map, tonumber(observer_count), tonumber(obj_count))
+end
+
 local function start_world_save_timer()
     local function tick()
         skynet.timeout(ctx.WORLD_SAVE_INTERVAL, tick)
