@@ -1,5 +1,5 @@
-local map_id = tonumber(...)
-local shard_id = select(2, ...)
+local map_id, shard_id = ...
+map_id = tonumber(map_id)
 shard_id = tonumber(shard_id)
 if not map_id then
     error("mapS requires map_id")
