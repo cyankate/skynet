@@ -14,10 +14,15 @@ ctx.MARCH_TICK = 10
 local observer = require "map.observer"
 local interact = require "map.interact"
 local march_runtime = require "map.march_runtime"
+local move_test = require "map.move_test"
 
 -- observer
 function CMD.enter_map(player_id, player_name, map_id)
-    return observer.enter_map(player_id, player_name, map_id)
+    local ok, result = observer.enter_map(player_id, player_name, map_id)
+    if ok then
+        move_test.start(player_id)
+    end
+    return ok, result
 end
 
 function CMD.move(player_id, x, y)
@@ -182,6 +187,7 @@ function CMD.init()
     end
     ctx.map = Map.new(def, shard_id)
     ctx.map:bootstrap()
+    move_test.seed(ctx.map)
     start_world_save_timer()
     start_march_timer()
     log.info("Map service initialized, map_id=%s shard_id=%s", tostring(map_id), tostring(shard_id))

@@ -238,6 +238,24 @@ function MessageHandler.handle_server_message(name, args)
 		return
 	end
 
+	if name == "map_visible_sync_notify" then
+		print(string.format("[视野全量] monsters=%d items=%d marches=%d buildings=%d",
+			#(args and args.monsters or {}), #(args and args.items or {}),
+			#(args and args.marches or {}), #(args and args.buildings or {})))
+		return
+	end
+
+	if name == "map_visible_delta_notify" then
+		local function n(t) return #(t or {}) end
+		print(string.format("[视野增量] enter=%d leave=%d update=%d",
+			n(args and args.enter_monsters) + n(args and args.enter_items)
+				+ n(args and args.enter_marches) + n(args and args.enter_buildings),
+			n(args and args.leave_uids),
+			n(args and args.update_monsters) + n(args and args.update_items)
+				+ n(args and args.update_marches) + n(args and args.update_buildings)))
+		return
+	end
+
 	if name == "instance_result_notify" then
 		print(string.format(
 			"[副本结算] inst_id=%s success=%s end_type=%s end_reason=%s duration=%s",
@@ -368,6 +386,18 @@ function CommandHandler.process_command(cmd)
 			})
 		elseif cmd == "instance_match_cancel" then
 			NetworkManager.send_request("instance_match_cancel", {})
+		elseif cmd == "map_enter" then
+			NetworkManager.send_request("map_enter", { map_id = tonumber(args[1]) or 1 }, function(response)
+				if response and response.result == 0 then
+					print(string.format("进图成功！map_id=%s shard_id=%s 坐标=(%s,%s)",
+						tostring(response.map_id), tostring(response.shard_id),
+						tostring(response.x), tostring(response.y)))
+				else
+					print(string.format("进图失败: %s", response and response.message or "未知错误"))
+				end
+			end)
+		elseif cmd == "map_move" then
+			NetworkManager.send_request("map_move", { x = tonumber(args[1]) or 0, y = tonumber(args[2]) or 0 })
 		elseif cmd == "instance_mode_event" then
 			NetworkManager.send_request("instance_mode_event", {
 				inst_id = tostring(args[1] or ""),
