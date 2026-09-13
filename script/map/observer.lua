@@ -117,6 +117,7 @@ function M.transfer_observer(player_id, dest_shard, x, y)
         player_name = st.player_name,
         x = x,
         y = y,
+        move_test_deadline = st.move_test_deadline, -- 压测接力字段，无则为 nil
     }
     if st.current_scene_id and st.current_scene_id > 0 then
         pcall(function()
@@ -161,6 +162,7 @@ function M.accept_observer(snap)
     end
     st.player_id = player_id
     st.player_name = snap.player_name or st.player_name or ("Player_" .. tostring(player_id))
+    st.move_test_deadline = snap.move_test_deadline -- 压测接力字段
     local observer = aoi_object.Observer.new({
         uid = player_id,
         player_id = player_id,

@@ -6,6 +6,7 @@ local protocol_handler = require "protocol_handler"
 local aoi_object = require "map.aoi_object"
 local service_ctx = require "runtime.service_ctx"
 local helpers = require "map.helpers"
+local log = require "log"
 
 local ctx = service_ctx.get("map.map_service", {})
 local M = {}
@@ -45,7 +46,7 @@ local function stats_report()
         return
     end
     local sec = elapsed / 100
-    skynet.error(string.format(
+    log.info(string.format(
         "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d delta=%d enter=%d leave=%d update=%d",
         sec,
         stats.sync_full_count,

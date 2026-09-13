@@ -1,10 +1,10 @@
 -- 地图移动压测（服务端自驱动，开关与参数见下方常量）
 --   1. 地图初始化后刷一批内存测试实体（只进 AOI 做视野负载，不交互、不落库）
 --   2. 玩家进图后启动定时器，随机模拟镜头移动，持续 DURATION_SEC 秒
--- 移动模式：约 80% 小步（测同格跳过/跨格差集），约 20% 片内大跳（测大批量差集）
+-- 移动模式：约 80% 小步（测同格跳过/跨格差集），约 20% 全图大跳（可能跨片）
+-- 跨片接力：deadline 存 player_state 随 transfer 快照带到新片，新片接着驱动，总时长不重置
 local skynet = require "skynet"
 local log = require "log"
-local shard = require "map.shard"
 local aoi_object = require "map.aoi_object"
 local service_ctx = require "runtime.service_ctx"
 local observer = require "map.observer"
@@ -59,18 +59,17 @@ function M.seed(map)
         tostring(map.shard_id), monster_count, item_count)
 end
 
--- 片内随机取点（限制在本片，避免跨片迁移后本片的定时器失去玩家状态）
+-- 全图随机取点：小步钳在地图边界内，大跳全图随机（可能落到别的片，触发跨片迁移）
 local function next_pos(map, st)
-    local x0, y0, x1, y1 = shard.pixel_rect(map.shard_id, map.def)
     if math.random() < 0.2 then
-        return math.random(x0, x1), math.random(y0, y1)
+        return math.random(1, map.def.width), math.random(1, map.def.height)
     end
     local nx = (st.x or 0) + math.random(-STEP_RANGE, STEP_RANGE)
     local ny = (st.y or 0) + math.random(-STEP_RANGE, STEP_RANGE)
-    return math.max(x0, math.min(x1, nx)), math.max(y0, math.min(y1, ny))
+    return math.max(1, math.min(map.def.width, nx)), math.max(1, math.min(map.def.height, ny))
 end
 
--- 玩家进图后启动：每 interval 走一步，duration 秒后停；离图/跨片则提前结束
+-- 玩家进图/跨片接收后启动：每 MOVE_INTERVAL 走一步，到 deadline 停；离图则提前结束
 function M.start(player_id)
     if not M.enabled() then
         return
@@ -79,24 +78,33 @@ function M.start(player_id)
     if ctx.move_test[player_id] then
         return
     end
-    local duration = DURATION_SEC
-    local interval = MOVE_INTERVAL
-    local deadline = skynet.now() + duration * 100
+    local st = ctx.player_state and ctx.player_state[player_id]
+    if not st then
+        return
+    end
+    -- 跨片接力：快照带过来的 deadline 未到期则继续用；已过期/没有则开新窗口
+    local now = skynet.now()
+    local deadline = st.move_test_deadline
+    if not deadline or deadline <= now then
+        deadline = now + DURATION_SEC * 100
+        st.move_test_deadline = deadline
+    end
     local state = { moves = 0, failed = 0 }
     ctx.move_test[player_id] = state
-    log.info("move_test start, player_id=%s duration=%ds interval=%d",
-        tostring(player_id), duration, interval)
+    log.info("move_test start, player_id=%s remain=%.1fs interval=%d",
+        tostring(player_id), (deadline - now) / 100, MOVE_INTERVAL)
     local function step()
         if skynet.now() >= deadline then
             ctx.move_test[player_id] = nil
+            st.move_test_deadline = nil
             log.info("move_test done, player_id=%s moves=%d failed=%d",
                 tostring(player_id), state.moves, state.failed)
             return
         end
-        local st = ctx.player_state[player_id]
-        if not st or not st.current_scene_id or st.current_scene_id <= 0 or not ctx.map then
+        if not st.current_scene_id or st.current_scene_id <= 0 or not ctx.map then
+            -- 离图或跨片迁走（本片状态已清），本片驱动结束；跨片由新片接力
             ctx.move_test[player_id] = nil
-            log.info("move_test abort, player_id=%s left map", tostring(player_id))
+            log.info("move_test abort, player_id=%s left or transferred", tostring(player_id))
             return
         end
         local x, y = next_pos(ctx.map, st)
@@ -106,9 +114,9 @@ function M.start(player_id)
         else
             state.failed = state.failed + 1
         end
-        skynet.timeout(interval, step)
+        skynet.timeout(MOVE_INTERVAL, step)
     end
-    skynet.timeout(interval, step)
+    skynet.timeout(MOVE_INTERVAL, step)
 end
 
 return M

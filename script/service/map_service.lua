@@ -34,7 +34,14 @@ function CMD.transfer_observer(player_id, dest_shard, x, y)
 end
 
 function CMD.accept_observer(snap)
-    return observer.accept_observer(snap)
+    local ok, result = observer.accept_observer(snap)
+    if ok then
+        local player_id = snap and snap.player_id
+        if player_id then
+            move_test.start(player_id) -- 跨片接力：新片接着驱动随机镜头
+        end
+    end
+    return ok, result
 end
 
 function CMD.leave_map(player_id)
