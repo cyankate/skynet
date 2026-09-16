@@ -167,12 +167,15 @@ function M.should_project(obj)
     if obj.type == M.TYPE.MARCH then
         return true
     end
+    -- 建筑（玩家主城）全图可见，带 owner 也要贴边投影
+    if obj.type == M.TYPE.BUILDING then
+        return true
+    end
     if (obj.owner_player_id or 0) ~= 0 then
         return false
     end
     return obj.type == M.TYPE.MONSTER
         or obj.type == M.TYPE.RESOURCE
-        or obj.type == M.TYPE.BUILDING
 end
 
 function M.visible_bucket(otype)
@@ -214,13 +217,7 @@ function M.pack_visible(obj, ctx)
             out[key] = v
         end
     end
-    if use_dirty then
-        local mask = {}
-        for key, _ in pairs(dirty) do
-            mask[#mask + 1] = key
-        end
-        out.mask = mask
-    end
+    -- 增量模式非脏字段为 nil，sproto 编码时自动跳过（线上即稀疏包），客户端按非 nil 覆盖
     return out
 end
 

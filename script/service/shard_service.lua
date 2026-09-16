@@ -5,16 +5,19 @@ local service_ctx = require "runtime.service_ctx"
 local map_store = require "map.map_store"
 local Map = require "map.map"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 
 
 ctx.WORLD_SAVE_INTERVAL = 10 * 100
 ctx.MARCH_TICK = 10
+ctx.PATROL_TICK = 50 -- 怪物巡逻 500ms 一拍
 
 local observer = require "map.observer"
 local interact = require "map.interact"
 local march_runtime = require "map.march_runtime"
+local monster_ai = require "map.monster_ai"
 local move_test = require "map.move_test"
+local hotspot_test = require "map.hotspot_test"
 
 -- observer
 function CMD.enter_map(player_id, player_name, map_id)
@@ -31,6 +34,34 @@ end
 
 function CMD.transfer_observer(player_id, dest_shard, x, y)
     return observer.transfer_observer(player_id, dest_shard, x, y)
+end
+
+-- 全图寻城：本片有则返回坐标，没有则 city not found（enter_map / interact 跨片查询用）
+function CMD.find_city(player_id)
+    local map = ctx.map
+    if not map then
+        return false, "map not found"
+    end
+    local city = map:get_city(player_id)
+    if not city then
+        return false, "city not found"
+    end
+    return true, { uid = city.uid, x = city.x, y = city.y, shard_id = map.shard_id }
+end
+
+-- 全局服务回推的联盟 buff 缓存：战斗等本地逻辑直接读，零跨服调用
+function CMD.alliance_buff_sync(buffs)
+    ctx.alliance_buffs = buffs or {}
+    return true
+end
+
+-- 全局服务重建时拉取：本片辖区内的争夺建筑清单
+function CMD.list_contention_buildings()
+    local map = ctx.map
+    if not map then
+        return false, "map not found"
+    end
+    return true, map:list_contention_buildings()
 end
 
 function CMD.accept_observer(snap)
@@ -150,10 +181,19 @@ function CMD.accept_march_handoff(snap)
     return march_runtime.accept_march_handoff(snap)
 end
 
--- P1: 压测入口（debug console 调：call .map.1.0 "stress_test" 100 1000）
+-- P1: 压测入口（debug console 调：call .shard.1001.0 "stress_test" 100 1000）
 function CMD.stress_test(observer_count, obj_count)
     local view_sync = require "map.view_sync"
     return view_sync._stress_test(ctx.map, tonumber(observer_count), tonumber(obj_count))
+end
+
+-- 热点压测（debug console 调：call .shard.1001.0 "hotspot_start"）
+function CMD.hotspot_start(opts)
+    return hotspot_test.start(opts)
+end
+
+function CMD.hotspot_stop()
+    return hotspot_test.stop()
 end
 
 local function start_world_save_timer()
@@ -164,17 +204,50 @@ local function start_world_save_timer()
     skynet.timeout(ctx.WORLD_SAVE_INTERVAL, tick)
 end
 
+-- tick 耗时统计（单位 0.01s）：热点压测读这个判断单 VM CPU 水位
+ctx.tick_cost = ctx.tick_cost or {}
+local function record_tick_cost(name, t0)
+    local cost = skynet.now() - t0
+    local s = ctx.tick_cost[name]
+    if not s then
+        s = { total = 0, count = 0, max = 0 }
+        ctx.tick_cost[name] = s
+    end
+    s.total = s.total + cost
+    s.count = s.count + 1
+    if cost > s.max then
+        s.max = cost
+    end
+end
+
 local function start_march_timer()
     local function tick()
         skynet.timeout(ctx.MARCH_TICK, tick)
+        local t0 = skynet.now()
         local ok, err = pcall(function()
             march_runtime.tick_marches()
         end)
+        record_tick_cost("march", t0)
         if not ok then
             log.error("march tick failed: %s", tostring(err))
         end
     end
     skynet.timeout(ctx.MARCH_TICK, tick)
+end
+
+local function start_patrol_timer()
+    local function tick()
+        skynet.timeout(ctx.PATROL_TICK, tick)
+        local t0 = skynet.now()
+        local ok, err = pcall(function()
+            monster_ai.tick(ctx.map)
+        end)
+        record_tick_cost("patrol", t0)
+        if not ok then
+            log.error("patrol tick failed: %s", tostring(err))
+        end
+    end
+    skynet.timeout(ctx.PATROL_TICK, tick)
 end
 
 function CMD.init()
@@ -197,6 +270,7 @@ function CMD.init()
     move_test.seed(ctx.map)
     start_world_save_timer()
     start_march_timer()
+    start_patrol_timer()
     log.info("Map service initialized, map_id=%s shard_id=%s", tostring(map_id), tostring(shard_id))
     return true
 end

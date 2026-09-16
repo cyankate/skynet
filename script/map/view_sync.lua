@@ -1,6 +1,7 @@
 -- 观察者视野同步：
 --   进/离视野 → 观察者差集（enter / leave）
 --   属性变化 → 实体侧主动推送 update（不扫周围对象）
+--   下发出口 → 按观察者合批：同玩家 100ms 窗口内的 enter/leave/update 合并成一包
 local skynet = require "skynet"
 local protocol_handler = require "protocol_handler"
 local aoi_object = require "map.aoi_object"
@@ -8,7 +9,7 @@ local service_ctx = require "runtime.service_ctx"
 local helpers = require "map.helpers"
 local log = require "log"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
 -- 镜头移动差集合并窗口（skynet.timeout 单位 0.01s）
@@ -20,6 +21,7 @@ local stats = {
     sync_diff_count = 0,
     sync_obj_visible_count = 0,
     sync_obj_attr_count = 0,
+    delta_queued_count = 0,
     delta_sent_count = 0,
     delta_enter_total = 0,
     delta_leave_total = 0,
@@ -32,11 +34,32 @@ local function stats_reset()
     stats.sync_diff_count = 0
     stats.sync_obj_visible_count = 0
     stats.sync_obj_attr_count = 0
+    stats.delta_queued_count = 0
     stats.delta_sent_count = 0
     stats.delta_enter_total = 0
     stats.delta_leave_total = 0
     stats.delta_update_total = 0
     stats.last_reset_time = skynet.now()
+end
+
+-- 压测/监控用：计数快照（带时间戳，调用方算增量）与清零
+function M.stats_snapshot()
+    return {
+        sync_full_count = stats.sync_full_count,
+        sync_diff_count = stats.sync_diff_count,
+        sync_obj_visible_count = stats.sync_obj_visible_count,
+        sync_obj_attr_count = stats.sync_obj_attr_count,
+        delta_queued_count = stats.delta_queued_count,
+        delta_sent_count = stats.delta_sent_count,
+        delta_enter_total = stats.delta_enter_total,
+        delta_leave_total = stats.delta_leave_total,
+        delta_update_total = stats.delta_update_total,
+        now = skynet.now(),
+    }
+end
+
+function M.stats_reset_counters()
+    stats_reset()
 end
 
 local function stats_report()
@@ -47,12 +70,13 @@ local function stats_report()
     end
     local sec = elapsed / 100
     log.info(string.format(
-        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d delta=%d enter=%d leave=%d update=%d",
+        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d queued=%d sent=%d enter=%d leave=%d update=%d",
         sec,
         stats.sync_full_count,
         stats.sync_diff_count,
         stats.sync_obj_visible_count,
         stats.sync_obj_attr_count,
+        stats.delta_queued_count,
         stats.delta_sent_count,
         stats.delta_enter_total,
         stats.delta_leave_total,
@@ -75,6 +99,10 @@ function M.aoi_obj_visible(st, map, obj)
     end
     if aoi_object.is_observer(obj) then
         return false
+    end
+    -- 建筑（玩家主城）对所有观察者可见
+    if obj.type == aoi_object.TYPE.BUILDING then
+        return true
     end
     local owner_id = obj.owner_player_id or 0
     if owner_id ~= 0 and owner_id ~= st.player_id then
@@ -168,16 +196,32 @@ local function view_grid_of(map, x, y)
     return row, col
 end
 
+-- 视野中心 = AOI 观察者实体坐标（镜头位置）；实体缺失时回退原点
+local function view_center(map, st)
+    local obj = map and st and map:get_obj(st.player_id)
+    if obj then
+        return obj.x, obj.y
+    end
+    return 0, 0
+end
+
 local function remember_view_grid(st, map)
     if not st then
         return
     end
-    st.view_grid_row, st.view_grid_col = view_grid_of(map, st.x, st.y)
+    st.view_grid_row, st.view_grid_col = view_grid_of(map, view_center(map, st))
 end
+
+-- 前向声明：观察者合批冲刷（定义在下方合批区）
+local flush_player_batch
 
 function M.clear_view_state(st)
     if not st then
         return
+    end
+    if st.player_id then
+        -- 滞留合批先冲掉：避免旧图 delta 落到新图全量包之后
+        flush_player_batch(st.player_id)
     end
     st.visible_uids = nil
     st.view_grid_row = nil
@@ -187,8 +231,8 @@ function M.clear_view_state(st)
     st.view_sync_scheduled = nil
 end
 
--- 增量包：enter/leave/update 四桶，空表自动过滤
-local function send_delta(player_id, map, delta)
+-- 增量包：enter/leave/update 四桶，空表自动过滤（真正发包点，全文件唯一出口）
+local function do_send_delta(player_id, map, delta)
     local enter_m = delta.enter_monsters or {}
     local enter_i = delta.enter_items or {}
     local enter_r = delta.enter_marches or {}
@@ -222,8 +266,145 @@ local function send_delta(player_id, map, delta)
     })
 end
 
+---------------------------------------------------------------------------
+-- 观察者合批：同一玩家的 enter/leave/update 在 BATCH_COALESCE 窗口内合并成一包。
+-- 不变式：flush 出的包里，一个 uid 只会出现在 enter / update / leave 其中一类。
+-- 合并规则：
+--   enter + leave → 对消（enter 尚未发出，客户端从未见过，无需任何包）
+--   leave + enter → 净 enter（全量包刷新；要求客户端 enter 为 upsert 语义）
+--   leave        → 优先于 update（客户端即将删除，无需再更新）
+--   enter + update → update 字段合并进 enter 全量包
+---------------------------------------------------------------------------
+local BATCH_COALESCE = 10 -- 100ms（skynet.timeout 单位 0.01s）
+
+local DELTA_SUFFIX = { "monsters", "items", "marches", "buildings" }
+
+-- player_id => {
+--   map = map, scheduled = bool,
+--   enter_monsters/items/marches/buildings = { uid -> packed },
+--   update_* 同上,
+--   leave_uids = { uid -> true },
+-- }
+local pending_batches = {}
+
+local function queue_enter(pend, suffix, uid, packed)
+    -- leave + enter → 净 enter（移除滞留 leave）
+    pend.leave_uids[uid] = nil
+    for _, s in ipairs(DELTA_SUFFIX) do
+        -- enter 是全量包且更新鲜：滞留 update 被其覆盖，丢弃（正常时序不应存在，防御性）
+        pend["update_" .. s][uid] = nil
+        -- 重复 enter 以最新全量包为准
+        pend["enter_" .. s][uid] = nil
+    end
+    pend["enter_" .. suffix][uid] = packed
+end
+
+local function queue_leave(pend, uid)
+    local had_enter = false
+    for _, s in ipairs(DELTA_SUFFIX) do
+        if pend["enter_" .. s][uid] then
+            pend["enter_" .. s][uid] = nil
+            had_enter = true
+        end
+        pend["update_" .. s][uid] = nil
+    end
+    -- enter + leave 窗口内对消：enter 未发出过，客户端从未见过该 uid
+    if not had_enter then
+        pend.leave_uids[uid] = true
+    end
+end
+
+local function queue_update(pend, suffix, uid, packed)
+    if pend.leave_uids[uid] then
+        return -- leave 优先
+    end
+    -- 已有 enter：合并进全量包（字段覆盖即最新值）
+    for _, s in ipairs(DELTA_SUFFIX) do
+        local e = pend["enter_" .. s][uid]
+        if e then
+            for k, v in pairs(packed) do
+                e[k] = v
+            end
+            return
+        end
+    end
+    -- 合并到 update：同 uid 字段覆盖，只留最终态
+    local bucket = pend["update_" .. suffix]
+    local old = bucket[uid]
+    if old then
+        for k, v in pairs(packed) do
+            old[k] = v
+        end
+    else
+        bucket[uid] = packed
+    end
+end
+
+flush_player_batch = function(player_id)
+    local pend = pending_batches[player_id]
+    if not pend then
+        return
+    end
+    pending_batches[player_id] = nil
+    local delta = { leave_uids = {} }
+    for uid in pairs(pend.leave_uids) do
+        delta.leave_uids[#delta.leave_uids + 1] = uid
+    end
+    for _, s in ipairs(DELTA_SUFFIX) do
+        local ek, uk = "enter_" .. s, "update_" .. s
+        local ea, ua = {}, {}
+        for _, packed in pairs(pend[ek]) do
+            ea[#ea + 1] = packed
+        end
+        for _, packed in pairs(pend[uk]) do
+            ua[#ua + 1] = packed
+        end
+        delta[ek] = ea
+        delta[uk] = ua
+    end
+    do_send_delta(player_id, pend.map, delta)
+end
+
+-- 下发入口（替代原 send_delta）：合入该玩家的批次，窗口到点统一发
+local function queue_delta(player_id, map, delta)
+    stats.delta_queued_count = stats.delta_queued_count + 1
+    local pend = pending_batches[player_id]
+    if pend and pend.map ~= map then
+        -- 换图/跨片：旧批次先冲，避免旧图 delta 落到新图全量包之后
+        flush_player_batch(player_id)
+        pend = nil
+    end
+    if not pend then
+        pend = { map = map, leave_uids = {} }
+        for _, s in ipairs(DELTA_SUFFIX) do
+            pend["enter_" .. s] = {}
+            pend["update_" .. s] = {}
+        end
+        pending_batches[player_id] = pend
+    end
+    for _, s in ipairs(DELTA_SUFFIX) do
+        for _, packed in ipairs(delta["enter_" .. s] or {}) do
+            queue_enter(pend, s, tostring(packed.uid), packed)
+        end
+        for _, packed in ipairs(delta["update_" .. s] or {}) do
+            queue_update(pend, s, tostring(packed.uid), packed)
+        end
+    end
+    for _, uid in ipairs(delta.leave_uids or {}) do
+        queue_leave(pend, tostring(uid))
+    end
+    if not pend.scheduled then
+        pend.scheduled = true
+        skynet.timeout(BATCH_COALESCE, function()
+            flush_player_batch(player_id)
+        end)
+    end
+end
+
 function M.sync_full(player_id, map, st)
     stats.sync_full_count = stats.sync_full_count + 1
+    -- 全量前先冲掉滞留合批，保证线上顺序：delta 在前、full 在后
+    flush_player_batch(player_id)
     local by_uid = M.collect_visible_objs(map, st)
     local monsters, items, marches, buildings = {}, {}, {}, {}
     for _, obj in pairs(by_uid) do
@@ -264,7 +445,7 @@ function M.sync_diff(player_id, map, st)
         end
     end
     commit_visible_uids(st, by_uid)
-    send_delta(player_id, map, {
+    queue_delta(player_id, map, {
         enter_monsters = enter_m,
         enter_items = enter_i,
         enter_marches = enter_r,
@@ -291,7 +472,7 @@ function M.sync_diff_on_move(player_id, map, st)
     if not st or not map then
         return
     end
-    local row, col = view_grid_of(map, st.x, st.y)
+    local row, col = view_grid_of(map, view_center(map, st))
     if st.view_grid_row == row and st.view_grid_col == col then
         return
     end
@@ -323,12 +504,12 @@ function M.sync_diff_on_move(player_id, map, st)
     end)
 end
 
--- 判断目标坐标是否在观察者视野格子范围内
+-- 判断目标坐标是否在观察者视野格子范围内（视野中心 = 镜头位置）
 local function in_observer_range(map, st, x, y)
     local vr = ctx.MAP_VIEW_RANGE or 0
     local grid_size = (map and map.aoi and map.aoi.grid_size) or 50
     local view_grids = math.ceil(vr / grid_size)
-    local center_row, center_col = view_grid_of(map, st.x, st.y)
+    local center_row, center_col = view_grid_of(map, view_center(map, st))
     local target_row, target_col = view_grid_of(map, x, y)
     return math.abs(target_row - center_row) <= view_grids
         and math.abs(target_col - center_col) <= view_grids
@@ -346,7 +527,7 @@ local function notify_enter(player_id, map, st, uid, bucket, packed)
     uids[uid] = true
     local enter_m, enter_i, enter_r, enter_b = {}, {}, {}, {}
     append_to_bucket(enter_m, enter_i, enter_r, enter_b, bucket, packed)
-    send_delta(player_id, map, {
+    queue_delta(player_id, map, {
         enter_monsters = enter_m,
         enter_items = enter_i,
         enter_marches = enter_r,
@@ -360,7 +541,7 @@ local function notify_leave(player_id, map, st, uid)
         return
     end
     uids[uid] = nil
-    send_delta(player_id, map, { leave_uids = { tostring(uid) } })
+    queue_delta(player_id, map, { leave_uids = { tostring(uid) } })
 end
 
 -- 实体进/离/跨格：按该 uid 对周围观察者补 enter 或 leave（非整表差集）
@@ -449,7 +630,7 @@ local function flush_attr_sync(uid)
             if st and st.current_scene_id and st.current_scene_id > 0
                 and st.current_map_id == map.map_id
                 and st.visible_uids and st.visible_uids[uid] then
-                send_delta(pid, map, {
+                queue_delta(pid, map, {
                     update_monsters = upd_m,
                     update_items = upd_i,
                     update_marches = upd_r,
@@ -519,7 +700,7 @@ function M.sync_obj_move_around(map, obj)
                 if st and st.current_scene_id and st.current_scene_id > 0
                     and st.current_map_id == m.map_id
                     and st.visible_uids and st.visible_uids[uid] then
-                    send_delta(pid, m, {
+                    queue_delta(pid, m, {
                         update_monsters = upd_m,
                         update_items = upd_i,
                         update_marches = upd_r,

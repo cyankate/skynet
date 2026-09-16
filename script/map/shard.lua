@@ -161,7 +161,7 @@ function M.halo_neighbors(shard_id, x, y, halo, def)
 end
 
 function M.service_name(map_id, shard_id)
-    return ".map." .. tostring(map_id) .. "." .. tostring(shard_id)
+    return ".shard." .. tostring(map_id) .. "." .. tostring(shard_id)
 end
 
 function M.local_name(map_id, shard_id)
@@ -182,6 +182,19 @@ end
 
 function M.scene_addr(map_id, shard_id)
     return skynet.localname(M.scene_name(map_id, shard_id))
+end
+
+-- 全图全局服务（每张图一个）：注册表 + 派生状态计算，权威数据仍在分片
+function M.global_name(map_id)
+    return ".map." .. tostring(map_id)
+end
+
+function M.global_local_name(map_id)
+    return M.global_name(map_id):sub(2)
+end
+
+function M.global_addr(map_id)
+    return skynet.localname(M.global_name(map_id))
 end
 
 return M

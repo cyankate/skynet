@@ -7,7 +7,7 @@ local service_ctx = require "runtime.service_ctx"
 local view = require "map.view_sync"
 local helpers = require "map.helpers"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
 ctx.obj_locks = ctx.obj_locks or {}
@@ -97,6 +97,26 @@ local function in_attack_range(x1, y1, x2, y2, range)
     return (dx * dx + dy * dy) <= (range * range)
 end
 
+-- 攻击锚点 = 主城坐标（权威是主城实体；本片没有则全图问一遍，低频操作可接受）
+local function resolve_city_pos(map, player_id)
+    local city = map and map:get_city(player_id)
+    if city then
+        return city.x, city.y
+    end
+    for _, sid in ipairs(shard.all_ids()) do
+        if map and sid ~= map.shard_id then
+            local addr = shard.addr(map.map_id, sid)
+            if addr then
+                local ok, info = skynet.call(addr, "lua", "find_city", player_id)
+                if ok and type(info) == "table" then
+                    return tonumber(info.x), tonumber(info.y)
+                end
+            end
+        end
+    end
+    return nil
+end
+
 local function start_monster_instance(map, player_id, uid)
     local instanceS = skynet.localname(".instance")
     if not instanceS then
@@ -175,6 +195,11 @@ function M.interact_monster(player_id, monster_uid)
     if ctx.player_battles[player_id] then
         return false, "battle already in progress"
     end
+    -- 攻击范围锚定主城坐标，与镜头位置无关
+    local ax, ay = resolve_city_pos(map, player_id)
+    if not ax then
+        return false, "主城不存在"
+    end
     local monster = map:get_public_monster(uid)
     if monster then
         local can_interact, why = can_interact_obj(st, map, monster)
@@ -184,7 +209,7 @@ function M.interact_monster(player_id, monster_uid)
         if not monster.alive then
             return false, "monster already defeated"
         end
-        if not in_attack_range(st.x, st.y, monster.x, monster.y, ctx.MAP_ATTACK_RANGE) then
+        if not in_attack_range(ax, ay, monster.x, monster.y, ctx.MAP_ATTACK_RANGE) then
             return false, "超出攻击范围"
         end
         local lock_key = "monster:" .. tostring(map.map_id) .. ":" .. uid
@@ -222,8 +247,8 @@ function M.interact_monster(player_id, monster_uid)
     local owner_shard_id = ghost and tonumber(ghost.owner_shard_id)
     local req = {
         player_id = player_id,
-        x = st.x,
-        y = st.y,
+        x = ax,
+        y = ay,
         attack_range = ctx.MAP_ATTACK_RANGE,
     }
     local function accept_remote(nid, result)
@@ -478,10 +503,10 @@ function M.try_interact_public(uid, req)
     end
     local px, py = tonumber(req.x), tonumber(req.y)
     if not px or not py then
-        local attacker = map:get_obj(player_id)
-        if attacker then
-            px, py = attacker.x, attacker.y
-        end
+        px, py = resolve_city_pos(map, player_id)
+    end
+    if not px then
+        return false, "缺少攻击锚点"
     end
     if not in_attack_range(px, py, monster.x, monster.y, req.attack_range or ctx.MAP_ATTACK_RANGE) then
         return false, "超出攻击范围"

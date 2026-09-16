@@ -3,11 +3,12 @@ local log = require "log"
 local protocol_handler = require "protocol_handler"
 local shard = require "map.shard"
 local march = require "map.march"
+local map_store = require "map.map_store"
 local service_ctx = require "runtime.service_ctx"
 local view = require "map.view_sync"
 local helpers = require "map.helpers"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
 ctx.marches = ctx.marches or {}
@@ -648,17 +649,22 @@ function M.despawn_player_marches(player_id)
     ctx.player_marches[player_id] = nil
 end
 
+-- 行军从主城出发：本 CMD 应落在主城所在片（net 层按 city_shard_id_ 路由），
+-- 起点读主城实体（本片权威），不依赖 player_state
 function M.march_start(player_id, x, y)
-    local st = helpers.get_or_init_player_state(player_id)
-    local map = helpers.current_map(st)
+    local map = ctx.map
     if not map then
-        return false, "player not in map"
+        return false, "map not found"
+    end
+    local city = map:get_city(player_id)
+    if not city then
+        return false, "主城不在本战区"
     end
     if count_all_player_marches(player_id) >= march.MAX_PER_PLAYER then
         return false, "行军数量已满"
     end
     x, y = march.clamp(map.def, x, y)
-    local path, path_err = find_map_path(map, st.x, st.y, x, y)
+    local path, path_err = find_map_path(map, city.x, city.y, x, y)
     if not path then
         return false, path_err or "无法到达目标"
     end
@@ -668,8 +674,8 @@ function M.march_start(player_id, x, y)
     local m = march.new({
         uid = uid,
         owner_player_id = player_id,
-        x = st.x,
-        y = st.y,
+        x = city.x,
+        y = city.y,
         waypoints = path,
         shard_id = map.shard_id,
         state = march.STATE_MARCHING,

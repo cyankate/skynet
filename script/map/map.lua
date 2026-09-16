@@ -50,6 +50,42 @@ function Map:rand_spawn()
     return math.random(x0, x1), math.random(y0, y1)
 end
 
+-- 公共对象播种配置（每片）
+local PUBLIC_MONSTER_COUNT = 48
+local PUBLIC_ITEM_COUNT = 32
+local PATROL_RATIO = 0.3        -- 巡逻怪比例
+local PATROL_RADIUS_MIN = 60    -- 巡逻半径区间（以生成点为圆心小范围游走）
+local PATROL_RADIUS_MAX = 120
+
+-- 抖动网格均匀取点：按矩形纵横比切成网格，洗牌后每格内随机落一点。
+-- 相比纯随机，保证全片覆盖均匀、不扎堆；相比纯网格，格内抖动避免棋盘感。
+local function jittered_points(x0, y0, x1, y1, count)
+    local w = math.max(1, x1 - x0)
+    local h = math.max(1, y1 - y0)
+    local cols = math.max(1, math.ceil(math.sqrt(count * w / h)))
+    local rows = math.max(1, math.ceil(count / cols))
+    local cw = w / cols
+    local ch = h / rows
+    local cells = {}
+    for r = 0, rows - 1 do
+        for c = 0, cols - 1 do
+            cells[#cells + 1] = { r = r, c = c }
+        end
+    end
+    for i = #cells, 2, -1 do
+        local j = math.random(i)
+        cells[i], cells[j] = cells[j], cells[i]
+    end
+    local pts = {}
+    for i = 1, math.min(count, #cells) do
+        local cell = cells[i]
+        local x = math.floor(x0 + (cell.c + math.random()) * cw)
+        local y = math.floor(y0 + (cell.r + math.random()) * ch)
+        pts[#pts + 1] = { x = math.max(1, x), y = math.max(1, y) }
+    end
+    return pts
+end
+
 -- 非观察者实体进/离视野：同步周围观察者对该 uid 的可见性
 -- 观察者自身不推（客户端自己知道自己在哪）
 local function sync_visible(map, x, y, uid, otype)
@@ -276,23 +312,30 @@ end
 function Map:seed_public_monsters()
     local monsters = {}
     local docs = {}
-    for i = 1, 4 do
-        local x, y = self:rand_spawn()
+    local x0, y0, x1, y1 = shard.pixel_rect(self.shard_id, self.def)
+    local pts = jittered_points(x0, y0, x1, y1, PUBLIC_MONSTER_COUNT)
+    for i, pt in ipairs(pts) do
         local uid = string.format("pub_%d_%d_%d", self.map_id, self.shard_id, i)
+        -- 部分怪物带巡逻半径（配置随实体持久化，巡逻状态是运行时）
+        local patrol_radius = 0
+        if math.random() < PATROL_RATIO then
+            patrol_radius = math.random(PATROL_RADIUS_MIN, PATROL_RADIUS_MAX)
+        end
         local monster = {
             uid = uid,
             type = aoi_object.TYPE.MONSTER,
             map_id = self.map_id,
             shard_id = self.shard_id,
             owner_shard_id = self.shard_id,
-            x = x,
-            y = y,
+            x = pt.x,
+            y = pt.y,
             view_range = 0,
             is_ghost = false,
-            chunk_id = chunk.from_pos(x, y, self.def.chunk_size),
+            chunk_id = chunk.from_pos(pt.x, pt.y, self.def.chunk_size),
             alive = true,
             kind = "public",
             owner_player_id = 0,
+            patrol_radius = patrol_radius,
             version = 1,
         }
         monster._id = map_store.make_id(self.map_id, aoi_object.TYPE.MONSTER, uid)
@@ -305,8 +348,9 @@ end
 function Map:seed_public_items()
     local items = {}
     local docs = {}
-    for i = 1, 6 do
-        local x, y = self:rand_spawn()
+    local x0, y0, x1, y1 = shard.pixel_rect(self.shard_id, self.def)
+    local pts = jittered_points(x0, y0, x1, y1, PUBLIC_ITEM_COUNT)
+    for i, pt in ipairs(pts) do
         local uid = string.format("pub_i_%d_%d_%d", self.map_id, self.shard_id, i)
         local item = {
             uid = uid,
@@ -314,11 +358,11 @@ function Map:seed_public_items()
             map_id = self.map_id,
             shard_id = self.shard_id,
             owner_shard_id = self.shard_id,
-            x = x,
-            y = y,
+            x = pt.x,
+            y = pt.y,
             view_range = 0,
             is_ghost = false,
-            chunk_id = chunk.from_pos(x, y, self.def.chunk_size),
+            chunk_id = chunk.from_pos(pt.x, pt.y, self.def.chunk_size),
             alive = true,
             item_id = 10001 + ((i - 1) % 3),
             count = 1,
@@ -412,6 +456,43 @@ function Map:get_public_item(uid)
     return self.public_items[uid]
 end
 
+-- 玩家主城：uid 约定 city_<player_id>，AOI 实体即权威，不落 player_state
+function Map:get_city(player_id)
+    return self.aoi:get("city_" .. tostring(player_id))
+end
+
+-- 本片辖区内的争夺建筑清单（公共 BUILDING；玩家主城 owner~=0 不算，ghost 不算）
+function Map:list_contention_buildings()
+    local list = {}
+    for _, obj in pairs(self.aoi.objs) do
+        if obj.type == aoi_object.TYPE.BUILDING
+            and not obj.is_ghost
+            and (obj.owner_player_id or 0) == 0 then
+            list[#list + 1] = {
+                uid = obj.uid,
+                building_id = obj.building_id or 0,
+                x = obj.x,
+                y = obj.y,
+                shard_id = self.shard_id,
+                alliance_id = obj.alliance_id or 0,
+            }
+        end
+    end
+    return list
+end
+
+-- 建筑（含玩家主城）：不自动刷，只从库加载；建城在 enter_map 流程里
+function Map:load_buildings()
+    if self.buildings_ready then
+        return
+    end
+    self.buildings_ready = true
+    local objs = self:load_typed(aoi_object.TYPE.BUILDING, function()
+        return {}, {}
+    end)
+    self:attach_all(objs, aoi_object.TYPE.BUILDING)
+end
+
 function Map:is_items_ephemeral()
     return self.store_ephemeral and true or false
 end
@@ -434,6 +515,7 @@ end
 function Map:bootstrap()
     self:load_public_monsters()
     self:load_public_items()
+    self:load_buildings()
     self:attach_all(self.public_monsters, aoi_object.TYPE.MONSTER)
     self:attach_all(self.public_items, aoi_object.TYPE.RESOURCE)
     local this = self

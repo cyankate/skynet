@@ -1,7 +1,7 @@
--- map_service 共享 helper（纯函数，不挂状态，不进 CMD）
+-- shard_service 共享 helper（纯函数，不挂状态，不进 CMD）
 local service_ctx = require "runtime.service_ctx"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
 function M.with_shard(map, payload)
@@ -27,11 +27,10 @@ function M.get_or_init_player_state(player_id)
     if st then
         return st
     end
+    -- 纯视野状态：玩法锚点是主城实体（AOI 里的 building），不在这里存坐标
     st = {
         current_map_id = 0,
         current_scene_id = 0,
-        x = 0,
-        y = 0,
     }
     ctx.player_state[player_id] = st
     return st

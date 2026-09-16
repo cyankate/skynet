@@ -1,6 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
+local shard = require "map.shard"
 require "skynet.manager"
 
 skynet.start(function()
@@ -46,7 +47,8 @@ skynet.start(function()
 
     local pathfinding = skynet.newservice("pathfindingS")
 
-    local map = skynet.newservice("mapLaunchS")
+    -- 全局地图服：启动后自行拉起各分片
+    local map = skynet.newservice("mapS", shard.default_def().map_id)
 
     local register = skynet.newservice("registerS")
 

@@ -19,6 +19,7 @@ local function forget(player)
         player.map_id_ = nil
         player.map_shard_id_ = nil
         player.march_shards_ = nil
+        player.city_shard_id_ = nil
     end
 end
 
@@ -169,6 +170,8 @@ local function on_map_enter(player_id, msg)
         return false, result
     end
     remember(player, result)
+    -- 进图落在主城所在片：记下供行军路由（主城不迁移，一次缓存长期有效）
+    player.city_shard_id_ = result.shard_id or sid
     protocol_handler.send_to_player(player_id, "map_enter_response", {
         result = 0,
         message = "ok",
@@ -374,7 +377,20 @@ end
 
 local function on_map_march_start(player_id, msg)
     local player = user_mgr.get_player_obj(player_id)
-    local ok, result = call_player_map(player, player_id, "march_start", tonumber(msg and msg.x) or 0, tonumber(msg and msg.y) or 0)
+    local dx = tonumber(msg and msg.x) or 0
+    local dy = tonumber(msg and msg.y) or 0
+    -- 行军从主城出发：优先路由到主城所在片（进图时缓存）
+    local city_sid = player and player.city_shard_id_
+    local city_addr = city_sid ~= nil
+        and shard_addr((player and player.map_id_) or shard.DEFAULT_MAP_ID, city_sid)
+        or nil
+    local ok, result
+    if city_addr then
+        ok, result = skynet.call(city_addr, "lua", "march_start", player_id, dx, dy)
+    end
+    if ok == nil then
+        ok, result = call_player_map(player, player_id, "march_start", dx, dy)
+    end
     if not ok then
         protocol_handler.send_to_player(player_id, "map_march_start_response", {
             result = 1,

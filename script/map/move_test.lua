@@ -9,7 +9,7 @@ local aoi_object = require "map.aoi_object"
 local service_ctx = require "runtime.service_ctx"
 local observer = require "map.observer"
 
-local ctx = service_ctx.get("map.map_service", {})
+local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
 -- 开关与参数（改这里，改完重启生效）
@@ -59,13 +59,16 @@ function M.seed(map)
         tostring(map.shard_id), monster_count, item_count)
 end
 
--- 全图随机取点：小步钳在地图边界内，大跳全图随机（可能落到别的片，触发跨片迁移）
-local function next_pos(map, st)
+-- 全图随机取点：小步以镜头当前位置为基准钳在地图边界内，大跳全图随机（可能落到别的片，触发跨片迁移）
+local function next_pos(map, player_id)
     if math.random() < 0.2 then
         return math.random(1, map.def.width), math.random(1, map.def.height)
     end
-    local nx = (st.x or 0) + math.random(-STEP_RANGE, STEP_RANGE)
-    local ny = (st.y or 0) + math.random(-STEP_RANGE, STEP_RANGE)
+    local obj = map:get_obj(player_id)
+    local cx = (obj and obj.x) or 0
+    local cy = (obj and obj.y) or 0
+    local nx = cx + math.random(-STEP_RANGE, STEP_RANGE)
+    local ny = cy + math.random(-STEP_RANGE, STEP_RANGE)
     return math.max(1, math.min(map.def.width, nx)), math.max(1, math.min(map.def.height, ny))
 end
 
@@ -107,7 +110,7 @@ function M.start(player_id)
             log.info("move_test abort, player_id=%s left or transferred", tostring(player_id))
             return
         end
-        local x, y = next_pos(ctx.map, st)
+        local x, y = next_pos(ctx.map, player_id)
         local ok = observer.move(player_id, x, y)
         if ok then
             state.moves = state.moves + 1
