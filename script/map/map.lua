@@ -106,6 +106,16 @@ local function sync_visible_move(map, x, y, old_x, old_y, uid, otype)
     if x == nil or not uid then
         return
     end
+    -- 可见性按 AOI 格子窗口判定（in_observer_range 比较格子号）：
+    -- 同一格子内的移动不可能改变任何观察者的 should/has，扫描必然零产出，直接短路。
+    -- 行军 30u/s 每 tick 走 3u，~94% 的 tick 落在此分支（热点压测 march_tick 主要开销）
+    if old_x ~= nil then
+        local gs = (map.aoi and map.aoi.grid_size) or 50
+        if math.floor(x / gs) == math.floor(old_x / gs)
+            and math.floor(y / gs) == math.floor(old_y / gs) then
+            return
+        end
+    end
     view_sync.sync_obj_visible_around(map, {
         { x = x, y = y },
         old_x ~= nil and (old_x ~= x or old_y ~= y) and { x = old_x, y = old_y } or nil,
