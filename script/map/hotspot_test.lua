@@ -9,6 +9,8 @@
 -- 用法（debug console）：
 --   call .shard.1001.0 "hotspot_start"                          -- 默认参数
 --   call .shard.1001.0 "hotspot_start" { observers = 100, marchers = 300 }
+--   call .shard.1001.0 "hotspot_start" { x = 1024, y = 1024 }   -- 边界热点（churn 会真实跨片迁移）
+--   call .shard.1001.0 "hotspot_start" { churners = 0 }         -- 关掉 churn，与静态基线对比
 --   call .shard.1001.0 "hotspot_stop"
 local skynet = require "skynet"
 local log = require "log"
@@ -17,6 +19,7 @@ local march = require "map.march"
 local shard = require "map.shard"
 local service_ctx = require "runtime.service_ctx"
 local view_sync = require "map.view_sync"
+local observer = require "map.observer"
 
 local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
@@ -24,11 +27,17 @@ local M = {}
 local DEFAULTS = {
     radius = 150,          -- 热点半径（view_range=100，保证可见集高度重叠）
     observers = 50,        -- 虚拟观察者数（静止聚焦热点）
+    churners = 10,         -- 移动观察者数（热点内持续游走，打 enter/leave churn 与跨片迁移路径；0=关闭）
     marchers = 100,        -- 虚拟行军数（主要移动负载，热点内往返游走）
     monsters = 40,         -- 热点巡逻怪（patrol_radius > 0，走 monster_ai 通道）
     duration_sec = 120,
     report_interval = 500, -- 报告周期（skynet 单位，500 = 5s）
 }
+
+-- churn 移动参数：300ms 一步、每步 40 单位 ≈ 133 单位/秒的镜头拖扫。
+-- AOI 网格 50，单步跨格概率 ~80%，稳定触发视野 diff + enter/leave
+local CHURN_TICK = 30
+local CHURN_STEP = 40
 
 local hs = nil -- 运行态：{ cx, cy, radius, observers, observer_list, marches, monsters, deadline, ... }
 
@@ -74,7 +83,78 @@ local function spawn_observer(map, i)
     view_sync.sync_full(pid, map, st)
     hs.observers[pid] = true
     hs.observer_list[#hs.observer_list + 1] = pid
-    return pid
+    return pid, x, y
+end
+
+-- churn 目标点：以热点中心随机取点，只钳地图边界、不钳本片——
+-- 边界热点场景下目标会落到邻片，走真实 transfer_observer 迁移路径
+local function churn_target(map)
+    local ang = math.random() * math.pi * 2
+    local r = math.random() * hs.radius
+    local x = math.floor(hs.cx + math.cos(ang) * r)
+    local y = math.floor(hs.cy + math.sin(ang) * r)
+    return math.max(1, math.min(map.def.width, x)), math.max(1, math.min(map.def.height, y))
+end
+
+-- 单个 churner 推进一步。位置/归属片由本地账本维护（每步必更新），跨片走 CMD.move 远程路由
+local function step_churner(map, pid, c)
+    if not c.tx then
+        c.tx, c.ty = churn_target(map)
+    end
+    local dx, dy = c.tx - c.x, c.ty - c.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+    local nx, ny
+    if dist <= CHURN_STEP then
+        nx, ny = c.tx, c.ty
+        c.tx, c.ty = nil, nil -- 到位，下一步重派目标
+    else
+        nx = math.floor(c.x + dx / dist * CHURN_STEP)
+        ny = math.floor(c.y + dy / dist * CHURN_STEP)
+    end
+    local mv_ok
+    if c.shard == map.shard_id then
+        mv_ok = observer.move(pid, nx, ny)
+    else
+        -- 已迁移到邻片：远程调 owner 片的 move（observer.move 读的是目标 VM 的 player_state）
+        local pok, r_ok = pcall(skynet.call, shard.addr(map.map_id, c.shard), "lua", "move", pid, nx, ny)
+        mv_ok = pok and r_ok
+    end
+    if not hs then
+        return -- 远程调用让出协程，回来可能已 stop
+    end
+    if mv_ok then
+        c.errs = 0
+        c.x, c.y = nx, ny
+        hs.w_moves = hs.w_moves + 1
+        local ns = shard.shard_id_of_pos(nx, ny, map.def)
+        if ns ~= c.shard then
+            c.shard = ns
+            hs.w_transfers = hs.w_transfers + 1
+        end
+    else
+        hs.w_move_errs = hs.w_move_errs + 1
+        c.tx = nil -- 失败重派目标
+        c.errs = (c.errs or 0) + 1
+        if c.errs > 20 then
+            -- 持续失败（状态被清/服务异常）：移出 churn 列表，观察者留到 stop 统一清
+            hs.churn[pid] = nil
+        end
+    end
+end
+
+local function churn_tick(map)
+    if not hs then
+        return
+    end
+    skynet.timeout(CHURN_TICK, function()
+        churn_tick(map)
+    end)
+    for pid, c in pairs(hs.churn) do
+        pcall(step_churner, map, pid, c)
+        if not hs then
+            return
+        end
+    end
 end
 
 -- 虚拟行军：热点内两点游走，到达后由 report 周期重新派点。
@@ -211,6 +291,13 @@ local function report_tick(map)
     local m_avg, m_max = tick_cost_ms(last_cost, "march")
     local p_avg, p_max = tick_cost_ms(last_cost, "patrol")
     hs.last_tick_cost = snapshot_tick_cost()
+    -- churn 窗口计数取出即清零（与报告周期对齐，与 view_sync stats 的 reset 互不干扰）
+    local w_moves, w_transfers, w_move_errs = hs.w_moves, hs.w_transfers, hs.w_move_errs
+    hs.w_moves, hs.w_transfers, hs.w_move_errs = 0, 0, 0
+    local n_churn = 0
+    for _ in pairs(hs.churn) do
+        n_churn = n_churn + 1
+    end
     if last then
         local dt = (s.now - last.now) / 100
         if dt > 0 then
@@ -223,12 +310,15 @@ local function report_tick(map)
             local leave = rate("delta_leave_total")
             local update = rate("delta_update_total")
             local entries = enter + leave + update
+            local bytes = rate("delta_bytes_total")
             log.info(string.format(
-                "[hotspot] obs=%d march=%d mon=%d | sent=%.0f/s entries=%.0f/s e/p=%.1f (e=%.0f l=%.0f u=%.0f) | visible_scan=%.0f/s attr=%.0f/s full=%.0f/s diff=%.0f/s | march_tick avg=%.1fms peak=%.1fms | patrol_tick avg=%.1fms peak=%.1fms",
-                #hs.observer_list, march_alive(), mon_alive(),
+                "[hotspot] obs=%d churn=%d march=%d mon=%d | sent=%.0f/s entries=%.0f/s e/p=%.1f (e=%.0f l=%.0f u=%.0f) bytes=%.1fKB/s pkt=%.0fB pktmax=%d | visible_scan=%.0f/s attr=%.0f/s full=%.0f/s diff=%.0f/s | churn mv=%.0f/s xfer=%d err=%d | march_tick avg=%.1fms peak=%.1fms | patrol_tick avg=%.1fms peak=%.1fms",
+                #hs.observer_list, n_churn, march_alive(), mon_alive(),
                 sent, entries, sent > 0 and (entries / sent) or 0, enter, leave, update,
+                bytes / 1024, sent > 0 and (bytes / sent) or 0, s.delta_pkt_bytes_max or 0,
                 rate("sync_obj_visible_count"), rate("sync_obj_attr_count"),
                 rate("sync_full_count"), rate("sync_diff_count"),
+                w_moves / dt, w_transfers, w_move_errs,
                 m_avg, m_max, p_avg, p_max))
         end
     end
@@ -266,15 +356,26 @@ function M.start(opts)
         radius = o.radius,
         observers = {},
         observer_list = {},
+        churn = {},          -- pid => { x, y, shard, tx, ty, errs } 移动观察者账本
         marches = {},
         monsters = {},
         deadline = skynet.now() + o.duration_sec * 100,
         report_interval = o.report_interval,
+        w_moves = 0,         -- 窗口计数：churn 移动步数（report 后清零）
+        w_transfers = 0,     -- 窗口计数：跨片迁移次数
+        w_move_errs = 0,     -- 窗口计数：churn 移动失败次数
     }
-    local n_obs, n_mon, n_mar = 0, 0, 0
+    local n_obs, n_mon, n_mar, n_churn = 0, 0, 0, 0
     for i = 1, o.observers do
         if spawn_observer(map, i) then
             n_obs = n_obs + 1
+        end
+    end
+    for i = 1, o.churners do
+        local pid, x, y = spawn_observer(map, o.observers + i)
+        if pid then
+            hs.churn[pid] = { x = x, y = y, shard = map.shard_id }
+            n_churn = n_churn + 1
         end
     end
     for i = 1, o.monsters do
@@ -292,9 +393,14 @@ function M.start(opts)
     skynet.timeout(o.report_interval, function()
         report_tick(map)
     end)
-    log.info("[hotspot] start: shard=%s center=(%d,%d) r=%d obs=%d marchers=%d monsters=%d duration=%ds",
-        tostring(map.shard_id), cx, cy, o.radius, n_obs, n_mar, n_mon, o.duration_sec)
-    return true, { observers = n_obs, marchers = n_mar, monsters = n_mon, x = cx, y = cy }
+    if n_churn > 0 then
+        skynet.timeout(CHURN_TICK, function()
+            churn_tick(map)
+        end)
+    end
+    log.info("[hotspot] start: shard=%s center=(%d,%d) r=%d obs=%d churn=%d marchers=%d monsters=%d duration=%ds",
+        tostring(map.shard_id), cx, cy, o.radius, n_obs, n_churn, n_mar, n_mon, o.duration_sec)
+    return true, { observers = n_obs, churners = n_churn, marchers = n_mar, monsters = n_mon, x = cx, y = cy }
 end
 
 function M.stop()
@@ -304,6 +410,14 @@ function M.stop()
     local map = ctx.map
     local n_obs, n_mar, n_mon = 0, 0, 0
     if map then
+        -- 已迁移到邻片的 churner：本片 leave 不到，远程通知 owner 片清理
+        for pid, c in pairs(hs.churn) do
+            if c.shard ~= map.shard_id then
+                pcall(function()
+                    skynet.call(shard.addr(map.map_id, c.shard), "lua", "leave_map", pid)
+                end)
+            end
+        end
         for uid in pairs(hs.marches) do
             local m = ctx.marches[uid]
             if m then
@@ -341,8 +455,13 @@ function M.status()
     if not hs then
         return false, "hotspot not running"
     end
+    local n_churn = 0
+    for _ in pairs(hs.churn) do
+        n_churn = n_churn + 1
+    end
     return true, {
         observers = #hs.observer_list,
+        churners = n_churn,
         marchers = march_alive(),
         monsters = mon_alive(),
         remain_sec = math.max(0, (hs.deadline - skynet.now()) / 100),

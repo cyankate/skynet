@@ -26,6 +26,8 @@ local stats = {
     delta_enter_total = 0,
     delta_leave_total = 0,
     delta_update_total = 0,
+    delta_bytes_total = 0,    -- 下发字节估算累计（见 est_delta_bytes）
+    delta_pkt_bytes_max = 0,  -- 单包估算字节高水位（自上次 reset 起）
     last_reset_time = 0,
 }
 
@@ -39,6 +41,8 @@ local function stats_reset()
     stats.delta_enter_total = 0
     stats.delta_leave_total = 0
     stats.delta_update_total = 0
+    stats.delta_bytes_total = 0
+    stats.delta_pkt_bytes_max = 0
     stats.last_reset_time = skynet.now()
 end
 
@@ -54,6 +58,8 @@ function M.stats_snapshot()
         delta_enter_total = stats.delta_enter_total,
         delta_leave_total = stats.delta_leave_total,
         delta_update_total = stats.delta_update_total,
+        delta_bytes_total = stats.delta_bytes_total,
+        delta_pkt_bytes_max = stats.delta_pkt_bytes_max,
         now = skynet.now(),
     }
 end
@@ -70,7 +76,7 @@ local function stats_report()
     end
     local sec = elapsed / 100
     log.info(string.format(
-        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d queued=%d sent=%d enter=%d leave=%d update=%d",
+        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d queued=%d sent=%d enter=%d leave=%d update=%d bytes=%d pktmax=%d",
         sec,
         stats.sync_full_count,
         stats.sync_diff_count,
@@ -80,7 +86,9 @@ local function stats_report()
         stats.delta_sent_count,
         stats.delta_enter_total,
         stats.delta_leave_total,
-        stats.delta_update_total
+        stats.delta_update_total,
+        stats.delta_bytes_total,
+        stats.delta_pkt_bytes_max
     ))
     stats_reset()
 end
@@ -231,6 +239,30 @@ function M.clear_view_state(st)
     st.view_sync_scheduled = nil
 end
 
+-- 线长估算：真实 sproto 编码在 gate，shard 侧永远看不到字节；此处按 schema 做零成本估算
+-- （sproto wire ≈ 每字段 2B tag + 值：int≈4B / double≈8B / string≈4B+len，数组元素另加 4B 头），
+-- 误差 ~±20%，只用于压测评估带宽量级，不进任何业务逻辑
+local DELTA_PKT_BASE_BYTES = 40 -- 协议头 + map_id + 8 个桶的数组头
+local EST_ENTER_BYTES = { monsters = 44, items = 48, marches = 84, buildings = 48 } -- enter = 全量字段
+local EST_UPDATE_BYTES = 30  -- update ≈ uid + x,y 双精度为主的脏字段
+local EST_LEAVE_BYTES = 12   -- leave = 纯 uid
+
+local function est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m, upd_i, upd_r, upd_b)
+    local function sum(bucket, base)
+        local s = 0
+        for _, e in pairs(bucket) do
+            s = s + base + #(tostring(type(e) == "table" and e.uid or e))
+        end
+        return s
+    end
+    return DELTA_PKT_BASE_BYTES
+        + sum(enter_m, EST_ENTER_BYTES.monsters) + sum(enter_i, EST_ENTER_BYTES.items)
+        + sum(enter_r, EST_ENTER_BYTES.marches) + sum(enter_b, EST_ENTER_BYTES.buildings)
+        + sum(upd_m, EST_UPDATE_BYTES) + sum(upd_i, EST_UPDATE_BYTES)
+        + sum(upd_r, EST_UPDATE_BYTES) + sum(upd_b, EST_UPDATE_BYTES)
+        + sum(leave, EST_LEAVE_BYTES)
+end
+
 -- 增量包：enter/leave/update 四桶，空表自动过滤（真正发包点，全文件唯一出口）
 local function do_send_delta(player_id, map, delta)
     local enter_m = delta.enter_monsters or {}
@@ -252,6 +284,12 @@ local function do_send_delta(player_id, map, delta)
     stats.delta_enter_total = stats.delta_enter_total + enter_count
     stats.delta_leave_total = stats.delta_leave_total + leave_count
     stats.delta_update_total = stats.delta_update_total + update_count
+    local pkt_bytes = est_delta_bytes(enter_m, enter_i, enter_r, enter_b,
+        leave, upd_m, upd_i, upd_r, upd_b)
+    stats.delta_bytes_total = stats.delta_bytes_total + pkt_bytes
+    if pkt_bytes > stats.delta_pkt_bytes_max then
+        stats.delta_pkt_bytes_max = pkt_bytes
+    end
     protocol_handler.send_to_player(player_id, "map_visible_delta_notify", {
         map_id = map and map.map_id or 0,
         enter_monsters = enter_m,

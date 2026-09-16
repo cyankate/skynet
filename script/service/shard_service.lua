@@ -196,6 +196,10 @@ function CMD.hotspot_stop()
     return hotspot_test.stop()
 end
 
+function CMD.hotspot_status()
+    return hotspot_test.status()
+end
+
 local function start_world_save_timer()
     local function tick()
         skynet.timeout(ctx.WORLD_SAVE_INTERVAL, tick)
