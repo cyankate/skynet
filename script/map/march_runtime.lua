@@ -113,7 +113,7 @@ local function notify_march_sync(map, m, removed)
     end
     local payload = {
         map_id = map and map.map_id or 0,
-        marches = (not removed) and { march.pack_visible(m, map and map.shard_id) } or {},
+        marches = (not removed) and { march.pack_visible(m, map and map.shard_id, true) } or {}, -- owner 私有通道全量包（含计划字段，视野外也能外推）
         removed_uid = removed and (m.uid or "") or "",
         shard_id = map and map.shard_id or 0,
     }
@@ -164,6 +164,11 @@ local function clear_march_battle_fields(m, keep_chase)
         end
     end
     aoi_object.mark_dirty(m, "state")
+    -- 心跳推算：战斗结束恢复移动，用当前坐标+剩余路径作为新外推基准
+    aoi_object.mark_dirty(m, "x")
+    aoi_object.mark_dirty(m, "y")
+    aoi_object.mark_dirty(m, "waypoints")
+    aoi_object.mark_dirty(m, "wp_index")
 end
 
 local end_field_battle
@@ -254,6 +259,11 @@ local function start_field_battle(map, atk, target)
         def_local.host_shard_id = map.shard_id
         def_local.role = "defender"
         def_local.state = march.STATE_BATTLE
+        -- 心跳推算：交战冻结点（客户端停在权威坐标，不再外推）
+        aoi_object.mark_dirty(def_local, "state")
+        aoi_object.mark_dirty(def_local, "battle_id")
+        aoi_object.mark_dirty(def_local, "x")
+        aoi_object.mark_dirty(def_local, "y")
     else
         local addr = shard.addr(map.map_id, battle.defender_shard)
         if not addr then
@@ -278,6 +288,9 @@ local function start_field_battle(map, atk, target)
     aoi_object.mark_dirty(atk, "state")
     aoi_object.mark_dirty(atk, "battle_id")
     aoi_object.mark_dirty(atk, "target_uid")
+    -- 心跳推算：交战冻结点（客户端停在权威坐标，不再外推）
+    aoi_object.mark_dirty(atk, "x")
+    aoi_object.mark_dirty(atk, "y")
     ctx.field_battles[battle.id] = battle
     if atk.in_aoi then
         map:sync_ghosts(atk)
@@ -380,23 +393,31 @@ local function sync_march_aoi(map, m, force_notify, is_new_action)
     local old_y = obj and obj._aoi_y or m.y
     if m.in_aoi and (ix ~= old_x or iy ~= old_y) then
         map:move_obj(m.uid, ix, iy)
-        aoi_object.mark_dirty(m, "x")
-        aoi_object.mark_dirty(m, "y")
-        if is_new_action then
-            -- 新行为：立即推，不合并
-            view.sync_obj_attr_around(map, m)
-        else
-            -- 持续移动：合并推
-            view.sync_obj_move_around(map, m)
+        if not march.DEAD_RECKONING then
+            aoi_object.mark_dirty(m, "x")
+            aoi_object.mark_dirty(m, "y")
+            if is_new_action then
+                -- 新行为：立即推，不合并
+                view.sync_obj_attr_around(map, m)
+            else
+                -- 持续移动：合并推
+                view.sync_obj_move_around(map, m)
+            end
         end
+        -- 心跳推算模式：tick 持续移动只做 AOI 网格维护（move_obj），不下发坐标流
     elseif m.in_aoi then
         -- hp/state 等非坐标变化仍要推 ghost
         map:sync_ghosts(m)
     end
+    if march.DEAD_RECKONING and is_new_action and m.in_aoi then
+        -- 心跳推算：行为事件（追击/交战等状态或路径变更）立即推，客户端按包内计划字段外推
+        map:sync_ghosts(m)
+        view.sync_obj_attr_around(map, m)
+    end
     if force_notify or march.dist2(m.x, m.y, m.last_notify_x, m.last_notify_y) >= (march.NOTIFY_MOVE * march.NOTIFY_MOVE) then
         m.last_notify_x, m.last_notify_y = m.x, m.y
         notify_march_sync(map, m)
-        if m.in_aoi then
+        if not march.DEAD_RECKONING and m.in_aoi then
             view.sync_obj_attr_around(map, m)
         end
     end
@@ -487,7 +508,26 @@ local function apply_march_path(m, path, tx, ty)
     march.set_path(m, path)
     m.last_path_tx = tx
     m.last_path_ty = ty
+    -- 心跳推算：计划变更 = 脏计划字段 + 当前坐标作为客户端外推 rebase 点
+    aoi_object.mark_dirty(m, "waypoints")
+    aoi_object.mark_dirty(m, "wp_index")
+    aoi_object.mark_dirty(m, "x")
+    aoi_object.mark_dirty(m, "y")
 end
+
+-- 心跳推算：计划变更广播（标脏幂等，可直接用于外部改路径后的补推，如压测 repath）
+local function broadcast_plan(map, m)
+    aoi_object.mark_dirty(m, "waypoints")
+    aoi_object.mark_dirty(m, "wp_index")
+    aoi_object.mark_dirty(m, "x")
+    aoi_object.mark_dirty(m, "y")
+    if not m.in_aoi then
+        return
+    end
+    map:sync_ghosts(m)
+    view.sync_obj_attr_around(map, m)
+end
+M.broadcast_plan = broadcast_plan
 
 -- 追击重寻路：目标移动超过 CHASE_REPATH_DIST 或无路径时重新找路
 local function maybe_repath_chase(map, m, tgt)
@@ -508,6 +548,7 @@ local function maybe_repath_chase(map, m, tgt)
         path = { { x = m.x, y = m.y }, { x = tgt.x, y = tgt.y } }
     end
     apply_march_path(m, path, tgt.x, tgt.y)
+    broadcast_plan(map, m) -- 追击重寻路 = 计划变更，立即广播（心跳推算）
 end
 
 -- 单个行军 tick：追击/战斗/移动/跨片/同步
@@ -833,6 +874,9 @@ function M.march_set_defender(uid, info)
     m.state = march.STATE_BATTLE
     aoi_object.mark_dirty(m, "state")
     aoi_object.mark_dirty(m, "battle_id")
+    -- 心跳推算：交战冻结点
+    aoi_object.mark_dirty(m, "x")
+    aoi_object.mark_dirty(m, "y")
     if map and m.in_aoi then
         map:sync_ghosts(m)
         view.sync_obj_attr_around(map, m)

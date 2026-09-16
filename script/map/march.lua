@@ -16,6 +16,12 @@ M.STATE_MARCHING = "marching"
 M.STATE_CHASE = "chase"
 M.STATE_BATTLE = "battle"
 
+-- 心跳推算（dead reckoning）开关：
+-- true  = 停推行军每 tick 位置流，只在计划变更（出发/重寻路/交战/战斗结束）广播
+--         waypoints+wp_index+speed+x,y(rebase)，客户端本地外推；压测可 A/B
+-- false = 旧行为：每 tick 坐标位置流
+M.DEAD_RECKONING = true
+
 function M.dist2(x1, y1, x2, y2)
     local dx = (tonumber(x1) or 0) - (tonumber(x2) or 0)
     local dy = (tonumber(y1) or 0) - (tonumber(y2) or 0)
@@ -131,8 +137,8 @@ function M.current_dest(m)
     return m.x, m.y
 end
 
-function M.pack_visible(m, shard_id)
-    return aoi_object.pack_visible(m, { shard_id = shard_id })
+function M.pack_visible(m, shard_id, full)
+    return aoi_object.pack_visible(m, { shard_id = shard_id, full = full })
 end
 
 function M.from_ghost(obj)

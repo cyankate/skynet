@@ -1010,6 +1010,11 @@ local s2c_builder = builder.new()
         owner_player_id = "integer",
     })
 
+    :type("map_point", {
+        x = "double",
+        y = "double",
+    })
+
     :type("map_march_info", {
         uid = "string",
         owner_player_id = "integer",
@@ -1021,6 +1026,11 @@ local s2c_builder = builder.new()
         target_uid = "string",
         battle_id = "string",
         shard_id = "integer",
+        -- 心跳推算计划字段：x,y 为本包权威坐标（rebase 点），
+        -- 客户端从 (x,y) 起按 waypoints[wp_index..] + speed 本地外推，停推每 tick 位置流
+        speed = "double",
+        wp_index = "integer",
+        waypoints = "*map_point",
     })
 
     :type("map_info", {

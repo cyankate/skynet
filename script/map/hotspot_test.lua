@@ -16,6 +16,7 @@ local skynet = require "skynet"
 local log = require "log"
 local aoi_object = require "map.aoi_object"
 local march = require "map.march"
+local march_runtime = require "map.march_runtime"
 local shard = require "map.shard"
 local service_ctx = require "runtime.service_ctx"
 local view_sync = require "map.view_sync"
@@ -240,6 +241,7 @@ local function repath_arrived(map)
             m.waypoints = { { x = m.x, y = m.y }, { x = tx, y = ty } }
             m.wp_index = 1
             m.last_path_tx, m.last_path_ty = tx, ty
+            march_runtime.broadcast_plan(map, m) -- 心跳推算：repath = 计划变更广播
             n = n + 1
         end
     end

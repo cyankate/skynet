@@ -243,7 +243,7 @@ end
 -- （sproto wire ≈ 每字段 2B tag + 值：int≈4B / double≈8B / string≈4B+len，数组元素另加 4B 头），
 -- 误差 ~±20%，只用于压测评估带宽量级，不进任何业务逻辑
 local DELTA_PKT_BASE_BYTES = 40 -- 协议头 + map_id + 8 个桶的数组头
-local EST_ENTER_BYTES = { monsters = 44, items = 48, marches = 84, buildings = 48 } -- enter = 全量字段
+local EST_ENTER_BYTES = { monsters = 44, items = 48, marches = 140, buildings = 48 } -- enter = 全量字段（行军含 waypoints 计划）
 local EST_UPDATE_BYTES = 30  -- update ≈ uid + x,y 双精度为主的脏字段
 local EST_LEAVE_BYTES = 12   -- leave = 纯 uid
 

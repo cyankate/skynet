@@ -28,7 +28,7 @@ M.WORLD_FIELDS = {
 -- 分型扩展：只列 AOI / 可见 / ghost 边界需要的字段
 M.TYPE_FIELDS = {
     [M.TYPE.OBSERVER] = { "player_id", "player_name" },
-    [M.TYPE.MARCH] = { "hp", "max_hp", "state", "target_uid", "battle_id" },
+    [M.TYPE.MARCH] = { "hp", "max_hp", "state", "target_uid", "battle_id", "speed", "wp_index", "waypoints" },
     [M.TYPE.MONSTER] = { "kind" },
     [M.TYPE.RESOURCE] = { "item_id", "count" },
     [M.TYPE.BUILDING] = { "building_id", "level" },
@@ -39,6 +39,7 @@ M.VISIBLE_FIELDS = {
     [M.TYPE.MARCH] = {
         "uid", "owner_player_id", "x", "y",
         "hp", "max_hp", "state", "target_uid", "battle_id", "shard_id",
+        "speed", "wp_index", "waypoints", -- 心跳推算计划字段
     },
     [M.TYPE.MONSTER] = {
         "uid", "x", "y", "kind", "owner_player_id",
