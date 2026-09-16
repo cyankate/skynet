@@ -455,6 +455,18 @@ function M.remember_march(data)
     return true
 end
 
+function M.add_items(data)
+    data = data or {}
+    local player, err = get_player_or_err(data.player_id)
+    if not player then
+        return false, err
+    end
+    if type(data.items) ~= "table" then
+        return false, "invalid items"
+    end
+    return item_mgr.add_items(player, data.items, data.reason or "map_gather")
+end
+
 function M.gm_command(data)
     data = data or {}
     local player, err = get_player_or_err(data.player_id)

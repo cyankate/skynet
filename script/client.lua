@@ -256,6 +256,31 @@ function MessageHandler.handle_server_message(name, args)
 		return
 	end
 
+	if name == "map_march_gather_response" then
+		print(string.format("[采集出发] result=%s uid=%s res=%s intent=%s dest=(%s,%s) %s",
+			tostring(args and args.result),
+			tostring(args and args.march_uid or ""),
+			tostring(args and args.resource_uid or ""),
+			tostring(args and args.intent or ""),
+			tostring(args and args.dest_x), tostring(args and args.dest_y),
+			tostring(args and args.message or "")))
+		return
+	end
+
+	if name == "map_march_sync_notify" then
+		local m = args and args.marches and args.marches[1]
+		print(string.format("[行军同步] removed=%s uid=%s state=%s intent=%s cargo=%s/%s gather=%s/%ss",
+			tostring(args and args.removed_uid or ""),
+			tostring(m and m.uid or ""),
+			tostring(m and m.state or ""),
+			tostring(m and m.intent or ""),
+			tostring(m and m.cargo_count or 0),
+			tostring(m and m.load_max or 0),
+			tostring(m and m.gather_amount or 0),
+			tostring(m and m.gather_duration or 0)))
+		return
+	end
+
 	if name == "instance_result_notify" then
 		print(string.format(
 			"[副本结算] inst_id=%s success=%s end_type=%s end_reason=%s duration=%s",

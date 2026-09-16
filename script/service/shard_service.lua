@@ -141,6 +141,14 @@ function CMD.march_start(player_id, x, y)
     return march_runtime.march_start(player_id, x, y)
 end
 
+function CMD.march_gather(player_id, resource_uid)
+    return march_runtime.march_gather(player_id, resource_uid)
+end
+
+function CMD.query_resource(uid)
+    return march_runtime.query_resource(uid)
+end
+
 function CMD.march_attack(player_id, march_uid, target_uid)
     return march_runtime.march_attack(player_id, march_uid, target_uid)
 end

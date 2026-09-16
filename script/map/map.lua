@@ -375,7 +375,9 @@ function Map:seed_public_resources()
             chunk_id = chunk.from_pos(pt.x, pt.y, self.def.chunk_size),
             alive = true,
             item_id = 10001 + ((i - 1) % 3),
-            count = 1,
+            count = 120,
+            gatherable = true,
+            occupier_uid = "",
             owner_player_id = 0,
             version = 1,
         }
@@ -459,6 +461,12 @@ function Map:load_public_resources()
     end)
     self.public_resources = objs
     self.public_resources_ready = true
+    for _, obj in pairs(self.public_resources) do
+        obj.occupier_uid = ""
+        if obj.gatherable == nil then
+            obj.gatherable = true
+        end
+    end
     return objs
 end
 

@@ -15,6 +15,18 @@ M.NOTIFY_MOVE = 8
 M.STATE_MARCHING = "marching"
 M.STATE_CHASE = "chase"
 M.STATE_BATTLE = "battle"
+M.STATE_GATHERING = "gathering"
+
+-- 行军任务：move 点对点；gather 去资源点采集；return 回城交货
+M.INTENT_MOVE = "move"
+M.INTENT_GATHER = "gather"
+M.INTENT_RETURN = "return"
+
+M.LOAD_MAX = 100
+M.GATHER_SPEED = 20    -- 每秒采集量，客户端按时间估值
+M.GATHER_RANGE = 20
+M.CITY_ARRIVE_RANGE = 20
+M.RESOURCE_AMOUNT = 120 -- 新播种的资源点余量
 
 -- 心跳推算（dead reckoning）开关：
 -- true  = 停推行军每 tick 位置流，只在计划变更（出发/重寻路/交战/战斗结束）广播
@@ -87,6 +99,16 @@ function M.new(opts)
         hp = opts.hp or M.MAX_HP,
         max_hp = opts.max_hp or M.MAX_HP,
         state = opts.state or M.STATE_MARCHING,
+        intent = opts.intent or M.INTENT_MOVE,
+        cargo_item_id = opts.cargo_item_id or 0,
+        cargo_count = opts.cargo_count or 0,
+        load_max = opts.load_max or M.LOAD_MAX,
+        gather_speed = opts.gather_speed or 0,
+        gather_amount = opts.gather_amount or 0,
+        gather_duration = opts.gather_duration or 0,
+        gather_start = opts.gather_start or 0,
+        gather_end = opts.gather_end or 0,
+        gather_seq = opts.gather_seq or 0,
         target_uid = opts.target_uid,
         target_shard_id = opts.target_shard_id,
         last_path_tx = opts.last_path_tx,
@@ -175,6 +197,16 @@ function M.export(m)
         hp = m.hp,
         max_hp = m.max_hp,
         state = m.state,
+        intent = m.intent,
+        cargo_item_id = m.cargo_item_id,
+        cargo_count = m.cargo_count,
+        load_max = m.load_max,
+        gather_speed = m.gather_speed,
+        gather_amount = m.gather_amount,
+        gather_duration = m.gather_duration,
+        gather_start = m.gather_start,
+        gather_end = m.gather_end,
+        gather_seq = m.gather_seq,
         target_uid = m.target_uid,
         target_shard_id = m.target_shard_id,
         battle_id = m.battle_id,

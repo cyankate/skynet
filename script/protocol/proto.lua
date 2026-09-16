@@ -371,6 +371,12 @@ local c2s_builder = builder.new()
         }
     })
 
+    :protocol("map_march_gather", 807, {
+        request = {
+            resource_uid = "string",
+        }
+    })
+
 proto.c2s = sprotoparser.parse(c2s_builder:to_string())
 
 -- 注册 C2S 协议 schema（用于验证）
@@ -998,6 +1004,7 @@ local s2c_builder = builder.new()
         y = "double",
         item_id = "integer",
         count = "integer",
+        occupier_uid = "string",
         owner_player_id = "integer",
     })
 
@@ -1031,6 +1038,13 @@ local s2c_builder = builder.new()
         speed = "double",
         wp_index = "integer",
         waypoints = "*map_point",
+        intent = "string",
+        cargo_item_id = "integer",
+        cargo_count = "integer",
+        load_max = "integer",
+        gather_speed = "double",
+        gather_amount = "integer",
+        gather_duration = "double",
     })
 
     :type("map_info", {
@@ -1183,6 +1197,24 @@ local s2c_builder = builder.new()
             update_resources = "*map_entity_resource",
             update_marches = "*map_march_info",
             update_buildings = "*map_entity_building",
+        }
+    })
+
+    :protocol("map_march_gather_response", 807, {
+        request = {
+            result = "integer",
+            message = "string",
+            march_uid = "string",
+            resource_uid = "string",
+            x = "integer",
+            y = "integer",
+            dest_x = "integer",
+            dest_y = "integer",
+            hp = "integer",
+            max_hp = "integer",
+            state = "string",
+            intent = "string",
+            shard_id = "integer",
         }
     })
 

@@ -474,7 +474,59 @@ local function on_map_march_cancel(player_id, msg)
         result = 0,
         message = "ok",
         march_uid = result.march_uid or march_uid,
-        removed = true,
+        removed = result.removed and true or false,
+        shard_id = result.shard_id or 0,
+    })
+    return true
+end
+
+local function on_map_march_gather(player_id, msg)
+    local player = user_mgr.get_player_obj(player_id)
+    local resource_uid = tostring(msg and msg.resource_uid or "")
+    local city_sid = player and player.city_shard_id_
+    local city_addr = city_sid ~= nil
+        and shard_addr((player and player.map_id_) or shard.DEFAULT_MAP_ID, city_sid)
+        or nil
+    local ok, result
+    if city_addr then
+        ok, result = skynet.call(city_addr, "lua", "march_gather", player_id, resource_uid)
+    end
+    if ok == nil then
+        ok, result = call_player_map(player, player_id, "march_gather", resource_uid)
+    end
+    if not ok then
+        protocol_handler.send_to_player(player_id, "map_march_gather_response", {
+            result = 1,
+            message = result or "采集出发失败",
+            march_uid = "",
+            resource_uid = resource_uid,
+            x = 0,
+            y = 0,
+            dest_x = 0,
+            dest_y = 0,
+            hp = 0,
+            max_hp = 0,
+            state = "",
+            intent = "",
+            shard_id = player and player.map_shard_id_ or 0,
+        })
+        return false, result
+    end
+    remember(player, result)
+    remember_march(player, result)
+    protocol_handler.send_to_player(player_id, "map_march_gather_response", {
+        result = 0,
+        message = "ok",
+        march_uid = result.march_uid or "",
+        resource_uid = result.resource_uid or resource_uid,
+        x = result.x or 0,
+        y = result.y or 0,
+        dest_x = result.dest_x or 0,
+        dest_y = result.dest_y or 0,
+        hp = result.hp or 0,
+        max_hp = result.max_hp or 0,
+        state = result.state or "",
+        intent = result.intent or "",
         shard_id = result.shard_id or 0,
     })
     return true
@@ -492,4 +544,5 @@ return {
     map_march_start = on_map_march_start,
     map_march_attack = on_map_march_attack,
     map_march_cancel = on_map_march_cancel,
+    map_march_gather = on_map_march_gather,
 }

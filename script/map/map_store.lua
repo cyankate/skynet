@@ -33,6 +33,7 @@ local RUNTIME_KEYS = {
     owner_shard_id = true,
     _aoi_x = true,
     _aoi_y = true,
+    occupier_uid = true, -- 行军不落库，重载后占点失效
 }
 
 local ctx = service_ctx.get("map.map_store", {})

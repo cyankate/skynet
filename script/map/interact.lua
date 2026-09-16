@@ -406,6 +406,9 @@ function M.pick_item(player_id, item_uid)
     if not resource.alive then
         return false, "item already picked"
     end
+    if resource.gatherable ~= false then
+        return false, "need march gather"
+    end
     local lock_key = "resource:" .. tostring(map.map_id) .. ":" .. uid
     if not M.acquire_lock(lock_key) then
         return false, "item is busy"
@@ -450,6 +453,9 @@ function M.try_pick_public(uid, req)
     end
     if not resource.alive then
         return false, "item already picked"
+    end
+    if resource.gatherable ~= false then
+        return false, "need march gather"
     end
     local lock_key = "resource:" .. tostring(map.map_id) .. ":" .. uid
     if not M.acquire_lock(lock_key) then

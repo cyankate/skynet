@@ -111,7 +111,7 @@ CMD 只做对外入口，转发到模块。本片持有：
 属主私有通道（如 `map_march_sync_notify`）是玩法通知，不是 AOI，不能替代周围观察者同步。
 
 ## 行军与心跳推算
-
+ 
 行军是独立实体，坐标权威跟位置走，交战权威跟攻击者走。
 
 `march.DEAD_RECKONING = true`：
@@ -123,11 +123,18 @@ CMD 只做对外入口，转发到模块。本片持有：
 
 野战在攻击者所在片结算，防守方可能跨片（`march_set_defender`）。
 
+采集是行军任务，不是瞬间拾取：
+
+- `map_march_gather`：从主城出发，`intent=gather`，`target_uid` 为资源点
+- 到点独占 `occupier_uid`，`state=gathering` 冻结坐标，下发采集计划：`gather_speed` / `gather_amount` / `gather_duration`
+- 余量和货物**不实时同步**。客户端按开始快照的 `count` + 速度×时间估值；服务端只挂一个采完定时器，到期一次扣余量、写入 `cargo_count` 再回城
+- 中途取消按已过时间估值结算后回城。`map_pick_item` 只留给非 `gatherable` 的掉落物
+
 ## 持久化
 
 `map_store` 落库的是身份和配置（怪、资源、主城等），不是所有运行时。
 
-典型不落库：行军路径、交战、巡逻当前目标点。落库：`kind`、`patrol_radius`、建筑等级。重载后巡逻以落库坐标为圆心重新跑。
+典型不落库：行军路径、交战、巡逻当前目标点、资源 `occupier_uid`。落库：`kind`、`patrol_radius`、建筑等级、资源余量 `count`。重载后巡逻以落库坐标为圆心重新跑；占点行军不恢复，余量保留。
 
 ## 压测锚点
 
