@@ -344,6 +344,8 @@ function Map:seed_public_monsters()
             chunk_id = chunk.from_pos(pt.x, pt.y, self.def.chunk_size),
             alive = true,
             kind = "public",
+            hp = 100,
+            max_hp = 100,
             owner_player_id = 0,
             patrol_radius = patrol_radius,
             version = 1,

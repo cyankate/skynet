@@ -16,7 +16,7 @@ main
         └── shardS × N   分片服            service/shard_service.lua
               ├── Map + MapAOI
               ├── observer / view_sync
-              ├── march_runtime / monster_ai / interact
+              ├── march_runtime / march_gather / march_battle / monster_ai / interact
               └── map_store
 ```
 
@@ -121,7 +121,18 @@ CMD 只做对外入口，转发到模块。本片持有：
 - 客户端从权威坐标按剩余路点外推
 - 交战时脏 `state/battle_id/x,y` 作为冻结点，结束再 rebase
 
-野战在攻击者所在片结算，防守方可能跨片（`march_set_defender`）。
+野战在攻击者所在片结算，防守方可能跨片（`march_set_defender`）。交战权威是**到点一次结算**，不是 tick 扣血：
+
+- 追击进 `ENGAGE_RANGE`（或 `intent=attack_monster` 到怪）后冻结双方，下发 `battle_id` / `battle_duration`
+- 用开战快照 hp 和 `DAMAGE/TICK_SEC` 算出持续时间，挂一个定时器；到期按计划写剩余 hp，死人则 despawn
+- 中途取消按已过时间估值。属主私有 `map_march_battle_notify` 只发 `engage` / `end`，不发过程 tick
+- AOI 观众只看到停下来打，用 duration 播动画；hp 只在结算时 dirty 一次
+
+打野是行军任务，不再从主城距离开副本：
+
+- `map_interact_monster` 从主城发 `intent=attack_monster` 的行军（无城边距离限制）
+- 到点开战、结算；打赢回城，打输行军消失；怪 `battle_id` 非空时不巡逻、不可再打
+- 已有行军也可以 `map_march_attack` 指定怪 uid
 
 采集是行军任务，不是瞬间拾取：
 

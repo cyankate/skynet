@@ -15,6 +15,8 @@ ctx.PATROL_TICK = 50 -- 怪物巡逻 500ms 一拍
 local observer = require "map.observer"
 local interact = require "map.interact"
 local march_runtime = require "map.march_runtime"
+local march_gather = require "map.march_gather"
+local march_battle = require "map.march_battle"
 local monster_ai = require "map.monster_ai"
 local move_test = require "map.move_test"
 local hotspot_test = require "map.hotspot_test"
@@ -101,7 +103,7 @@ end
 
 -- interact
 function CMD.interact_monster(player_id, monster_uid)
-    return interact.interact_monster(player_id, monster_uid)
+    return march_battle.march_attack_monster(player_id, monster_uid)
 end
 
 function CMD.on_battle_result(player_id, monster_uid, win)
@@ -142,15 +144,15 @@ function CMD.march_start(player_id, x, y)
 end
 
 function CMD.march_gather(player_id, resource_uid)
-    return march_runtime.march_gather(player_id, resource_uid)
+    return march_gather.march_gather(player_id, resource_uid)
 end
 
 function CMD.query_resource(uid)
-    return march_runtime.query_resource(uid)
+    return march_gather.query_resource(uid)
 end
 
 function CMD.march_attack(player_id, march_uid, target_uid)
-    return march_runtime.march_attack(player_id, march_uid, target_uid)
+    return march_battle.march_attack(player_id, march_uid, target_uid)
 end
 
 function CMD.march_cancel(player_id, march_uid)
@@ -161,28 +163,32 @@ function CMD.query_march(uid)
     return march_runtime.query_march(uid)
 end
 
-function CMD.apply_march_damage(uid, dmg, battle_id)
-    return march_runtime.apply_march_damage(uid, dmg, battle_id)
+function CMD.query_monster(uid)
+    return march_battle.query_monster(uid)
+end
+
+function CMD.settle_defender(uid, info)
+    return march_battle.settle_defender(uid, info)
 end
 
 function CMD.march_set_defender(uid, info)
-    return march_runtime.march_set_defender(uid, info)
+    return march_battle.march_set_defender(uid, info)
 end
 
 function CMD.march_clear_battle(uid, battle_id, reason)
-    return march_runtime.march_clear_battle(uid, battle_id, reason)
+    return march_battle.march_clear_battle(uid, battle_id, reason)
 end
 
 function CMD.march_update_host(uid, battle_id, host_shard)
-    return march_runtime.march_update_host(uid, battle_id, host_shard)
+    return march_battle.march_update_host(uid, battle_id, host_shard)
 end
 
 function CMD.battle_defender_moved(battle_id, dest_shard, uid)
-    return march_runtime.battle_defender_moved(battle_id, dest_shard, uid)
+    return march_battle.battle_defender_moved(battle_id, dest_shard, uid)
 end
 
 function CMD.end_hosted_battle(battle_id, reason)
-    return march_runtime.end_hosted_battle(battle_id, reason)
+    return march_battle.end_hosted_battle(battle_id, reason)
 end
 
 function CMD.accept_march_handoff(snap)

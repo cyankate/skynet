@@ -28,10 +28,10 @@ M.WORLD_FIELDS = {
 -- 分型扩展：只列 AOI / 可见 / ghost 边界需要的字段
 M.TYPE_FIELDS = {
     [M.TYPE.OBSERVER] = { "player_id", "player_name" },
-    [M.TYPE.MARCH] = { "hp", "max_hp", "state", "target_uid", "battle_id", "speed", "wp_index", "waypoints",
+    [M.TYPE.MARCH] = { "hp", "max_hp", "state", "target_uid", "battle_id", "battle_duration", "speed", "wp_index", "waypoints",
         "intent", "cargo_item_id", "cargo_count", "load_max",
         "gather_speed", "gather_amount", "gather_duration" },
-    [M.TYPE.MONSTER] = { "kind" },
+    [M.TYPE.MONSTER] = { "kind", "hp", "max_hp", "battle_id" },
     [M.TYPE.RESOURCE] = { "item_id", "count", "occupier_uid" }, -- count=余量；item_id=进包模板
     [M.TYPE.BUILDING] = { "building_id", "level" },
 }
@@ -40,13 +40,13 @@ M.TYPE_FIELDS = {
 M.VISIBLE_FIELDS = {
     [M.TYPE.MARCH] = {
         "uid", "owner_player_id", "x", "y",
-        "hp", "max_hp", "state", "target_uid", "battle_id", "shard_id",
+        "hp", "max_hp", "state", "target_uid", "battle_id", "battle_duration", "shard_id",
         "speed", "wp_index", "waypoints", -- 心跳推算计划字段
         "intent", "cargo_item_id", "cargo_count", "load_max",
         "gather_speed", "gather_amount", "gather_duration",
     },
     [M.TYPE.MONSTER] = {
-        "uid", "x", "y", "kind", "owner_player_id",
+        "uid", "x", "y", "kind", "hp", "max_hp", "battle_id", "owner_player_id",
     },
     [M.TYPE.RESOURCE] = {
         "uid", "x", "y", "item_id", "count", "occupier_uid", "owner_player_id",
@@ -88,9 +88,10 @@ local VISIBLE_DEFAULTS = {
     gather_speed = 0,
     gather_amount = 0,
     gather_duration = 0,
+    battle_duration = 0,
     building_id = 0,
     level = 0,
-    hp = 0,
+    hp = 100,
     max_hp = 100,
     state = "",
     target_uid = "",

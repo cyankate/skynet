@@ -34,6 +34,7 @@ local RUNTIME_KEYS = {
     _aoi_x = true,
     _aoi_y = true,
     occupier_uid = true, -- 行军不落库，重载后占点失效
+    battle_id = true, -- 交战不落库，重载后怪恢复可打
 }
 
 local ctx = service_ctx.get("map.map_store", {})

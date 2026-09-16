@@ -1,4 +1,5 @@
--- 大地图交互：锁、打怪、拾取、战斗回写、跨片 try_*
+-- 大地图交互：锁、拾取、旧副本回写、跨片 try_*
+-- 打野已改为行军到点结算，见 march_battle.march_attack_monster（CMD.interact_monster 已转发）。
 local skynet = require "skynet"
 local log = require "log"
 local protocol_handler = require "protocol_handler"

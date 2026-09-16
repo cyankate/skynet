@@ -7,7 +7,7 @@ M.SPEED = 30
 M.ENGAGE_RANGE = 40
 M.DISENGAGE_RANGE = 80
 M.TICK_SEC = 0.1
-M.DAMAGE = 4
+M.DAMAGE = 4 -- 折算成每秒伤害，只用于到点一次结算，不再 tick 扣血
 M.MAX_HP = 100
 M.MAX_PER_PLAYER = 3
 M.NOTIFY_MOVE = 8
@@ -17,10 +17,12 @@ M.STATE_CHASE = "chase"
 M.STATE_BATTLE = "battle"
 M.STATE_GATHERING = "gathering"
 
--- 行军任务：move 点对点；gather 去资源点采集；return 回城交货
+-- 行军任务：move 点对点；gather 采集；return 回城；attack 打行军；attack_monster 打野
 M.INTENT_MOVE = "move"
 M.INTENT_GATHER = "gather"
 M.INTENT_RETURN = "return"
+M.INTENT_ATTACK = "attack"
+M.INTENT_ATTACK_MONSTER = "attack_monster"
 
 M.LOAD_MAX = 100
 M.GATHER_SPEED = 20    -- 每秒采集量，客户端按时间估值
@@ -109,6 +111,7 @@ function M.new(opts)
         gather_start = opts.gather_start or 0,
         gather_end = opts.gather_end or 0,
         gather_seq = opts.gather_seq or 0,
+        battle_duration = opts.battle_duration or 0,
         target_uid = opts.target_uid,
         target_shard_id = opts.target_shard_id,
         last_path_tx = opts.last_path_tx,
@@ -207,6 +210,7 @@ function M.export(m)
         gather_start = m.gather_start,
         gather_end = m.gather_end,
         gather_seq = m.gather_seq,
+        battle_duration = m.battle_duration,
         target_uid = m.target_uid,
         target_shard_id = m.target_shard_id,
         battle_id = m.battle_id,

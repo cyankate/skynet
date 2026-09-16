@@ -18,6 +18,7 @@ local log = require "log"
 local aoi_object = require "map.aoi_object"
 local march = require "map.march"
 local march_runtime = require "map.march_runtime"
+local march_battle = require "map.march_battle"
 local shard = require "map.shard"
 local service_ctx = require "runtime.service_ctx"
 local view_sync = require "map.view_sync"
@@ -31,7 +32,7 @@ local DEFAULTS = {
     observers = 50,        -- 虚拟观察者数（静止聚焦热点）
     churners = 10,         -- 移动观察者数（热点内持续游走，打 enter/leave churn 与跨片迁移路径；0=关闭）
     marchers = 100,        -- 虚拟行军数（主要移动负载，热点内往返游走）
-    battlers = 40,         -- 其中配对开战数（偶数；打 hp/state 增量）。0=关闭；超出 marchers 时钳到 marchers
+    battlers = 40,         -- 其中配对开战数（偶数；到点冻结 + 定时结算）。0=关闭；超出 marchers 时钳到 marchers
     monsters = 40,         -- 热点巡逻怪（patrol_radius > 0，走 monster_ai 通道）
     duration_sec = 120,
     report_interval = 500, -- 报告周期（skynet 单位，500 = 5s）
@@ -238,6 +239,8 @@ local function spawn_monster(map, i)
         kind = "hotspot",
         owner_player_id = 0,
         patrol_radius = math.random(40, 80),
+        hp = 100,
+        max_hp = 100,
     }
     map:attach(obj, aoi_object.TYPE.MONSTER)
     map.public_monsters[uid] = obj
@@ -306,7 +309,7 @@ local function n_battles()
     return n
 end
 
--- 交战对若被打散（脱战/目标丢失），每轮报告补一次 engage，保持 hp 增量负载
+-- 交战对若提前结束，每轮报告补一次 engage（开战/结算各推一次属性，不再 tick 扣血）
 local function maintain_battles()
     if not hs or not hs.battler_pairs then
         return
@@ -314,7 +317,9 @@ local function maintain_battles()
     for _, p in ipairs(hs.battler_pairs) do
         local a, b = ctx.marches[p[1]], ctx.marches[p[2]]
         if a and b and a.alive and b.alive and not a.battle_id and not b.battle_id then
-            march_runtime.engage(p[1], p[2])
+            a.hp = a.max_hp or a.hp
+            b.hp = b.max_hp or b.hp
+            march_battle.engage(p[1], p[2])
         end
     end
 end
@@ -447,7 +452,7 @@ function M.start(opts)
     if n_pair > max_pair then
         n_pair = max_pair
     end
-    -- hp=10000：400/4 伤害/tick 可打满 120s，专注 hp 增量而不是死亡重生
+    -- hp=10000：按 DAMAGE/TICK_SEC 结算约 250s，压测窗口内保持交战冻结，不指望 tick 刷血
     local BATTLER_HP = 10000
     local i = 1
     for _ = 1, n_pair do
@@ -462,7 +467,7 @@ function M.start(opts)
             n_mar = n_mar + 1
         end
         if a and b then
-            local ok, err = march_runtime.engage(a, b)
+            local ok, err = march_battle.engage(a, b)
             if ok then
                 hs.battlers[a] = true
                 hs.battlers[b] = true

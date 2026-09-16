@@ -11,9 +11,12 @@
 | `view_sync.lua` | 合批桶、可见性过滤、拆包 |
 | `map.lua` / `map_aoi.lua` | 进场、移动、同格短路、ghost 收发 |
 | `observer.lua` | 进图、镜头移动、跨片、主城 |
-| `march.lua` / `march_runtime.lua` | 行军计划、交战、心跳推算 |
+| `march.lua` | 行军常量、实体、可见打包 |
+| `march_runtime.lua` | 行军索引、AOI、寻路、跨片、tick、出发/取消 |
+| `march_gather.lua` | 占点采集、回城交货 |
+| `march_battle.lua` | 到点结算、打野、跨片交战 |
 | `monster_ai.lua` | 巡逻（运行时，不落库） |
-| `interact.lua` | 打怪、拾取；锚点用主城 |
+| `interact.lua` | 拾取；旧副本回写。打野入口已转到行军 |
 | `map_store.lua` | 持久化 |
 | `shard.lua` | 分片几何、服务名 |
 | `service/shard_service.lua` | CMD 转发，不写玩法 |
@@ -110,6 +113,7 @@ protocol_handler.send_to_player(pid, "map_visible_delta_notify", ...)
 ## 移动怎么同步
 
 - **行军**：`DEAD_RECKONING=true`。tick 只 `move_obj`；出发 / 重寻路 / 交战 / 结束 / 开始采集 / 回城才 `broadcast_plan`。交战和采集脏 `state/x/y` 当冻结点。
+- **战斗**：到点下发 `battle_duration` 后挂定时器，到期一次写 hp。不要 tick 扣血，也不要战斗过程中 dirty `hp`。取消按已过时间估值再结算。打野走行军 `intent=attack_monster`，不要开副本。
 - **采集**：到点下发 `gather_speed/amount/duration` 后挂定时器，到期一次结算。不要 tick 扣余量，也不要采集过程中 dirty `count` / `cargo_count`。取消按已过时间估值再结算。
 - **慢速游走（巡逻）**：当前是 `sync_obj_move_around`。新做的连续移动优先学行军计划，不要学每 tick 广播。
 - **瞬移 / 传送**：`move_obj` 到新坐标。跨格会自动 leave/enter；**同格则周围人看不到位移**，必须再 `mark_dirty("x"|"y")` + `sync_obj_attr_around`。
@@ -137,7 +141,7 @@ protocol_handler.send_to_player(pid, "map_visible_delta_notify", ...)
 
 落库：身份、配置、需要重载仍在的建筑/怪/资源余量。
 
-不落库：行军路径、交战、巡逻当前目标、镜头位置、`visible_uids`、资源占点 `occupier_uid`。
+不落库：行军路径、交战、`battle_id`、巡逻当前目标、镜头位置、`visible_uids`、资源占点 `occupier_uid`。
 
 改了落库结构要同时改 `map_store` 的读写，并确认重载后 `attach` 仍会 `ensure` 出 AOI 字段。
 
@@ -155,7 +159,7 @@ call .shard.1001.0 "hotspot_stop"
 
 - `itemsmax=50`（拆包条目数，不是资源实体）
 - `march_tick` 远小于 100ms
-- 开交战时 `battle` 钉在配对数，`attr` 约等于 `battlers × 10`
+- 开交战时 `battle` 钉在配对数；交战过程 **attr 不应再跟 battlers 线性涨**（开战/结算各推一次）
 - 新类型若 `attr` 涨了但 `u` 不涨：没进 bucket，或 dirty 字段不在 `VISIBLE_FIELDS`
 
 ## 常见故障

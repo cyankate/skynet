@@ -224,29 +224,45 @@ end
 
 local function on_map_interact_monster(player_id, msg)
     local player = user_mgr.get_player_obj(player_id)
-    local ok, result = call_player_map(player, player_id, "interact_monster", msg and msg.monster_uid)
+    local monster_uid = tostring(msg and msg.monster_uid or "")
+    local city_sid = player and player.city_shard_id_
+    local city_addr = city_sid ~= nil
+        and shard_addr((player and player.map_id_) or shard.DEFAULT_MAP_ID, city_sid)
+        or nil
+    local ok, result
+    if city_addr then
+        ok, result = skynet.call(city_addr, "lua", "interact_monster", player_id, monster_uid)
+    end
+    if ok == nil then
+        ok, result = call_player_map(player, player_id, "interact_monster", monster_uid)
+    end
     if not ok then
         protocol_handler.send_to_player(player_id, "map_interact_monster_response", {
             result = 1,
             message = result or "交互失败",
             map_id = player and player.map_id_ or 0,
-            monster_uid = tostring(msg and msg.monster_uid or ""),
+            monster_uid = monster_uid,
             battle_type = "",
             accepted = false,
+            march_uid = "",
+            state = "",
             shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
     remember(player, result)
+    remember_march(player, result)
     protocol_handler.send_to_player(player_id, "map_interact_monster_response", {
         result = 0,
         message = "ok",
         map_id = result.map_id or 0,
-        monster_uid = result.monster_uid or "",
-        battle_type = result.battle_type or "monster_instance",
+        monster_uid = result.monster_uid or monster_uid,
+        battle_type = result.battle_type or "march",
         inst_id = result.inst_id or "",
         scene_id = result.scene_id or 0,
         accepted = true,
+        march_uid = result.march_uid or "",
+        state = result.state or "",
         shard_id = result.shard_id or 0,
     })
     return true

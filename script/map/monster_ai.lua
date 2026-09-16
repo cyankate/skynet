@@ -19,11 +19,11 @@ local WAIT_MAX = 300
 
 ctx.patrol_state = ctx.patrol_state or {} -- uid => { home_x, home_y, tx, ty, wait_until }
 
--- 战斗中的怪物不巡逻（被锁在战斗实例里）。锁与 interact 同属一个服务 VM，直接读共享 ctx。
+-- 战斗中的怪物不巡逻（battle_id 由行军到点开战写入）。
 local function in_battle(map, uid)
-    local lock_key = "monster:" .. tostring(map.map_id) .. ":" .. uid
-    local expire = ctx.obj_locks and ctx.obj_locks[lock_key]
-    return expire and expire > skynet.now()
+    local mon = map.public_monsters and map.public_monsters[uid]
+    local bid = mon and mon.battle_id
+    return bid ~= nil and bid ~= ""
 end
 
 -- 在巡逻半径内随机取一个新目标点。

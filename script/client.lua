@@ -256,6 +256,30 @@ function MessageHandler.handle_server_message(name, args)
 		return
 	end
 
+	if name == "map_interact_monster_response" then
+		print(string.format("[打野出发] result=%s uid=%s mon=%s type=%s state=%s %s",
+			tostring(args and args.result),
+			tostring(args and args.march_uid or ""),
+			tostring(args and args.monster_uid or ""),
+			tostring(args and args.battle_type or ""),
+			tostring(args and args.state or ""),
+			tostring(args and args.message or "")))
+		return
+	end
+
+	if name == "map_march_battle_notify" then
+		print(string.format("[战斗] phase=%s id=%s atk=%s def=%s hp=%s/%s duration=%s reason=%s",
+			tostring(args and args.phase or ""),
+			tostring(args and args.battle_id or ""),
+			tostring(args and args.attacker_uid or ""),
+			tostring(args and args.defender_uid or ""),
+			tostring(args and args.attacker_hp),
+			tostring(args and args.defender_hp),
+			tostring(args and args.duration or 0),
+			tostring(args and args.reason or "")))
+		return
+	end
+
 	if name == "map_march_gather_response" then
 		print(string.format("[采集出发] result=%s uid=%s res=%s intent=%s dest=(%s,%s) %s",
 			tostring(args and args.result),
@@ -269,7 +293,7 @@ function MessageHandler.handle_server_message(name, args)
 
 	if name == "map_march_sync_notify" then
 		local m = args and args.marches and args.marches[1]
-		print(string.format("[行军同步] removed=%s uid=%s state=%s intent=%s cargo=%s/%s gather=%s/%ss",
+		print(string.format("[行军同步] removed=%s uid=%s state=%s intent=%s cargo=%s/%s gather=%s/%ss battle=%ss",
 			tostring(args and args.removed_uid or ""),
 			tostring(m and m.uid or ""),
 			tostring(m and m.state or ""),
@@ -277,7 +301,8 @@ function MessageHandler.handle_server_message(name, args)
 			tostring(m and m.cargo_count or 0),
 			tostring(m and m.load_max or 0),
 			tostring(m and m.gather_amount or 0),
-			tostring(m and m.gather_duration or 0)))
+			tostring(m and m.gather_duration or 0),
+			tostring(m and m.battle_duration or 0)))
 		return
 	end
 

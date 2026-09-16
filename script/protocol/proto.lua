@@ -995,6 +995,9 @@ local s2c_builder = builder.new()
         x = "double",
         y = "double",
         kind = "string",
+        hp = "integer",
+        max_hp = "integer",
+        battle_id = "string",
         owner_player_id = "integer",
     })
 
@@ -1032,6 +1035,7 @@ local s2c_builder = builder.new()
         state = "string",
         target_uid = "string",
         battle_id = "string",
+        battle_duration = "double",
         shard_id = "integer",
         -- 心跳推算计划字段：x,y 为本包权威坐标（rebase 点），
         -- 客户端从 (x,y) 起按 waypoints[wp_index..] + speed 本地外推，停推每 tick 位置流
@@ -1101,6 +1105,8 @@ local s2c_builder = builder.new()
             inst_id = "string",
             scene_id = "integer",
             accepted = "boolean",
+            march_uid = "string",
+            state = "string",
             shard_id = "integer",
         }
     })
@@ -1274,6 +1280,7 @@ local s2c_builder = builder.new()
             defender_uid = "string",
             attacker_hp = "integer",
             defender_hp = "integer",
+            duration = "double",
             reason = "string",
             shard_id = "integer",
         }
