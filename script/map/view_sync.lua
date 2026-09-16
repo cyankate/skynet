@@ -2,6 +2,7 @@
 --   进/离视野 → 观察者差集（enter / leave）
 --   属性变化 → 实体侧主动推送 update（不扫周围对象）
 --   下发出口 → 按观察者合批：同玩家 100ms 窗口内的 enter/leave/update 合并成一包
+--   拆包     → 单包估算超过 DELTA_PKT_MAX_BYTES 时按条目切成多帧（enter 为 upsert）
 local skynet = require "skynet"
 local protocol_handler = require "protocol_handler"
 local aoi_object = require "map.aoi_object"
@@ -243,9 +244,11 @@ end
 -- （sproto wire ≈ 每字段 2B tag + 值：int≈4B / double≈8B / string≈4B+len，数组元素另加 4B 头），
 -- 误差 ~±20%，只用于压测评估带宽量级，不进任何业务逻辑
 local DELTA_PKT_BASE_BYTES = 40 -- 协议头 + map_id + 8 个桶的数组头
+local DELTA_PKT_MAX_BYTES = 8000 -- 单包估算上限；超出按条目拆帧（单实体永不拆，可能略超）
 local EST_ENTER_BYTES = { monsters = 44, items = 48, marches = 140, buildings = 48 } -- enter = 全量字段（行军含 waypoints 计划）
 local EST_UPDATE_BYTES = 30  -- update ≈ uid + x,y 双精度为主的脏字段
 local EST_LEAVE_BYTES = 12   -- leave = 纯 uid
+local DELTA_SUFFIX = { "monsters", "items", "marches", "buildings" }
 
 local function est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m, upd_i, upd_r, upd_b)
     local function sum(bucket, base)
@@ -263,8 +266,115 @@ local function est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m,
         + sum(leave, EST_LEAVE_BYTES)
 end
 
--- 增量包：enter/leave/update 四桶，空表自动过滤（真正发包点，全文件唯一出口）
-local function do_send_delta(player_id, map, delta)
+local function record_pkt_bytes(pkt_bytes)
+    stats.delta_bytes_total = stats.delta_bytes_total + pkt_bytes
+    if pkt_bytes > stats.delta_pkt_bytes_max then
+        stats.delta_pkt_bytes_max = pkt_bytes
+    end
+end
+
+local function packed_enter_bytes(suffix, packed)
+    local sz = (EST_ENTER_BYTES[suffix] or 48) + #(tostring(packed and packed.uid or ""))
+    -- 140B 按 2 个路点估；更长路径按点补，避免拆包预算被低估打穿上限
+    if suffix == "marches" then
+        local wps = packed and packed.waypoints
+        if type(wps) == "table" then
+            local extra = #wps - 2
+            if extra > 0 then
+                sz = sz + extra * 20
+            end
+        end
+    end
+    return sz
+end
+
+local function new_delta_chunk()
+    return {
+        enter_monsters = {},
+        enter_items = {},
+        enter_marches = {},
+        enter_buildings = {},
+        leave_uids = {},
+        update_monsters = {},
+        update_items = {},
+        update_marches = {},
+        update_buildings = {},
+        _bytes = DELTA_PKT_BASE_BYTES,
+        _n = 0,
+    }
+end
+
+-- 拆包：leave → update → enter，贪心填满 DELTA_PKT_MAX_BYTES。
+-- 单条超过上限也整条发出（无法再切）。空输入返回 {}。
+local function split_delta(delta)
+    local enter_m = delta.enter_monsters or {}
+    local enter_i = delta.enter_items or {}
+    local enter_r = delta.enter_marches or {}
+    local enter_b = delta.enter_buildings or {}
+    local leave = delta.leave_uids or {}
+    local upd_m = delta.update_monsters or {}
+    local upd_i = delta.update_items or {}
+    local upd_r = delta.update_marches or {}
+    local upd_b = delta.update_buildings or {}
+    local total = #enter_m + #enter_i + #enter_r + #enter_b + #leave + #upd_m + #upd_i + #upd_r + #upd_b
+    if total == 0 then
+        return {}
+    end
+    local est = est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m, upd_i, upd_r, upd_b)
+    if est <= DELTA_PKT_MAX_BYTES then
+        return { delta }
+    end
+
+    local items = {}
+    for _, uid in ipairs(leave) do
+        items[#items + 1] = { op = "leave", uid = uid, bytes = EST_LEAVE_BYTES + #tostring(uid) }
+    end
+    local function collect(kind, suffix, bucket)
+        for _, packed in ipairs(bucket) do
+            local bytes
+            if kind == "enter" then
+                bytes = packed_enter_bytes(suffix, packed)
+            else
+                bytes = EST_UPDATE_BYTES + #(tostring(packed.uid or ""))
+            end
+            items[#items + 1] = { op = kind, suffix = suffix, packed = packed, bytes = bytes }
+        end
+    end
+    collect("update", "monsters", upd_m)
+    collect("update", "items", upd_i)
+    collect("update", "marches", upd_r)
+    collect("update", "buildings", upd_b)
+    collect("enter", "monsters", enter_m)
+    collect("enter", "items", enter_i)
+    collect("enter", "marches", enter_r)
+    collect("enter", "buildings", enter_b)
+
+    local chunks, ch = {}, new_delta_chunk()
+    local function flush_ch()
+        if ch._n > 0 then
+            chunks[#chunks + 1] = ch
+            ch = new_delta_chunk()
+        end
+    end
+    for _, it in ipairs(items) do
+        if ch._n > 0 and (ch._bytes + it.bytes) > DELTA_PKT_MAX_BYTES then
+            flush_ch()
+        end
+        if it.op == "leave" then
+            ch.leave_uids[#ch.leave_uids + 1] = it.uid
+        else
+            local bucket = ch[it.op .. "_" .. it.suffix]
+            bucket[#bucket + 1] = it.packed
+        end
+        ch._bytes = ch._bytes + it.bytes
+        ch._n = ch._n + 1
+    end
+    flush_ch()
+    return chunks
+end
+
+-- 真正发出一帧增量（调用方保证非空且已按上限切过）
+local function send_one_delta(player_id, map, delta)
     local enter_m = delta.enter_monsters or {}
     local enter_i = delta.enter_items or {}
     local enter_r = delta.enter_marches or {}
@@ -284,12 +394,8 @@ local function do_send_delta(player_id, map, delta)
     stats.delta_enter_total = stats.delta_enter_total + enter_count
     stats.delta_leave_total = stats.delta_leave_total + leave_count
     stats.delta_update_total = stats.delta_update_total + update_count
-    local pkt_bytes = est_delta_bytes(enter_m, enter_i, enter_r, enter_b,
-        leave, upd_m, upd_i, upd_r, upd_b)
-    stats.delta_bytes_total = stats.delta_bytes_total + pkt_bytes
-    if pkt_bytes > stats.delta_pkt_bytes_max then
-        stats.delta_pkt_bytes_max = pkt_bytes
-    end
+    record_pkt_bytes(est_delta_bytes(enter_m, enter_i, enter_r, enter_b,
+        leave, upd_m, upd_i, upd_r, upd_b))
     protocol_handler.send_to_player(player_id, "map_visible_delta_notify", {
         map_id = map and map.map_id or 0,
         enter_monsters = enter_m,
@@ -304,9 +410,34 @@ local function do_send_delta(player_id, map, delta)
     })
 end
 
+-- 增量包：enter/leave/update 四桶；超限自动拆帧。全文件 delta 唯一出口。
+local function do_send_delta(player_id, map, delta)
+    local chunks = split_delta(delta)
+    for i = 1, #chunks do
+        send_one_delta(player_id, map, chunks[i])
+    end
+end
+
+local function send_full_notify(player_id, map, monsters, items, marches, buildings)
+    monsters = monsters or {}
+    items = items or {}
+    marches = marches or {}
+    buildings = buildings or {}
+    -- 全量包字段布局与 enter 相同，复用 enter 估算，计入 pktmax
+    record_pkt_bytes(est_delta_bytes(monsters, items, marches, buildings, {}, {}, {}, {}, {}))
+    protocol_handler.send_to_player(player_id, "map_visible_sync_notify", {
+        map_id = map and map.map_id or 0,
+        monsters = monsters,
+        items = items,
+        marches = marches,
+        buildings = buildings,
+    })
+end
+
 ---------------------------------------------------------------------------
 -- 观察者合批：同一玩家的 enter/leave/update 在 BATCH_COALESCE 窗口内合并成一包。
--- 不变式：flush 出的包里，一个 uid 只会出现在 enter / update / leave 其中一类。
+-- 不变式：flush 出的逻辑批次里，一个 uid 只会出现在 enter / update / leave 其中一类；
+--         超限拆帧后每帧仍保持该互斥（条目不跨类复制）。
 -- 合并规则：
 --   enter + leave → 对消（enter 尚未发出，客户端从未见过，无需任何包）
 --   leave + enter → 净 enter（全量包刷新；要求客户端 enter 为 upsert 语义）
@@ -314,8 +445,6 @@ end
 --   enter + update → update 字段合并进 enter 全量包
 ---------------------------------------------------------------------------
 local BATCH_COALESCE = 10 -- 100ms（skynet.timeout 单位 0.01s）
-
-local DELTA_SUFFIX = { "monsters", "items", "marches", "buildings" }
 
 -- player_id => {
 --   map = map, scheduled = bool,
@@ -453,13 +582,24 @@ function M.sync_full(player_id, map, st)
     end
     commit_visible_uids(st, by_uid)
     remember_view_grid(st, map)
-    protocol_handler.send_to_player(player_id, "map_visible_sync_notify", {
-        map_id = map and map.map_id or 0,
-        monsters = monsters,
-        items = items,
-        marches = marches,
-        buildings = buildings,
+    -- 首帧走 sync_notify（客户端按全量快照重置），溢出帧改 delta enter（upsert）。
+    -- 不能连发多帧 full：若客户端是覆盖语义，后一帧会把前一帧实体抹掉。
+    local chunks = split_delta({
+        enter_monsters = monsters,
+        enter_items = items,
+        enter_marches = marches,
+        enter_buildings = buildings,
     })
+    if #chunks == 0 then
+        send_full_notify(player_id, map, monsters, items, marches, buildings)
+        return
+    end
+    local first = chunks[1]
+    send_full_notify(player_id, map,
+        first.enter_monsters, first.enter_items, first.enter_marches, first.enter_buildings)
+    for i = 2, #chunks do
+        send_one_delta(player_id, map, chunks[i])
+    end
 end
 
 -- 仅进/离视野差集（不做属性 update）
