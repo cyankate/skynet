@@ -85,6 +85,11 @@ function M.start(player_id)
     if not st then
         return
     end
+    if st.hotspot_virtual then
+        -- 热点压测的虚拟观察者由 hotspot_test 自己驱动，move_test 不得劫持
+        -- （否则会随机乱走，与 churn 账本互相打架）
+        return
+    end
     -- 跨片接力：快照带过来的 deadline 未到期则继续用；已过期/没有则开新窗口
     local now = skynet.now()
     local deadline = st.move_test_deadline

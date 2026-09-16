@@ -195,6 +195,7 @@ function M.transfer_observer(player_id, dest_shard, x, y)
         x = x,
         y = y,
         move_test_deadline = st.move_test_deadline, -- 压测接力字段，无则为 nil
+        hotspot_virtual = st.hotspot_virtual,       -- 热点压测虚拟观察者标记，接力给新片（隔离 move_test）
     }
     if st.current_scene_id and st.current_scene_id > 0 then
         pcall(function()
@@ -204,7 +205,12 @@ function M.transfer_observer(player_id, dest_shard, x, y)
     view.clear_view_state(st)
     st.current_map_id = 0
     st.current_scene_id = 0
-    local ok, result = skynet.call(dest, "lua", "accept_observer", snap)
+    -- skynet.call 在对端抛错时会向本协程抛异常：必须兜住走回滚，
+    -- 否则观察者已在旧片 leave、新片未 accept，实体从所有片 AOI 丢失（不回滚 = 玩家镜头蒸发）
+    local call_ok, ok, result = pcall(skynet.call, dest, "lua", "accept_observer", snap)
+    if not call_ok then
+        ok, result = false, tostring(ok)
+    end
     if not ok then
         snap.x, snap.y = old_x, old_y
         local restored, restore_err = M.accept_observer(snap)
@@ -239,6 +245,7 @@ function M.accept_observer(snap)
     st.player_id = player_id
     st.player_name = snap.player_name or st.player_name or ("Player_" .. tostring(player_id))
     st.move_test_deadline = snap.move_test_deadline -- 压测接力字段
+    st.hotspot_virtual = snap.hotspot_virtual       -- 热点压测虚拟观察者标记接力
     local observer = aoi_object.Observer.new({
         uid = player_id,
         player_id = player_id,

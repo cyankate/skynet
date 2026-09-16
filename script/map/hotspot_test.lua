@@ -61,6 +61,7 @@ local function spawn_observer(map, i)
         current_map_id = map.map_id,
         current_scene_id = map.map_id,
         visible_uids = {},
+        hotspot_virtual = true, -- 隔离 move_test 接力（跨片时随 snap 接力），见 move_test.start
     }
     ctx.player_state[pid] = st
     local obs = aoi_object.Observer.new({
@@ -111,13 +112,17 @@ local function step_churner(map, pid, c)
         nx = math.floor(c.x + dx / dist * CHURN_STEP)
         ny = math.floor(c.y + dy / dist * CHURN_STEP)
     end
-    local mv_ok
+    local mv_ok, mv_err
     if c.shard == map.shard_id then
-        mv_ok = observer.move(pid, nx, ny)
+        mv_ok, mv_err = observer.move(pid, nx, ny)
     else
         -- 已迁移到邻片：远程调 owner 片的 move（observer.move 读的是目标 VM 的 player_state）
-        local pok, r_ok = pcall(skynet.call, shard.addr(map.map_id, c.shard), "lua", "move", pid, nx, ny)
-        mv_ok = pok and r_ok
+        local pok, r_ok, r_err = pcall(skynet.call, shard.addr(map.map_id, c.shard), "lua", "move", pid, nx, ny)
+        if pok then
+            mv_ok, mv_err = r_ok, r_err
+        else
+            mv_ok, mv_err = false, tostring(r_ok)
+        end
     end
     if not hs then
         return -- 远程调用让出协程，回来可能已 stop
@@ -133,10 +138,20 @@ local function step_churner(map, pid, c)
         end
     else
         hs.w_move_errs = hs.w_move_errs + 1
+        -- 前 10 次、之后每 50 次打一次失败原因+现场，避免刷屏（排障关键：原因不能被计数器吞掉）
+        if hs.w_move_errs <= 10 or hs.w_move_errs % 50 == 0 then
+            local ent = map:get_obj(pid)
+            local st = ctx.player_state[pid]
+            log.info("[hotspot] churn move fail: pid=%s ledger_shard=%s pos=(%s,%s)->(%s,%s) ent=%s st=%s scene=%s reason=%s",
+                pid, tostring(c.shard), tostring(c.x), tostring(c.y), tostring(nx), tostring(ny),
+                tostring(ent ~= nil), tostring(st ~= nil),
+                tostring(st and st.current_scene_id), tostring(mv_err))
+        end
         c.tx = nil -- 失败重派目标
         c.errs = (c.errs or 0) + 1
         if c.errs > 20 then
             -- 持续失败（状态被清/服务异常）：移出 churn 列表，观察者留到 stop 统一清
+            log.info("[hotspot] churn drop: pid=%s after %d consecutive errors", pid, c.errs)
             hs.churn[pid] = nil
         end
     end
