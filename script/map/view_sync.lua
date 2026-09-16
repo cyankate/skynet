@@ -116,13 +116,13 @@ function M.aoi_obj_visible(st, map, obj)
     return true
 end
 
-local function append_to_bucket(monsters, items, marches, buildings, bucket, packed)
+local function append_to_bucket(monsters, resources, marches, buildings, bucket, packed)
     if bucket == "marches" then
         marches[#marches + 1] = packed
     elseif bucket == "monsters" then
         monsters[#monsters + 1] = packed
     elseif bucket == "resources" then
-        items[#items + 1] = packed
+        resources[#resources + 1] = packed
     elseif bucket == "buildings" then
         buildings[#buildings + 1] = packed
     end
@@ -176,14 +176,14 @@ function M.collect_visible_objs(map, st)
 end
 
 function M.collect_visible(map, st)
-    local monsters, items, marches, buildings = {}, {}, {}, {}
+    local monsters, resources, marches, buildings = {}, {}, {}, {}
     for _, obj in pairs(M.collect_visible_objs(map, st)) do
         local bucket, packed = pack_obj(map, obj)
         if bucket and packed then
-            append_to_bucket(monsters, items, marches, buildings, bucket, packed)
+            append_to_bucket(monsters, resources, marches, buildings, bucket, packed)
         end
     end
-    return monsters, items, marches, buildings
+    return monsters, resources, marches, buildings
 end
 
 local function commit_visible_uids(st, by_uid)
@@ -239,17 +239,17 @@ end
 -- 单包条目上限（enter/leave/update 合计）。50 条行军全量约 7KB，协议加字段也留得住 8KB 量级。
 -- 不在 shard 侧估算 sproto 线长：真实编码在 gate，估算会随 schema 漂移且无法作为安全闸门。
 local DELTA_PKT_MAX_ITEMS = 50
-local DELTA_SUFFIX = { "monsters", "items", "marches", "buildings" }
+local DELTA_SUFFIX = { "monsters", "resources", "marches", "buildings" }
 
 local function new_delta_chunk()
     return {
         enter_monsters = {},
-        enter_items = {},
+        enter_resources = {},
         enter_marches = {},
         enter_buildings = {},
         leave_uids = {},
         update_monsters = {},
-        update_items = {},
+        update_resources = {},
         update_marches = {},
         update_buildings = {},
         _n = 0,
@@ -260,12 +260,12 @@ end
 -- 单条永不拆。空输入返回 {}。
 local function split_delta(delta)
     local enter_m = delta.enter_monsters or {}
-    local enter_i = delta.enter_items or {}
+    local enter_i = delta.enter_resources or {}
     local enter_r = delta.enter_marches or {}
     local enter_b = delta.enter_buildings or {}
     local leave = delta.leave_uids or {}
     local upd_m = delta.update_monsters or {}
-    local upd_i = delta.update_items or {}
+    local upd_i = delta.update_resources or {}
     local upd_r = delta.update_marches or {}
     local upd_b = delta.update_buildings or {}
     local total = #enter_m + #enter_i + #enter_r + #enter_b + #leave + #upd_m + #upd_i + #upd_r + #upd_b
@@ -286,11 +286,11 @@ local function split_delta(delta)
         end
     end
     collect("update", "monsters", upd_m)
-    collect("update", "items", upd_i)
+    collect("update", "resources", upd_i)
     collect("update", "marches", upd_r)
     collect("update", "buildings", upd_b)
     collect("enter", "monsters", enter_m)
-    collect("enter", "items", enter_i)
+    collect("enter", "resources", enter_i)
     collect("enter", "marches", enter_r)
     collect("enter", "buildings", enter_b)
 
@@ -326,12 +326,12 @@ end
 -- 真正发出一帧增量（调用方保证非空且已按上限切过）
 local function send_one_delta(player_id, map, delta)
     local enter_m = delta.enter_monsters or {}
-    local enter_i = delta.enter_items or {}
+    local enter_i = delta.enter_resources or {}
     local enter_r = delta.enter_marches or {}
     local enter_b = delta.enter_buildings or {}
     local leave = delta.leave_uids or {}
     local upd_m = delta.update_monsters or {}
-    local upd_i = delta.update_items or {}
+    local upd_i = delta.update_resources or {}
     local upd_r = delta.update_marches or {}
     local upd_b = delta.update_buildings or {}
     local enter_count = #enter_m + #enter_i + #enter_r + #enter_b
@@ -349,12 +349,12 @@ local function send_one_delta(player_id, map, delta)
     protocol_handler.send_to_player(player_id, "map_visible_delta_notify", {
         map_id = map and map.map_id or 0,
         enter_monsters = enter_m,
-        enter_items = enter_i,
+        enter_resources = enter_i,
         enter_marches = enter_r,
         enter_buildings = enter_b,
         leave_uids = leave,
         update_monsters = upd_m,
-        update_items = upd_i,
+        update_resources = upd_i,
         update_marches = upd_r,
         update_buildings = upd_b,
     })
@@ -368,16 +368,16 @@ local function do_send_delta(player_id, map, delta)
     end
 end
 
-local function send_full_notify(player_id, map, monsters, items, marches, buildings)
+local function send_full_notify(player_id, map, monsters, resources, marches, buildings)
     monsters = monsters or {}
-    items = items or {}
+    resources = resources or {}
     marches = marches or {}
     buildings = buildings or {}
-    note_pkt_items(#monsters + #items + #marches + #buildings)
+    note_pkt_items(#monsters + #resources + #marches + #buildings)
     protocol_handler.send_to_player(player_id, "map_visible_sync_notify", {
         map_id = map and map.map_id or 0,
         monsters = monsters,
-        items = items,
+        resources = resources,
         marches = marches,
         buildings = buildings,
     })
@@ -397,7 +397,7 @@ local BATCH_COALESCE = 10 -- 100ms（skynet.timeout 单位 0.01s）
 
 -- player_id => {
 --   map = map, scheduled = bool,
---   enter_monsters/items/marches/buildings = { uid -> packed },
+--   enter_monsters/resources/marches/buildings = { uid -> packed },
 --   update_* 同上,
 --   leave_uids = { uid -> true },
 -- }
@@ -522,11 +522,11 @@ function M.sync_full(player_id, map, st)
     -- 全量前先冲掉滞留合批，保证线上顺序：delta 在前、full 在后
     flush_player_batch(player_id)
     local by_uid = M.collect_visible_objs(map, st)
-    local monsters, items, marches, buildings = {}, {}, {}, {}
+    local monsters, resources, marches, buildings = {}, {}, {}, {}
     for _, obj in pairs(by_uid) do
         local bucket, packed = pack_obj(map, obj, true)
         if bucket and packed then
-            append_to_bucket(monsters, items, marches, buildings, bucket, packed)
+            append_to_bucket(monsters, resources, marches, buildings, bucket, packed)
         end
     end
     commit_visible_uids(st, by_uid)
@@ -535,17 +535,17 @@ function M.sync_full(player_id, map, st)
     -- 不能连发多帧 full：若客户端是覆盖语义，后一帧会把前一帧实体抹掉。
     local chunks = split_delta({
         enter_monsters = monsters,
-        enter_items = items,
+        enter_resources = resources,
         enter_marches = marches,
         enter_buildings = buildings,
     })
     if #chunks == 0 then
-        send_full_notify(player_id, map, monsters, items, marches, buildings)
+        send_full_notify(player_id, map, monsters, resources, marches, buildings)
         return
     end
     local first = chunks[1]
     send_full_notify(player_id, map,
-        first.enter_monsters, first.enter_items, first.enter_marches, first.enter_buildings)
+        first.enter_monsters, first.enter_resources, first.enter_marches, first.enter_buildings)
     for i = 2, #chunks do
         send_one_delta(player_id, map, chunks[i])
     end
@@ -574,7 +574,7 @@ function M.sync_diff(player_id, map, st)
     commit_visible_uids(st, by_uid)
     queue_delta(player_id, map, {
         enter_monsters = enter_m,
-        enter_items = enter_i,
+        enter_resources = enter_i,
         enter_marches = enter_r,
         enter_buildings = enter_b,
         leave_uids = leave,
@@ -656,7 +656,7 @@ local function notify_enter(player_id, map, st, uid, bucket, packed)
     append_to_bucket(enter_m, enter_i, enter_r, enter_b, bucket, packed)
     queue_delta(player_id, map, {
         enter_monsters = enter_m,
-        enter_items = enter_i,
+        enter_resources = enter_i,
         enter_marches = enter_r,
         enter_buildings = enter_b,
     })
@@ -759,7 +759,7 @@ local function flush_attr_sync(uid)
                 and st.visible_uids and st.visible_uids[uid] then
                 queue_delta(pid, map, {
                     update_monsters = upd_m,
-                    update_items = upd_i,
+                    update_resources = upd_i,
                     update_marches = upd_r,
                     update_buildings = upd_b,
                 })
@@ -829,7 +829,7 @@ function M.sync_obj_move_around(map, obj)
                     and st.visible_uids and st.visible_uids[uid] then
                     queue_delta(pid, m, {
                         update_monsters = upd_m,
-                        update_items = upd_i,
+                        update_resources = upd_i,
                         update_marches = upd_r,
                         update_buildings = upd_b,
                     })

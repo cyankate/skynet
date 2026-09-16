@@ -132,7 +132,7 @@ function M.enter_map(player_id, player_name, map_id)
 
     st.current_map_id = map_id
     st.current_scene_id = map_id
-    local monsters, items, marches, buildings = view.collect_visible(map, st)
+    local monsters, resources, marches, buildings = view.collect_visible(map, st)
     view.sync_view(player_id, map, st)
 
     return true, helpers.with_shard(map, {
@@ -141,7 +141,7 @@ function M.enter_map(player_id, player_name, map_id)
         x = x,
         y = y,
         monsters = monsters,
-        items = items,
+        resources = resources,
         marches = marches,
         buildings = buildings,
     })
@@ -264,7 +264,7 @@ function M.accept_observer(snap)
     end
     st.current_map_id = map.map_id
     st.current_scene_id = map.map_id
-    local monsters, items, marches, buildings = view.collect_visible(map, st)
+    local monsters, resources, marches, buildings = view.collect_visible(map, st)
     view.sync_view(player_id, map, st)
     return true, helpers.with_shard(map, {
         map_id = map.map_id,
@@ -272,7 +272,7 @@ function M.accept_observer(snap)
         x = snap.x, -- 观察者（镜头）落点
         y = snap.y,
         monsters = monsters,
-        items = items,
+        resources = resources,
         marches = marches,
         buildings = buildings,
     })
@@ -328,7 +328,7 @@ end
 function M.get_state(player_id)
     local st = helpers.get_or_init_player_state(player_id)
     local map = helpers.current_map(st)
-    local monsters, items, marches, buildings = {}, {}, {}, {}
+    local monsters, resources, marches, buildings = {}, {}, {}, {}
     local x, y = 0, 0
     if map then
         -- 返回镜头位置（观察者实体坐标）；客户端要找主城看 buildings 里 owner 是自己的
@@ -336,7 +336,7 @@ function M.get_state(player_id)
         if obj then
             x, y = obj.x, obj.y
         end
-        monsters, items, marches, buildings = view.collect_visible(map, st)
+        monsters, resources, marches, buildings = view.collect_visible(map, st)
     end
     return helpers.with_shard(map, {
         map_id = st.current_map_id or 0,
@@ -344,7 +344,7 @@ function M.get_state(player_id)
         x = x,
         y = y,
         monsters = monsters,
-        items = items,
+        resources = resources,
         marches = marches,
         buildings = buildings,
     })

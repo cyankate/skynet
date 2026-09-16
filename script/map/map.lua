@@ -26,8 +26,8 @@ function Map:ctor(def, shard_id)
     self.aoi = MapAOI.new(def.width, def.height, def.grid_size or 50)
     self.public_monsters = {}
     self.public_monsters_ready = false
-    self.public_items = {}
-    self.public_items_ready = false
+    self.public_resources = {}
+    self.public_resources_ready = false
     self.store_ephemeral = false
     self.ghost_replicas = {}  -- uid => { [neighbor_shard] = true }
     self.ghost_payloads = {}  -- uid => 真身 obj 引用（仅贴边投影时有）
@@ -52,7 +52,7 @@ end
 
 -- 公共对象播种配置（每片）
 local PUBLIC_MONSTER_COUNT = 48
-local PUBLIC_ITEM_COUNT = 32
+local PUBLIC_RESOURCE_COUNT = 32
 local PATROL_RATIO = 0.3        -- 巡逻怪比例
 local PATROL_RADIUS_MIN = 60    -- 巡逻半径区间（以生成点为圆心小范围游走）
 local PATROL_RADIUS_MAX = 120
@@ -355,14 +355,14 @@ function Map:seed_public_monsters()
     return monsters, docs
 end
 
-function Map:seed_public_items()
-    local items = {}
+function Map:seed_public_resources()
+    local resources = {}
     local docs = {}
     local x0, y0, x1, y1 = shard.pixel_rect(self.shard_id, self.def)
-    local pts = jittered_points(x0, y0, x1, y1, PUBLIC_ITEM_COUNT)
+    local pts = jittered_points(x0, y0, x1, y1, PUBLIC_RESOURCE_COUNT)
     for i, pt in ipairs(pts) do
         local uid = string.format("pub_i_%d_%d_%d", self.map_id, self.shard_id, i)
-        local item = {
+        local obj = {
             uid = uid,
             type = aoi_object.TYPE.RESOURCE,
             map_id = self.map_id,
@@ -379,11 +379,11 @@ function Map:seed_public_items()
             owner_player_id = 0,
             version = 1,
         }
-        item._id = map_store.make_id(self.map_id, aoi_object.TYPE.RESOURCE, uid)
-        items[uid] = item
-        docs[#docs + 1] = item
+        obj._id = map_store.make_id(self.map_id, aoi_object.TYPE.RESOURCE, uid)
+        resources[uid] = obj
+        docs[#docs + 1] = obj
     end
-    return items, docs
+    return resources, docs
 end
 
 local function index_by_uid(list)
@@ -449,21 +449,21 @@ function Map:load_public_monsters()
     return objs
 end
 
-function Map:load_public_items()
-    if self.public_items_ready then
-        return self.public_items
+function Map:load_public_resources()
+    if self.public_resources_ready then
+        return self.public_resources
     end
     local this = self
     local objs = self:load_typed(aoi_object.TYPE.RESOURCE, function()
-        return this:seed_public_items()
+        return this:seed_public_resources()
     end)
-    self.public_items = objs
-    self.public_items_ready = true
+    self.public_resources = objs
+    self.public_resources_ready = true
     return objs
 end
 
-function Map:get_public_item(uid)
-    return self.public_items[uid]
+function Map:get_public_resource(uid)
+    return self.public_resources[uid]
 end
 
 -- 玩家主城：uid 约定 city_<player_id>，AOI 实体即权威，不落 player_state
@@ -503,10 +503,6 @@ function Map:load_buildings()
     self:attach_all(objs, aoi_object.TYPE.BUILDING)
 end
 
-function Map:is_items_ephemeral()
-    return self.store_ephemeral and true or false
-end
-
 function Map:save(obj)
     if not obj then
         return false, "invalid obj"
@@ -518,16 +514,12 @@ function Map:save(obj)
     return map_store.save_one(obj)
 end
 
-function Map:save_item(item)
-    return self:save(item)
-end
-
 function Map:bootstrap()
     self:load_public_monsters()
-    self:load_public_items()
+    self:load_public_resources()
     self:load_buildings()
     self:attach_all(self.public_monsters, aoi_object.TYPE.MONSTER)
-    self:attach_all(self.public_items, aoi_object.TYPE.RESOURCE)
+    self:attach_all(self.public_resources, aoi_object.TYPE.RESOURCE)
     local this = self
     skynet.timeout(100, function()
         this:resync_border_ghosts()

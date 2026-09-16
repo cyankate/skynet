@@ -15,7 +15,7 @@ local M = {}
 -- 开关与参数（改这里，改完重启生效）
 local ENABLED = true          -- false 关闭测试
 local MONSTER_COUNT = 1000    -- 每片测试怪物数
-local ITEM_COUNT = 500        -- 每片测试资源数
+local RESOURCE_COUNT = 500    -- 每片测试资源数
 local DURATION_SEC = 15       -- 随机镜头持续秒数
 local MOVE_INTERVAL = 20      -- 移动间隔（0.01s 单位，20 = 200ms）
 local STEP_RANGE = 150        -- 小步移动幅度（地图单位）
@@ -31,7 +31,7 @@ function M.seed(map)
     end
     math.randomseed(skynet.now() * 31 + (map.shard_id or 0))
     local monster_count = MONSTER_COUNT
-    local item_count = ITEM_COUNT
+    local resource_count = RESOURCE_COUNT
     local seq = 0
     local function add(otype, extra)
         seq = seq + 1
@@ -52,11 +52,11 @@ function M.seed(map)
     for _ = 1, monster_count do
         add(aoi_object.TYPE.MONSTER, { kind = "stress" })
     end
-    for i = 1, item_count do
+    for i = 1, resource_count do
         add(aoi_object.TYPE.RESOURCE, { item_id = 10001 + (i % 3), count = 1 })
     end
-    log.info("move_test seed done, shard_id=%s monsters=%d items=%d",
-        tostring(map.shard_id), monster_count, item_count)
+    log.info("move_test seed done, shard_id=%s monsters=%d resources=%d",
+        tostring(map.shard_id), monster_count, resource_count)
 end
 
 -- 全图随机取点：小步以镜头当前位置为基准钳在地图边界内，大跳全图随机（可能落到别的片，触发跨片迁移）

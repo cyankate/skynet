@@ -379,9 +379,9 @@ function M.pick_item(player_id, item_uid)
     if uid == "" then
         return false, "item_uid is required"
     end
-    local public_items = map.public_items or {}
-    local item = public_items[uid]
-    if not item then
+    local public_resources = map.public_resources or {}
+    local resource = public_resources[uid]
+    if not resource then
         local req = {
             player_id = player_id,
         }
@@ -399,30 +399,30 @@ function M.pick_item(player_id, item_uid)
         end
         return false, "item not found"
     end
-    local can_interact, why = can_interact_obj(st, map, item)
+    local can_interact, why = can_interact_obj(st, map, resource)
     if not can_interact then
         return false, why
     end
-    if not item.alive then
+    if not resource.alive then
         return false, "item already picked"
     end
-    local lock_key = "item:" .. tostring(map.map_id) .. ":" .. uid
+    local lock_key = "resource:" .. tostring(map.map_id) .. ":" .. uid
     if not M.acquire_lock(lock_key) then
         return false, "item is busy"
     end
-    item.alive = false
-    aoi_object.mark_dirty(item, "alive")
-    map:detach(item)
-    if not map:is_items_ephemeral() then
-        map:save_item(item)
+    resource.alive = false
+    aoi_object.mark_dirty(resource, "alive")
+    map:detach(resource)
+    if not map.store_ephemeral then
+        map:save(resource)
     end
-    notify_item_removed(map.map_id, uid, item.x, item.y, player_id)
+    notify_item_removed(map.map_id, uid, resource.x, resource.y, player_id)
     M.release_lock(lock_key)
     return true, helpers.with_shard(map, {
         map_id = map.map_id,
         item_uid = uid,
-        item_id = item.item_id,
-        count = item.count,
+        item_id = resource.item_id,
+        count = resource.count,
         removed = true,
     })
 end
@@ -437,37 +437,37 @@ function M.try_pick_public(uid, req)
     if uid == "" or type(req) ~= "table" then
         return false, "item not found"
     end
-    local item = map:get_public_item(uid)
-    if not item then
+    local resource = map:get_public_resource(uid)
+    if not resource then
         return false, "item not found"
     end
     local st = {
         player_id = req.player_id,
     }
-    local can_interact, why = can_interact_obj(st, map, item)
+    local can_interact, why = can_interact_obj(st, map, resource)
     if not can_interact then
         return false, why
     end
-    if not item.alive then
+    if not resource.alive then
         return false, "item already picked"
     end
-    local lock_key = "item:" .. tostring(map.map_id) .. ":" .. uid
+    local lock_key = "resource:" .. tostring(map.map_id) .. ":" .. uid
     if not M.acquire_lock(lock_key) then
         return false, "item is busy"
     end
-    item.alive = false
-    aoi_object.mark_dirty(item, "alive")
-    map:detach(item)
-    if not map:is_items_ephemeral() then
-        map:save_item(item)
+    resource.alive = false
+    aoi_object.mark_dirty(resource, "alive")
+    map:detach(resource)
+    if not map.store_ephemeral then
+        map:save(resource)
     end
-    notify_item_removed(map.map_id, uid, item.x, item.y, req.player_id)
+    notify_item_removed(map.map_id, uid, resource.x, resource.y, req.player_id)
     M.release_lock(lock_key)
     return true, helpers.with_shard(map, {
         map_id = map.map_id,
         item_uid = uid,
-        item_id = item.item_id,
-        count = item.count,
+        item_id = resource.item_id,
+        count = resource.count,
         removed = true,
     })
 end

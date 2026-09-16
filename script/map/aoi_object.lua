@@ -30,7 +30,7 @@ M.TYPE_FIELDS = {
     [M.TYPE.OBSERVER] = { "player_id", "player_name" },
     [M.TYPE.MARCH] = { "hp", "max_hp", "state", "target_uid", "battle_id", "speed", "wp_index", "waypoints" },
     [M.TYPE.MONSTER] = { "kind" },
-    [M.TYPE.RESOURCE] = { "item_id", "count" },
+    [M.TYPE.RESOURCE] = { "item_id", "count" }, -- item_id = 进包的道具模板，不是地图类型名
     [M.TYPE.BUILDING] = { "building_id", "level" },
 }
 
@@ -52,7 +52,7 @@ M.VISIBLE_FIELDS = {
     },
 }
 
--- 全量可见包分桶名（内部）；下发协议里资源列表字段仍叫 items
+-- 全量可见包分桶名（与协议列表字段同名）
 M.VISIBLE_BUCKET = {
     [M.TYPE.MARCH] = "marches",
     [M.TYPE.MONSTER] = "monsters",

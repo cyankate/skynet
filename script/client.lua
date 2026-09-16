@@ -239,8 +239,8 @@ function MessageHandler.handle_server_message(name, args)
 	end
 
 	if name == "map_visible_sync_notify" then
-		print(string.format("[视野全量] monsters=%d items=%d marches=%d buildings=%d",
-			#(args and args.monsters or {}), #(args and args.items or {}),
+		print(string.format("[视野全量] monsters=%d resources=%d marches=%d buildings=%d",
+			#(args and args.monsters or {}), #(args and args.resources or {}),
 			#(args and args.marches or {}), #(args and args.buildings or {})))
 		return
 	end
@@ -248,10 +248,10 @@ function MessageHandler.handle_server_message(name, args)
 	if name == "map_visible_delta_notify" then
 		local function n(t) return #(t or {}) end
 		print(string.format("[视野增量] enter=%d leave=%d update=%d",
-			n(args and args.enter_monsters) + n(args and args.enter_items)
+			n(args and args.enter_monsters) + n(args and args.enter_resources)
 				+ n(args and args.enter_marches) + n(args and args.enter_buildings),
 			n(args and args.leave_uids),
-			n(args and args.update_monsters) + n(args and args.update_items)
+			n(args and args.update_monsters) + n(args and args.update_resources)
 				+ n(args and args.update_marches) + n(args and args.update_buildings)))
 		return
 	end

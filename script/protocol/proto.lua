@@ -992,7 +992,7 @@ local s2c_builder = builder.new()
         owner_player_id = "integer",
     })
 
-    :type("map_entity_item", {
+    :type("map_entity_resource", {
         uid = "string",
         x = "double",
         y = "double",
@@ -1131,7 +1131,7 @@ local s2c_builder = builder.new()
             x = "integer",
             y = "integer",
             monsters = "*map_entity_monster",
-            items = "*map_entity_item",
+            resources = "*map_entity_resource",
             marches = "*map_march_info",
             buildings = "*map_entity_building",
             shard_id = "integer",
@@ -1165,7 +1165,7 @@ local s2c_builder = builder.new()
         request = {
             map_id = "integer",
             monsters = "*map_entity_monster",
-            items = "*map_entity_item",
+            resources = "*map_entity_resource",
             marches = "*map_march_info",
             buildings = "*map_entity_building",
         }
@@ -1175,12 +1175,12 @@ local s2c_builder = builder.new()
         request = {
             map_id = "integer",
             enter_monsters = "*map_entity_monster",
-            enter_items = "*map_entity_item",
+            enter_resources = "*map_entity_resource",
             enter_marches = "*map_march_info",
             enter_buildings = "*map_entity_building",
             leave_uids = "*string",
             update_monsters = "*map_entity_monster",
-            update_items = "*map_entity_item",
+            update_resources = "*map_entity_resource",
             update_marches = "*map_march_info",
             update_buildings = "*map_entity_building",
         }
