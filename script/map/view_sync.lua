@@ -2,7 +2,7 @@
 --   进/离视野 → 观察者差集（enter / leave）
 --   属性变化 → 实体侧主动推送 update（不扫周围对象）
 --   下发出口 → 按观察者合批：同玩家 100ms 窗口内的 enter/leave/update 合并成一包
---   拆包     → 单包估算超过 DELTA_PKT_MAX_BYTES 时按条目切成多帧（enter 为 upsert）
+--   拆包     → 单包超过 DELTA_PKT_MAX_ITEMS 条时按条目切成多帧（enter 为 upsert）
 local skynet = require "skynet"
 local protocol_handler = require "protocol_handler"
 local aoi_object = require "map.aoi_object"
@@ -27,8 +27,7 @@ local stats = {
     delta_enter_total = 0,
     delta_leave_total = 0,
     delta_update_total = 0,
-    delta_bytes_total = 0,    -- 下发字节估算累计（见 est_delta_bytes）
-    delta_pkt_bytes_max = 0,  -- 单包估算字节高水位（自上次 reset 起）
+    delta_pkt_items_max = 0,  -- 单包条目高水位（自上次 reset 起）
     last_reset_time = 0,
 }
 
@@ -42,8 +41,7 @@ local function stats_reset()
     stats.delta_enter_total = 0
     stats.delta_leave_total = 0
     stats.delta_update_total = 0
-    stats.delta_bytes_total = 0
-    stats.delta_pkt_bytes_max = 0
+    stats.delta_pkt_items_max = 0
     stats.last_reset_time = skynet.now()
 end
 
@@ -59,8 +57,7 @@ function M.stats_snapshot()
         delta_enter_total = stats.delta_enter_total,
         delta_leave_total = stats.delta_leave_total,
         delta_update_total = stats.delta_update_total,
-        delta_bytes_total = stats.delta_bytes_total,
-        delta_pkt_bytes_max = stats.delta_pkt_bytes_max,
+        delta_pkt_items_max = stats.delta_pkt_items_max,
         now = skynet.now(),
     }
 end
@@ -77,7 +74,7 @@ local function stats_report()
     end
     local sec = elapsed / 100
     log.info(string.format(
-        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d queued=%d sent=%d enter=%d leave=%d update=%d bytes=%d pktmax=%d",
+        "[view_sync stats] %.1fs: full=%d diff=%d visible=%d attr=%d queued=%d sent=%d enter=%d leave=%d update=%d itemsmax=%d",
         sec,
         stats.sync_full_count,
         stats.sync_diff_count,
@@ -88,8 +85,7 @@ local function stats_report()
         stats.delta_enter_total,
         stats.delta_leave_total,
         stats.delta_update_total,
-        stats.delta_bytes_total,
-        stats.delta_pkt_bytes_max
+        stats.delta_pkt_items_max
     ))
     stats_reset()
 end
@@ -240,53 +236,10 @@ function M.clear_view_state(st)
     st.view_sync_scheduled = nil
 end
 
--- 线长估算：真实 sproto 编码在 gate，shard 侧永远看不到字节；此处按 schema 做零成本估算
--- （sproto wire ≈ 每字段 2B tag + 值：int≈4B / double≈8B / string≈4B+len，数组元素另加 4B 头），
--- 误差 ~±20%，只用于压测评估带宽量级，不进任何业务逻辑
-local DELTA_PKT_BASE_BYTES = 40 -- 协议头 + map_id + 8 个桶的数组头
-local DELTA_PKT_MAX_BYTES = 8000 -- 单包估算上限；超出按条目拆帧（单实体永不拆，可能略超）
-local EST_ENTER_BYTES = { monsters = 44, items = 48, marches = 140, buildings = 48 } -- enter = 全量字段（行军含 waypoints 计划）
-local EST_UPDATE_BYTES = 30  -- update ≈ uid + x,y 双精度为主的脏字段
-local EST_LEAVE_BYTES = 12   -- leave = 纯 uid
+-- 单包条目上限（enter/leave/update 合计）。50 条行军全量约 7KB，协议加字段也留得住 8KB 量级。
+-- 不在 shard 侧估算 sproto 线长：真实编码在 gate，估算会随 schema 漂移且无法作为安全闸门。
+local DELTA_PKT_MAX_ITEMS = 50
 local DELTA_SUFFIX = { "monsters", "items", "marches", "buildings" }
-
-local function est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m, upd_i, upd_r, upd_b)
-    local function sum(bucket, base)
-        local s = 0
-        for _, e in pairs(bucket) do
-            s = s + base + #(tostring(type(e) == "table" and e.uid or e))
-        end
-        return s
-    end
-    return DELTA_PKT_BASE_BYTES
-        + sum(enter_m, EST_ENTER_BYTES.monsters) + sum(enter_i, EST_ENTER_BYTES.items)
-        + sum(enter_r, EST_ENTER_BYTES.marches) + sum(enter_b, EST_ENTER_BYTES.buildings)
-        + sum(upd_m, EST_UPDATE_BYTES) + sum(upd_i, EST_UPDATE_BYTES)
-        + sum(upd_r, EST_UPDATE_BYTES) + sum(upd_b, EST_UPDATE_BYTES)
-        + sum(leave, EST_LEAVE_BYTES)
-end
-
-local function record_pkt_bytes(pkt_bytes)
-    stats.delta_bytes_total = stats.delta_bytes_total + pkt_bytes
-    if pkt_bytes > stats.delta_pkt_bytes_max then
-        stats.delta_pkt_bytes_max = pkt_bytes
-    end
-end
-
-local function packed_enter_bytes(suffix, packed)
-    local sz = (EST_ENTER_BYTES[suffix] or 48) + #(tostring(packed and packed.uid or ""))
-    -- 140B 按 2 个路点估；更长路径按点补，避免拆包预算被低估打穿上限
-    if suffix == "marches" then
-        local wps = packed and packed.waypoints
-        if type(wps) == "table" then
-            local extra = #wps - 2
-            if extra > 0 then
-                sz = sz + extra * 20
-            end
-        end
-    end
-    return sz
-end
 
 local function new_delta_chunk()
     return {
@@ -299,13 +252,12 @@ local function new_delta_chunk()
         update_items = {},
         update_marches = {},
         update_buildings = {},
-        _bytes = DELTA_PKT_BASE_BYTES,
         _n = 0,
     }
 end
 
--- 拆包：leave → update → enter，贪心填满 DELTA_PKT_MAX_BYTES。
--- 单条超过上限也整条发出（无法再切）。空输入返回 {}。
+-- 拆包：leave → update → enter，每帧最多 DELTA_PKT_MAX_ITEMS 条。
+-- 单条永不拆。空输入返回 {}。
 local function split_delta(delta)
     local enter_m = delta.enter_monsters or {}
     local enter_i = delta.enter_items or {}
@@ -320,24 +272,17 @@ local function split_delta(delta)
     if total == 0 then
         return {}
     end
-    local est = est_delta_bytes(enter_m, enter_i, enter_r, enter_b, leave, upd_m, upd_i, upd_r, upd_b)
-    if est <= DELTA_PKT_MAX_BYTES then
+    if total <= DELTA_PKT_MAX_ITEMS then
         return { delta }
     end
 
     local items = {}
     for _, uid in ipairs(leave) do
-        items[#items + 1] = { op = "leave", uid = uid, bytes = EST_LEAVE_BYTES + #tostring(uid) }
+        items[#items + 1] = { op = "leave", uid = uid }
     end
     local function collect(kind, suffix, bucket)
         for _, packed in ipairs(bucket) do
-            local bytes
-            if kind == "enter" then
-                bytes = packed_enter_bytes(suffix, packed)
-            else
-                bytes = EST_UPDATE_BYTES + #(tostring(packed.uid or ""))
-            end
-            items[#items + 1] = { op = kind, suffix = suffix, packed = packed, bytes = bytes }
+            items[#items + 1] = { op = kind, suffix = suffix, packed = packed }
         end
     end
     collect("update", "monsters", upd_m)
@@ -357,7 +302,7 @@ local function split_delta(delta)
         end
     end
     for _, it in ipairs(items) do
-        if ch._n > 0 and (ch._bytes + it.bytes) > DELTA_PKT_MAX_BYTES then
+        if ch._n >= DELTA_PKT_MAX_ITEMS then
             flush_ch()
         end
         if it.op == "leave" then
@@ -366,11 +311,16 @@ local function split_delta(delta)
             local bucket = ch[it.op .. "_" .. it.suffix]
             bucket[#bucket + 1] = it.packed
         end
-        ch._bytes = ch._bytes + it.bytes
         ch._n = ch._n + 1
     end
     flush_ch()
     return chunks
+end
+
+local function note_pkt_items(n)
+    if n > stats.delta_pkt_items_max then
+        stats.delta_pkt_items_max = n
+    end
 end
 
 -- 真正发出一帧增量（调用方保证非空且已按上限切过）
@@ -387,15 +337,15 @@ local function send_one_delta(player_id, map, delta)
     local enter_count = #enter_m + #enter_i + #enter_r + #enter_b
     local leave_count = #leave
     local update_count = #upd_m + #upd_i + #upd_r + #upd_b
-    if (enter_count + leave_count + update_count) == 0 then
+    local n = enter_count + leave_count + update_count
+    if n == 0 then
         return
     end
     stats.delta_sent_count = stats.delta_sent_count + 1
     stats.delta_enter_total = stats.delta_enter_total + enter_count
     stats.delta_leave_total = stats.delta_leave_total + leave_count
     stats.delta_update_total = stats.delta_update_total + update_count
-    record_pkt_bytes(est_delta_bytes(enter_m, enter_i, enter_r, enter_b,
-        leave, upd_m, upd_i, upd_r, upd_b))
+    note_pkt_items(n)
     protocol_handler.send_to_player(player_id, "map_visible_delta_notify", {
         map_id = map and map.map_id or 0,
         enter_monsters = enter_m,
@@ -423,8 +373,7 @@ local function send_full_notify(player_id, map, monsters, items, marches, buildi
     items = items or {}
     marches = marches or {}
     buildings = buildings or {}
-    -- 全量包字段布局与 enter 相同，复用 enter 估算，计入 pktmax
-    record_pkt_bytes(est_delta_bytes(monsters, items, marches, buildings, {}, {}, {}, {}, {}))
+    note_pkt_items(#monsters + #items + #marches + #buildings)
     protocol_handler.send_to_player(player_id, "map_visible_sync_notify", {
         map_id = map and map.map_id or 0,
         monsters = monsters,

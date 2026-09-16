@@ -238,7 +238,9 @@ local function start_field_battle(map, atk, target)
     if target.battle_id and target.battle_id ~= "" then
         return false, "目标交战中"
     end
-    if target.owner_player_id == atk.owner_player_id then
+    -- 无主（nil/0）之间可以交战；只有双方都是同一非 0 玩家才拒
+    local ao, to = atk.owner_player_id or 0, target.owner_player_id or 0
+    if ao ~= 0 and ao == to then
         return false, "不能攻击自己的行军"
     end
     local battle = {
@@ -799,6 +801,48 @@ function M.march_attack(player_id, march_uid, target_uid)
         state = m.state,
         battle_id = m.battle_id or "",
     })
+end
+
+-- 压测/内部：不走玩家选行军，直接让两支本片行军追击或交战
+function M.engage(atk_uid, def_uid)
+    local map = ctx.map
+    if not map then
+        return false, "map not found"
+    end
+    local atk = ctx.marches[tostring(atk_uid or "")]
+    if not atk or not atk.alive then
+        return false, "attacker not found"
+    end
+    def_uid = tostring(def_uid or "")
+    if def_uid == "" or def_uid == atk.uid then
+        return false, "invalid target"
+    end
+    local tgt = resolve_target(map, def_uid, atk.target_shard_id)
+    if not tgt then
+        return false, "目标不在范围内"
+    end
+    atk.target_uid = def_uid
+    atk.target_shard_id = tgt.shard_id
+    aoi_object.mark_dirty(atk, "target_uid")
+    if not atk.battle_id then
+        atk.state = march.STATE_CHASE
+        aoi_object.mark_dirty(atk, "state")
+        if march.in_range(atk.x, atk.y, tgt.x, tgt.y, march.ENGAGE_RANGE) then
+            local ok, err = start_field_battle(map, atk, tgt)
+            if not ok then
+                return false, err
+            end
+        else
+            local path = find_map_path(map, atk.x, atk.y, tgt.x, tgt.y, true)
+            if not path then
+                path = { { x = atk.x, y = atk.y }, { x = tgt.x, y = tgt.y } }
+            end
+            apply_march_path(atk, path, tgt.x, tgt.y)
+        end
+    end
+    notify_march_sync(map, atk)
+    sync_march_aoi(map, atk, true, true)
+    return true
 end
 
 function M.march_cancel(player_id, march_uid)

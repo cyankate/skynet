@@ -10,6 +10,7 @@
 --   call .shard.1001.0 "hotspot_start"                          -- 默认参数
 --   call .shard.1001.0 "hotspot_start" { observers = 100, marchers = 300 }
 --   call .shard.1001.0 "hotspot_start" { x = 1024, y = 1024 }   -- 边界热点（churn 会真实跨片迁移）
+--   call .shard.1001.0 "hotspot_start" { battlers = 0 }       -- 关掉交战，只测行军游走
 --   call .shard.1001.0 "hotspot_start" { churners = 0 }         -- 关掉 churn，与静态基线对比
 --   call .shard.1001.0 "hotspot_stop"
 local skynet = require "skynet"
@@ -30,6 +31,7 @@ local DEFAULTS = {
     observers = 50,        -- 虚拟观察者数（静止聚焦热点）
     churners = 10,         -- 移动观察者数（热点内持续游走，打 enter/leave churn 与跨片迁移路径；0=关闭）
     marchers = 100,        -- 虚拟行军数（主要移动负载，热点内往返游走）
+    battlers = 40,         -- 其中配对开战数（偶数；打 hp/state 增量）。0=关闭；超出 marchers 时钳到 marchers
     monsters = 40,         -- 热点巡逻怪（patrol_radius > 0，走 monster_ai 通道）
     duration_sec = 120,
     report_interval = 500, -- 报告周期（skynet 单位，500 = 5s）
@@ -175,10 +177,21 @@ end
 
 -- 虚拟行军：热点内两点游走，到达后由 report 周期重新派点。
 -- 直接进 ctx.marches 由 march tick 驱动（绕开主城出发/agent 通知等业务前置）
-local function spawn_march(map, i)
+-- pos: 可选 { x, y, hold, hp, max_hp }；hold=true 时终点=起点，给交战对原地冻结
+local function spawn_march(map, i, pos)
     local uid = string.format("hmarch_%d_%d", map.shard_id, i)
-    local x, y = rand_point(map)
-    local tx, ty = rand_point(map)
+    local x, y
+    if pos and pos.x and pos.y then
+        x, y = pos.x, pos.y
+    else
+        x, y = rand_point(map)
+    end
+    local tx, ty
+    if pos and pos.hold then
+        tx, ty = x, y
+    else
+        tx, ty = rand_point(map)
+    end
     local m = march.new({
         uid = uid,
         x = x,
@@ -191,6 +204,8 @@ local function spawn_march(map, i)
         owner_shard_id = map.shard_id,
         last_path_tx = tx,
         last_path_ty = ty,
+        hp = pos and pos.hp,
+        max_hp = pos and pos.max_hp,
     })
     m.owner_player_id = nil -- 无属主：notify_march_sync / remember_owner_march 自动跳过
     march.bind_map(m, map.map_id, map.shard_id)
@@ -236,6 +251,7 @@ local function repath_arrived(map)
     for uid in pairs(hs.marches) do
         local m = ctx.marches[uid]
         if m and m.alive and m.state == march.STATE_MARCHING
+            and not (hs.battlers and hs.battlers[uid])
             and not (m.waypoints and m.waypoints[m.wp_index or 1]) then
             local tx, ty = rand_point(map)
             m.waypoints = { { x = m.x, y = m.y }, { x = tx, y = ty } }
@@ -282,6 +298,27 @@ local function count_alive(t, pool)
     return n
 end
 
+local function n_battles()
+    local n = 0
+    for _ in pairs(ctx.field_battles or {}) do
+        n = n + 1
+    end
+    return n
+end
+
+-- 交战对若被打散（脱战/目标丢失），每轮报告补一次 engage，保持 hp 增量负载
+local function maintain_battles()
+    if not hs or not hs.battler_pairs then
+        return
+    end
+    for _, p in ipairs(hs.battler_pairs) do
+        local a, b = ctx.marches[p[1]], ctx.marches[p[2]]
+        if a and b and a.alive and b.alive and not a.battle_id and not b.battle_id then
+            march_runtime.engage(p[1], p[2])
+        end
+    end
+end
+
 local function march_alive()
     return count_alive(hs.marches, ctx.marches)
 end
@@ -300,6 +337,7 @@ local function report_tick(map)
         return
     end
     repath_arrived(map)
+    maintain_battles()
     local s = view_sync.stats_snapshot()
     local last = hs.last_stats
     hs.last_stats = s
@@ -327,12 +365,14 @@ local function report_tick(map)
             local leave = rate("delta_leave_total")
             local update = rate("delta_update_total")
             local entries = enter + leave + update
-            local bytes = rate("delta_bytes_total")
+            -- 压测粗估带宽（偏保守：enter 按行军全量字段）；生产发包不走这条估算
+            local bytes = enter * 140 + leave * 12 + update * 30 + sent * 40
+            local itemsmax = s.delta_pkt_items_max or 0
             log.info(string.format(
-                "[hotspot] obs=%d churn=%d march=%d mon=%d | sent=%.0f/s entries=%.0f/s e/p=%.1f (e=%.0f l=%.0f u=%.0f) bytes=%.1fKB/s pkt=%.0fB pktmax=%d | visible_scan=%.0f/s attr=%.0f/s full=%.0f/s diff=%.0f/s | churn mv=%.0f/s xfer=%d err=%d | march_tick avg=%.1fms peak=%.1fms | patrol_tick avg=%.1fms peak=%.1fms",
-                #hs.observer_list, n_churn, march_alive(), mon_alive(),
+                "[hotspot] obs=%d churn=%d march=%d battle=%d mon=%d | sent=%.0f/s entries=%.0f/s e/p=%.1f (e=%.0f l=%.0f u=%.0f) bytes≈%.1fKB/s pkt≈%.0fB itemsmax=%d | visible_scan=%.0f/s attr=%.0f/s full=%.0f/s diff=%.0f/s | churn mv=%.0f/s xfer=%d err=%d | march_tick avg=%.1fms peak=%.1fms | patrol_tick avg=%.1fms peak=%.1fms",
+                #hs.observer_list, n_churn, march_alive(), n_battles(), mon_alive(),
                 sent, entries, sent > 0 and (entries / sent) or 0, enter, leave, update,
-                bytes / 1024, sent > 0 and (bytes / sent) or 0, s.delta_pkt_bytes_max or 0,
+                bytes / 1024, sent > 0 and (bytes / sent) or 0, itemsmax,
                 rate("sync_obj_visible_count"), rate("sync_obj_attr_count"),
                 rate("sync_full_count"), rate("sync_diff_count"),
                 w_moves / dt, w_transfers, w_move_errs,
@@ -375,6 +415,8 @@ function M.start(opts)
         observer_list = {},
         churn = {},          -- pid => { x, y, shard, tx, ty, errs } 移动观察者账本
         marches = {},
+        battlers = {},       -- uid => true，交战行军（repath 跳过）
+        battler_pairs = {},  -- { {atk, def}, ... }
         monsters = {},
         deadline = skynet.now() + o.duration_sec * 100,
         report_interval = o.report_interval,
@@ -382,7 +424,7 @@ function M.start(opts)
         w_transfers = 0,     -- 窗口计数：跨片迁移次数
         w_move_errs = 0,     -- 窗口计数：churn 移动失败次数
     }
-    local n_obs, n_mon, n_mar, n_churn = 0, 0, 0, 0
+    local n_obs, n_mon, n_mar, n_churn, n_bat = 0, 0, 0, 0, 0
     for i = 1, o.observers do
         if spawn_observer(map, i) then
             n_obs = n_obs + 1
@@ -400,8 +442,39 @@ function M.start(opts)
             n_mon = n_mon + 1
         end
     end
-    for i = 1, o.marchers do
-        if spawn_march(map, i) then
+    local n_pair = math.floor((o.battlers or 0) / 2)
+    local max_pair = math.floor(o.marchers / 2)
+    if n_pair > max_pair then
+        n_pair = max_pair
+    end
+    -- hp=10000：400/4 伤害/tick 可打满 120s，专注 hp 增量而不是死亡重生
+    local BATTLER_HP = 10000
+    local i = 1
+    for _ = 1, n_pair do
+        local x, y = rand_point(map)
+        local a = spawn_march(map, i, { x = x, y = y, hold = true, hp = BATTLER_HP, max_hp = BATTLER_HP })
+        local b = spawn_march(map, i + 1, { x = x + 8, y = y, hold = true, hp = BATTLER_HP, max_hp = BATTLER_HP })
+        i = i + 2
+        if a then
+            n_mar = n_mar + 1
+        end
+        if b then
+            n_mar = n_mar + 1
+        end
+        if a and b then
+            local ok, err = march_runtime.engage(a, b)
+            if ok then
+                hs.battlers[a] = true
+                hs.battlers[b] = true
+                hs.battler_pairs[#hs.battler_pairs + 1] = { a, b }
+                n_bat = n_bat + 2
+            else
+                log.info("[hotspot] engage fail: %s vs %s reason=%s", a, b, tostring(err))
+            end
+        end
+    end
+    for j = i, o.marchers do
+        if spawn_march(map, j) then
             n_mar = n_mar + 1
         end
     end
@@ -415,9 +488,9 @@ function M.start(opts)
             churn_tick(map)
         end)
     end
-    log.info("[hotspot] start: shard=%s center=(%d,%d) r=%d obs=%d churn=%d marchers=%d monsters=%d duration=%ds",
-        tostring(map.shard_id), cx, cy, o.radius, n_obs, n_churn, n_mar, n_mon, o.duration_sec)
-    return true, { observers = n_obs, churners = n_churn, marchers = n_mar, monsters = n_mon, x = cx, y = cy }
+    log.info("[hotspot] start: shard=%s center=(%d,%d) r=%d obs=%d churn=%d marchers=%d battlers=%d monsters=%d duration=%ds",
+        tostring(map.shard_id), cx, cy, o.radius, n_obs, n_churn, n_mar, n_bat, n_mon, o.duration_sec)
+    return true, { observers = n_obs, churners = n_churn, marchers = n_mar, battlers = n_bat, monsters = n_mon, x = cx, y = cy }
 end
 
 function M.stop()
@@ -480,6 +553,8 @@ function M.status()
         observers = #hs.observer_list,
         churners = n_churn,
         marchers = march_alive(),
+        battlers = n_battles() * 2,
+        battles = n_battles(),
         monsters = mon_alive(),
         remain_sec = math.max(0, (hs.deadline - skynet.now()) / 100),
     }
