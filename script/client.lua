@@ -439,8 +439,8 @@ function CommandHandler.process_command(cmd)
 		elseif cmd == "map_enter" then
 			NetworkManager.send_request("map_enter", { map_id = tonumber(args[1]) or 1 }, function(response)
 				if response and response.result == 0 then
-					print(string.format("进图成功！map_id=%s shard_id=%s 坐标=(%s,%s)",
-						tostring(response.map_id), tostring(response.shard_id),
+					print(string.format("进图成功！map_id=%s 坐标=(%s,%s)",
+						tostring(response.map_id),
 						tostring(response.x), tostring(response.y)))
 				else
 					print(string.format("进图失败: %s", response and response.message or "未知错误"))

@@ -131,9 +131,8 @@ function M.notify_march_sync(map, m, removed)
     end
     local payload = {
         map_id = map and map.map_id or 0,
-        marches = (not removed) and { march.pack_visible(m, map and map.shard_id, true) } or {},
+        marches = (not removed) and { march.pack_visible(m, true) } or {},
         removed_uid = removed and (m.uid or "") or "",
-        shard_id = map and map.shard_id or 0,
     }
     if m.owner_player_id then
         protocol_handler.send_to_player(m.owner_player_id, "map_march_sync_notify", payload)

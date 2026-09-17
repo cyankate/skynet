@@ -12,6 +12,7 @@ local view = require "map.view_sync"
 local helpers = require "map.helpers"
 local interact = require "map.interact"
 local march_runtime = require "map.march_runtime"
+local map_block = require "map.block"
 
 local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
@@ -21,21 +22,18 @@ ctx.MAP_VIEW_RANGE = 100
 
 local CITY_BUILDING_ID = 1 -- 主城的 building_id 配置占位
 
--- 主城落成：出生点建城（BUILDING 实体，owner=玩家，持久化；uid 约定 city_<player_id>）
+-- 主城落成：本片可走空地建城（BUILDING，owner=玩家，占格挡路，持久化；uid 约定 city_<player_id>）
 local function create_city(map, player_id)
-    local start = map.def.start or {}
-    local x, y
-    if start.x and start.y and map:owns_pos(start.x, start.y) then
-        x, y = start.x, start.y
-    else
-        x, y = map:rand_spawn()
+    local x, y = map_block.pick_city(map)
+    if not x then
+        log.error("city spawn failed, player_id=%s err=%s", tostring(player_id), tostring(y))
+        return nil
     end
     local city = {
         uid = "city_" .. tostring(player_id),
         type = aoi_object.TYPE.BUILDING,
         map_id = map.map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         x = x,
         y = y,
         view_range = 0,
@@ -122,7 +120,6 @@ function M.enter_map(player_id, player_name, map_id)
         view_range = ctx.MAP_VIEW_RANGE,
         map_id = map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         is_ghost = false,
     })
     local enter_ok, enter_err = map:enter_obj(observer)
@@ -255,7 +252,6 @@ function M.accept_observer(snap)
         view_range = ctx.MAP_VIEW_RANGE,
         map_id = map.map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         is_ghost = false,
     })
     local enter_ok, enter_err = map:enter_obj(observer)

@@ -7,6 +7,7 @@ local map_store = require "map.map_store"
 local MapAOI = require "map.map_aoi"
 local aoi_object = require "map.aoi_object"
 local view_sync = require "map.view_sync"
+local map_block = require "map.block"
 
 local Map = class("Map")
 
@@ -280,12 +281,12 @@ function Map:attach(obj, otype)
         view_range = 0,
         is_ghost = false,
         map_id = self.map_id,
-        owner_shard_id = self.shard_id,
         shard_id = self.shard_id,
     })
     local ok, err = self:enter_obj(obj)
     if ok then
         obj.in_aoi = true
+        map_block.set(obj)
     else
         log.error("%s enter aoi failed, uid=%s err=%s", tostring(otype), tostring(obj.uid), tostring(err))
     end
@@ -295,6 +296,7 @@ function Map:detach(obj)
     if not obj or not obj.uid then
         return
     end
+    map_block.clear(obj)
     if obj.in_aoi then
         pcall(function()
             self:leave_obj(obj.uid)
@@ -336,7 +338,6 @@ function Map:seed_public_monsters()
             type = aoi_object.TYPE.MONSTER,
             map_id = self.map_id,
             shard_id = self.shard_id,
-            owner_shard_id = self.shard_id,
             x = pt.x,
             y = pt.y,
             view_range = 0,
@@ -369,7 +370,6 @@ function Map:seed_public_resources()
             type = aoi_object.TYPE.RESOURCE,
             map_id = self.map_id,
             shard_id = self.shard_id,
-            owner_shard_id = self.shard_id,
             x = pt.x,
             y = pt.y,
             view_range = 0,

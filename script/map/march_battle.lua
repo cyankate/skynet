@@ -30,7 +30,6 @@ local function notify_field_battle(map, battle, phase, extra)
         defender_hp = extra.defender_hp or 0,
         duration = extra.duration or battle.duration or 0,
         reason = extra.reason or "",
-        shard_id = map and map.shard_id or 0,
     }
     if battle.attacker_player_id then
         protocol_handler.send_to_player(battle.attacker_player_id, "map_march_battle_notify", msg)
@@ -235,7 +234,7 @@ local function resolve_monster(map, uid, hint_shard)
     end
     local ghost = map:get_obj(uid)
     if ghost and ghost.type == aoi_object.TYPE.MONSTER then
-        snap = query_sid_monster(map, ghost.owner_shard_id, uid)
+        snap = query_sid_monster(map, ghost.shard_id, uid)
         if snap then
             return snap
         end
@@ -246,7 +245,7 @@ local function resolve_monster(map, uid, hint_shard)
             hp = tonumber(ghost.hp) or march.MAX_HP,
             max_hp = tonumber(ghost.max_hp) or march.MAX_HP,
             battle_id = ghost.battle_id or "",
-            shard_id = tonumber(ghost.owner_shard_id),
+            shard_id = tonumber(ghost.shard_id),
             kind = "monster",
         }
     end
@@ -525,11 +524,10 @@ local function maybe_repath_chase(map, m, tgt)
         return
     end
     local path = runtime.find_map_path(map, m.x, m.y, tgt.x, tgt.y, true)
-    if not path then
-        path = { { x = m.x, y = m.y }, { x = tgt.x, y = tgt.y } }
+    if path then
+        runtime.apply_march_path(m, path, tgt.x, tgt.y)
+        runtime.broadcast_plan(map, m)
     end
-    runtime.apply_march_path(m, path, tgt.x, tgt.y)
-    runtime.broadcast_plan(map, m)
 end
 
 function M.try_engage_chase(map, m)
@@ -610,11 +608,12 @@ function M.march_attack(player_id, march_uid, target_uid)
             return false, err
         end
     else
-        local path = runtime.find_map_path(map, m.x, m.y, tgt.x, tgt.y, true)
-        if not path then
-            path = { { x = m.x, y = m.y }, { x = tgt.x, y = tgt.y } }
+        local path, path_err = runtime.find_map_path(map, m.x, m.y, tgt.x, tgt.y, true)
+        if path then
+            runtime.apply_march_path(m, path, tgt.x, tgt.y)
+        else
+            return false, path_err or "无法到达目标"
         end
-        runtime.apply_march_path(m, path, tgt.x, tgt.y)
     end
     runtime.notify_march_sync(map, m)
     runtime.sync_march_aoi(map, m, true, true)
@@ -659,10 +658,9 @@ function M.engage(atk_uid, def_uid)
             end
         else
             local path = runtime.find_map_path(map, atk.x, atk.y, tgt.x, tgt.y, true)
-            if not path then
-                path = { { x = atk.x, y = atk.y }, { x = tgt.x, y = tgt.y } }
+            if path then
+                runtime.apply_march_path(atk, path, tgt.x, tgt.y)
             end
-            runtime.apply_march_path(atk, path, tgt.x, tgt.y)
         end
     end
     runtime.notify_march_sync(map, atk)

@@ -15,9 +15,10 @@ M.TYPE = {
 }
 
 -- 空间底座（所有 type）
+-- shard_id = 权威所在片；本片服务是 map.shard_id；投影看 is_ghost
 M.BASE_FIELDS = {
     "uid", "type", "x", "y", "view_range", "is_ghost",
-    "map_id", "shard_id", "owner_shard_id",
+    "map_id", "shard_id",
 }
 
 -- 世界对象公共
@@ -40,7 +41,7 @@ M.TYPE_FIELDS = {
 M.VISIBLE_FIELDS = {
     [M.TYPE.MARCH] = {
         "uid", "owner_player_id", "x", "y",
-        "hp", "max_hp", "state", "target_uid", "battle_id", "battle_duration", "shard_id",
+        "hp", "max_hp", "state", "target_uid", "battle_id", "battle_duration",
         "speed", "wp_index", "waypoints", -- 心跳推算计划字段
         "intent", "cargo_item_id", "cargo_count", "load_max",
         "gather_speed", "gather_amount", "gather_duration",
@@ -96,7 +97,6 @@ local VISIBLE_DEFAULTS = {
     state = "",
     target_uid = "",
     battle_id = "",
-    shard_id = 0,
 }
 
 -- ghost 快照里 nil 会变成这些值，便于邻居覆盖清空（否则 apply 会跳过 nil）
@@ -198,8 +198,8 @@ function M.visible_bucket(otype)
     return M.VISIBLE_BUCKET[otype]
 end
 
--- 客户端可见序列化。ctx.shard_id 可覆盖行军/投影所属 shard。
--- ctx.full = true 全量；否则只推脏字段（_dirty_fields）
+-- 客户端可见序列化。ctx.full = true 全量；否则只推脏字段（_dirty_fields）
+-- 分片 id 是服务端路由，不进可见包。
 function M.pack_visible(obj, ctx)
     if not obj or M.is_observer(obj) then
         return nil
@@ -216,8 +216,6 @@ function M.pack_visible(obj, ctx)
         local v
         if key == "uid" then
             v = obj.uid
-        elseif key == "shard_id" then
-            v = ctx.shard_id or obj.owner_shard_id or obj.shard_id
         else
             v = obj[key]
         end
@@ -253,7 +251,7 @@ function M.clear_dirty(obj)
     end
 end
 
-function M.make_ghost_snapshot(obj, map_id, owner_shard_id, view_range)
+function M.make_ghost_snapshot(obj, map_id, shard_id, view_range)
     if not obj then
         return nil
     end
@@ -263,8 +261,7 @@ function M.make_ghost_snapshot(obj, map_id, owner_shard_id, view_range)
         uid = uid,
         is_ghost = true,
         map_id = map_id or obj.map_id,
-        owner_shard_id = owner_shard_id or obj.owner_shard_id,
-        shard_id = owner_shard_id or obj.shard_id,
+        shard_id = shard_id or obj.shard_id,
         view_range = view_range or obj.view_range or 0,
     }
 
@@ -315,12 +312,6 @@ function M.apply_ghost_update(dst, src)
     end
     dst.uid = src.uid or dst.uid
     dst.is_ghost = true
-    if src.owner_shard_id ~= nil then
-        dst.owner_shard_id = src.owner_shard_id
-        if src.shard_id == nil then
-            dst.shard_id = src.owner_shard_id
-        end
-    end
     return dst
 end
 

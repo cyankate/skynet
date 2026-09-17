@@ -187,7 +187,8 @@ function M.begin_return(map, m)
     aoi_object.mark_dirty(m, "target_uid")
     local path = runtime.find_map_path(map, m.x, m.y, city.x, city.y)
     if not path then
-        path = { { x = m.x, y = m.y }, { x = city.x, y = city.y } }
+        log.error("gather return: no path uid=%s", tostring(m.uid))
+        return
     end
     runtime.apply_march_path(m, path, city.x, city.y)
     runtime.notify_march_sync(map, m)
@@ -208,7 +209,8 @@ function M.begin_gather(map, m)
     if not march.in_range(m.x, m.y, res.x, res.y, march.GATHER_RANGE) then
         local path = runtime.find_map_path(map, m.x, m.y, res.x, res.y, true)
         if not path then
-            path = { { x = m.x, y = m.y }, { x = res.x, y = res.y } }
+            M.begin_return(map, m)
+            return
         end
         runtime.apply_march_path(m, path, res.x, res.y)
         runtime.broadcast_plan(map, m)
@@ -291,11 +293,10 @@ function M.finish_return(map, m)
     end
     if not march.in_range(m.x, m.y, city.x, city.y, march.CITY_ARRIVE_RANGE) then
         local path = runtime.find_map_path(map, m.x, m.y, city.x, city.y)
-        if not path then
-            path = { { x = m.x, y = m.y }, { x = city.x, y = city.y } }
+        if path then
+            runtime.apply_march_path(m, path, city.x, city.y)
+            runtime.broadcast_plan(map, m)
         end
-        runtime.apply_march_path(m, path, city.x, city.y)
-        runtime.broadcast_plan(map, m)
         return
     end
     deposit_cargo(m)

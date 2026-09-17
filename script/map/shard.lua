@@ -31,10 +31,16 @@ end
 
 function M.all_ids()
     local t = {}
-    for i = 0, M.shard_count() - 1 do
+    for i = 1, M.shard_count() do
         t[#t + 1] = i
     end
     return t
+end
+
+-- 1-based shard_id → 网格列/行（0-based）
+local function shard_cell(shard_id, cols)
+    local idx = math.max(1, tonumber(shard_id) or 1) - 1
+    return idx % cols, math.floor(idx / cols)
 end
 
 function M.chunk_axis(def)
@@ -48,8 +54,7 @@ function M.shard_chunk_rect(shard_id, def)
     local cols = def.shard_cols or M.SHARD_COLS
     local rows = def.shard_rows or M.SHARD_ROWS
     local cx_max, cy_max = M.chunk_axis(def)
-    local sc = shard_id % cols
-    local sr = math.floor(shard_id / cols)
+    local sc, sr = shard_cell(shard_id, cols)
     local x_div = math.max(1, math.floor(cx_max / cols))
     local y_div = math.max(1, math.floor(cy_max / rows))
     local cx0 = sc * x_div
@@ -89,7 +94,7 @@ function M.shard_id_of_chunk(cx, cy, def)
     if sr < 0 then
         sr = 0
     end
-    return sr * cols + sc
+    return sr * cols + sc + 1
 end
 
 function M.shard_id_of_pos(x, y, def)
@@ -115,15 +120,14 @@ end
 function M.neighbors(shard_id, def)
     local cols = def.shard_cols or M.SHARD_COLS
     local rows = def.shard_rows or M.SHARD_ROWS
-    local sc = shard_id % cols
-    local sr = math.floor(shard_id / cols)
+    local sc, sr = shard_cell(shard_id, cols)
     local t = {}
     for dy = -1, 1 do
         for dx = -1, 1 do
             if not (dx == 0 and dy == 0) then
                 local nc, nr = sc + dx, sr + dy
                 if nc >= 0 and nc < cols and nr >= 0 and nr < rows then
-                    t[#t + 1] = nr * cols + nc
+                    t[#t + 1] = nr * cols + nc + 1
                 end
             end
         end

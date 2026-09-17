@@ -1,5 +1,5 @@
 -- 大世界静态寻路：一张 map 一份格子图，路点用世界坐标。
--- 动态障碍只给城墙 / 关隘这类低频变化，行军不要写进来。
+-- 主城等建筑占格为动态障碍（低频）；行军本身不写入导航图。
 local class = require "utils.class"
 local Simple2DNavMesh = require "scene.pathfinding.simple_2d_navmesh"
 
@@ -7,6 +7,10 @@ local MapPath = class("MapPath")
 
 MapPath.CELL_SIZE = 8
 MapPath.SNAP_CELLS = 24
+-- 主城占格：半径约 2 格；间距避免叠城。回城判定要大于半径（见 march.CITY_ARRIVE_RANGE）
+MapPath.CITY_BLOCK_RADIUS = 16
+MapPath.CITY_SPACING = 96
+MapPath.SPAWN_TRIES = 48
 
 function MapPath:ctor(def)
     self.def = def

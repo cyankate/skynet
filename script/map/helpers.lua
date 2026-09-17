@@ -4,6 +4,7 @@ local service_ctx = require "runtime.service_ctx"
 local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
 
+-- 给 agent 路由用（map_net 缓存 city/map/march 所在片），不下发客户端。
 function M.with_shard(map, payload)
     payload = payload or {}
     payload.map_id = payload.map_id or (map and map.map_id or 0)

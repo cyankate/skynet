@@ -19,6 +19,8 @@
 | `interact.lua` | 拾取；旧副本回写。打野入口已转到行军 |
 | `map_store.lua` | 持久化 |
 | `shard.lua` | 分片几何、服务名 |
+| `pathfinding.lua` / `block.lua` | 全局寻路、主城占格 |
+| `service/pathfinding_service.lua` | 导航图 + blocker |
 | `service/shard_service.lua` | CMD 转发，不写玩法 |
 | `service/map_service.lua` | 全图派生状态，不进热路径 |
 | `net/map_net.lua` | 客户端路由（行军打到主城所在片） |
@@ -131,6 +133,10 @@ protocol_handler.send_to_player(pid, "map_visible_delta_notify", ...)
 
 ## 分片与 ghost
 
+- 分片 id 从 1 起，0 表示未设置；不下发客户端（agent 用 RPC 返回值 `with_shard` 和 `remember_march`）
+- 实体 `shard_id` = 权威所在片；本片服务是 `map.shard_id`；投影看 `is_ghost`
+- 主城生成在本片可走空地（间距 `CITY_SPACING`），`kind=city` 占格写入 `.pathfinding`
+- 行军走 `find_map_path`，禁止找不到路时直线穿城
 - 权威永远在 `shard_id_of_pos(x,y)` 那一片
 - 实体贴边：`Map:sync_ghosts`；邻居 `ghost_upsert` / `ghost_remove`
 - 新类型要过片可见：`should_project` + `TYPE_FIELDS` 覆盖投影状态
@@ -150,9 +156,9 @@ protocol_handler.send_to_player(pid, "map_visible_delta_notify", ...)
 同一分片 debug console：
 
 ```
-call .shard.1001.0 "hotspot_start"
-call .shard.1001.0 "hotspot_start" { battlers = 0 }
-call .shard.1001.0 "hotspot_stop"
+call .shard.1001.1 "hotspot_start"
+call .shard.1001.1 "hotspot_start" { battlers = 0 }
+call .shard.1001.1 "hotspot_stop"
 ```
 
 稳态应大致满足：

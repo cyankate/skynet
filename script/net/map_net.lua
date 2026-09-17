@@ -151,7 +151,6 @@ local function on_map_enter(player_id, msg)
             scene_id = 0,
             x = 0,
             y = 0,
-            shard_id = sid,
         })
         return false, "Map service not available"
     end
@@ -165,7 +164,6 @@ local function on_map_enter(player_id, msg)
             scene_id = 0,
             x = 0,
             y = 0,
-            shard_id = sid,
         })
         return false, result
     end
@@ -179,7 +177,6 @@ local function on_map_enter(player_id, msg)
         scene_id = result.scene_id,
         x = result.x,
         y = result.y,
-        shard_id = result.shard_id or sid,
     })
     protocol_handler.send_to_player(player_id, "main_scene_enter_notify", {
         scene_id = result.scene_id or 0,
@@ -200,7 +197,6 @@ local function on_map_move(player_id, msg)
             map_id = player and player.map_id_ or 0,
             x = 0,
             y = 0,
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -217,7 +213,6 @@ local function on_map_move(player_id, msg)
         map_id = result.map_id,
         x = result.x,
         y = result.y,
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -246,7 +241,6 @@ local function on_map_interact_monster(player_id, msg)
             accepted = false,
             march_uid = "",
             state = "",
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -263,7 +257,6 @@ local function on_map_interact_monster(player_id, msg)
         accepted = true,
         march_uid = result.march_uid or "",
         state = result.state or "",
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -285,7 +278,6 @@ local function on_map_battle_result(player_id, msg)
             monster_uid = tostring(msg and msg.monster_uid or ""),
             win = (msg and msg.win) and true or false,
             removed = false,
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -297,7 +289,6 @@ local function on_map_battle_result(player_id, msg)
         monster_uid = result.monster_uid or tostring(msg and msg.monster_uid or ""),
         win = result.win and true or false,
         removed = result.removed and true or false,
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -314,7 +305,6 @@ local function on_map_pick_item(player_id, msg)
             item_id = 0,
             count = 0,
             removed = false,
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -327,7 +317,6 @@ local function on_map_pick_item(player_id, msg)
         item_id = result.item_id or 0,
         count = result.count or 0,
         removed = result.removed and true or false,
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -361,7 +350,6 @@ local function on_map_state(player_id, msg)
         resources = {},
         marches = {},
         buildings = {},
-        shard_id = 0,
     }
     protocol_handler.send_to_player(player_id, "map_state_response", {
         result = 0,
@@ -374,7 +362,6 @@ local function on_map_state(player_id, msg)
         resources = result.resources,
         marches = result.marches or {},
         buildings = result.buildings or {},
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -386,7 +373,6 @@ local function on_map_leave(player_id, msg)
         result = 0,
         message = "ok",
         map_id = 0,
-        shard_id = 0,
     })
     return true
 end
@@ -419,7 +405,6 @@ local function on_map_march_start(player_id, msg)
             hp = 0,
             max_hp = 0,
             state = "",
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -436,7 +421,6 @@ local function on_map_march_start(player_id, msg)
         hp = result.hp or 0,
         max_hp = result.max_hp or 0,
         state = result.state or "",
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -454,7 +438,6 @@ local function on_map_march_attack(player_id, msg)
             target_uid = target_uid,
             state = "",
             battle_id = "",
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -466,7 +449,6 @@ local function on_map_march_attack(player_id, msg)
         target_uid = result.target_uid or target_uid,
         state = result.state or "",
         battle_id = result.battle_id or "",
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -481,7 +463,6 @@ local function on_map_march_cancel(player_id, msg)
             message = result or "取消失败",
             march_uid = march_uid,
             removed = false,
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -491,7 +472,6 @@ local function on_map_march_cancel(player_id, msg)
         message = "ok",
         march_uid = result.march_uid or march_uid,
         removed = result.removed and true or false,
-        shard_id = result.shard_id or 0,
     })
     return true
 end
@@ -524,7 +504,6 @@ local function on_map_march_gather(player_id, msg)
             max_hp = 0,
             state = "",
             intent = "",
-            shard_id = player and player.map_shard_id_ or 0,
         })
         return false, result
     end
@@ -543,7 +522,6 @@ local function on_map_march_gather(player_id, msg)
         max_hp = result.max_hp or 0,
         state = result.state or "",
         intent = result.intent or "",
-        shard_id = result.shard_id or 0,
     })
     return true
 end

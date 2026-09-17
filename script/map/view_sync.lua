@@ -136,9 +136,7 @@ local function pack_obj(map, obj, full)
     if not bucket then
         return nil, nil
     end
-    local shard_id = map and map.shard_id or 0
     local packed = aoi_object.pack_visible(obj, {
-        shard_id = obj.owner_shard_id or shard_id,
         full = full,
     })
     if not packed then

@@ -21,8 +21,9 @@ main
 ```
 
 启动：`mapS` 拉起全部 `shardS`。分片名 `.shard.<map_id>.<shard_id>`，全局名见 `map.shard`。
+全图一份导航：`pathfindingS`（`.pathfinding`），主城占格写在这里，行军 `find_map_path` 都问它。
 
-当前默认 2×2 = 4 片。切分单位是 chunk，再聚合成分片矩形（`shard.pixel_rect`）。
+当前默认 2×2 = 4 片，id 为 1..N; 切分单位是 chunk，再聚合成分片矩形（`shard.pixel_rect`）。
 
 ### 全局服（map_service）
 
@@ -51,7 +52,7 @@ CMD 只做对外入口，转发到模块。本片持有：
 | 主城 | 玩法锚点（出发、交互距离） | `BUILDING`，`uid = city_<player_id>` |
 | `player_state` | 视野会话 | `visible_uids`、`current_map_id`、当前片；**不存玩法坐标** |
 
-`observer.move` 只挪镜头，跨片转的是观察者，不是主城。行军从主城所在片出发（agent 缓存 `city_shard_id_`）。
+`observer.move` 只挪镜头，跨片转的是观察者，不是主城。行军从主城所在片出发（agent 缓存 `city_shard_id_`）。分片 id 是服务端路由，不下发客户端。
 
 ## 对象模型
 
@@ -110,6 +111,14 @@ CMD 只做对外入口，转发到模块。本片持有：
 
 属主私有通道（如 `map_march_sync_notify`）是玩法通知，不是 AOI，不能替代周围观察者同步。
 
+## 主城、占格、寻路
+
+首次进图：本片没有主城则在**可走空地**建一座 `BUILDING`（`uid=city_<player_id>`，`kind=city`），不再叠在 `def.start` 同一点。选点避开已有占格，间距 `CITY_SPACING`（默认 96）。
+
+建筑进 AOI 后向 `.pathfinding` 登记圆形障碍（半径 `CITY_BLOCK_RADIUS=16`，约 2 个导航格）。行军不占格。回城判定 `CITY_ARRIVE_RANGE` 大于占格半径，停在城边缘即可交货。
+
+格子图 cell=8，A* 在 `pathfindingS`。找不到路时行军失败或停住，**不会直线穿城**。寻路服不可用时才退回直线（开发兜底）。
+
 ## 行军与心跳推算
  
 行军是独立实体，坐标权威跟位置走，交战权威跟攻击者走。
@@ -154,6 +163,6 @@ CMD 只做对外入口，转发到模块。本片持有：
 入口（debug console）：
 
 ```
-call .shard.1001.0 "hotspot_start"
-call .shard.1001.0 "hotspot_stop"
+call .shard.1001.1 "hotspot_start"
+call .shard.1001.1 "hotspot_stop"
 ```

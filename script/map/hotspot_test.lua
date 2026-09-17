@@ -7,12 +7,12 @@
 -- 压测实体只进本片（坐标钳在本片像素矩形内缩进边界，防行军跨片 handoff 泄漏到邻片）
 --
 -- 用法（debug console）：
---   call .shard.1001.0 "hotspot_start"                          -- 默认参数
---   call .shard.1001.0 "hotspot_start" { observers = 100, marchers = 300 }
---   call .shard.1001.0 "hotspot_start" { x = 1024, y = 1024 }   -- 边界热点（churn 会真实跨片迁移）
---   call .shard.1001.0 "hotspot_start" { battlers = 0 }       -- 关掉交战，只测行军游走
---   call .shard.1001.0 "hotspot_start" { churners = 0 }         -- 关掉 churn，与静态基线对比
---   call .shard.1001.0 "hotspot_stop"
+--   call .shard.1001.1 "hotspot_start"                          -- 默认参数
+--   call .shard.1001.1 "hotspot_start" { observers = 100, marchers = 300 }
+--   call .shard.1001.1 "hotspot_start" { x = 1024, y = 1024 }   -- 边界热点（churn 会真实跨片迁移）
+--   call .shard.1001.1 "hotspot_start" { battlers = 0 }       -- 关掉交战，只测行军游走
+--   call .shard.1001.1 "hotspot_start" { churners = 0 }         -- 关掉 churn，与静态基线对比
+--   call .shard.1001.1 "hotspot_stop"
 local skynet = require "skynet"
 local log = require "log"
 local aoi_object = require "map.aoi_object"
@@ -77,7 +77,6 @@ local function spawn_observer(map, i)
         view_range = ctx.MAP_VIEW_RANGE or 100,
         map_id = map.map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         is_ghost = false,
     })
     local ok, err = map:enter_obj(obs)
@@ -202,7 +201,6 @@ local function spawn_march(map, i, pos)
         state = march.STATE_MARCHING,
         map_id = map.map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         last_path_tx = tx,
         last_path_ty = ty,
         hp = pos and pos.hp,
@@ -230,7 +228,6 @@ local function spawn_monster(map, i)
         type = aoi_object.TYPE.MONSTER,
         map_id = map.map_id,
         shard_id = map.shard_id,
-        owner_shard_id = map.shard_id,
         x = x,
         y = y,
         view_range = 0,

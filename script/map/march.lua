@@ -27,7 +27,7 @@ M.INTENT_ATTACK_MONSTER = "attack_monster"
 M.LOAD_MAX = 100
 M.GATHER_SPEED = 20    -- 每秒采集量，客户端按时间估值
 M.GATHER_RANGE = 20
-M.CITY_ARRIVE_RANGE = 20
+M.CITY_ARRIVE_RANGE = 32
 M.RESOURCE_AMOUNT = 120 -- 新播种的资源点余量
 
 -- 心跳推算（dead reckoning）开关：
@@ -121,7 +121,6 @@ function M.new(opts)
         role = opts.role,
         map_id = opts.map_id,
         shard_id = opts.shard_id,
-        owner_shard_id = opts.owner_shard_id or opts.shard_id,
         alive = opts.alive ~= false,
         in_aoi = false,
         last_notify_x = x,
@@ -138,7 +137,6 @@ function M.bind_map(m, map_id, shard_id)
         view_range = 0,
         is_ghost = false,
         map_id = map_id,
-        owner_shard_id = shard_id,
         shard_id = shard_id,
     })
 end
@@ -162,8 +160,8 @@ function M.current_dest(m)
     return m.x, m.y
 end
 
-function M.pack_visible(m, shard_id, full)
-    return aoi_object.pack_visible(m, { shard_id = shard_id, full = full })
+function M.pack_visible(m, full)
+    return aoi_object.pack_visible(m, { full = full })
 end
 
 function M.from_ghost(obj)
@@ -177,7 +175,7 @@ function M.from_ghost(obj)
         hp = tonumber(obj.hp) or M.MAX_HP,
         max_hp = tonumber(obj.max_hp) or M.MAX_HP,
         owner_player_id = obj.owner_player_id or 0,
-        shard_id = tonumber(obj.owner_shard_id),
+        shard_id = tonumber(obj.shard_id),
         battle_id = obj.battle_id,
         state = obj.state,
     }

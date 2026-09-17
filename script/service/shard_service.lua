@@ -195,13 +195,13 @@ function CMD.accept_march_handoff(snap)
     return march_runtime.accept_march_handoff(snap)
 end
 
--- P1: 压测入口（debug console 调：call .shard.1001.0 "stress_test" 100 1000）
+-- P1: 压测入口（debug console 调：call .shard.1001.1 "stress_test" 100 1000）
 function CMD.stress_test(observer_count, obj_count)
     local view_sync = require "map.view_sync"
     return view_sync._stress_test(ctx.map, tonumber(observer_count), tonumber(obj_count))
 end
 
--- 热点压测（debug console 调：call .shard.1001.0 "hotspot_start"）
+-- 热点压测（debug console 调：call .shard.1001.1 "hotspot_start"）
 function CMD.hotspot_start(opts)
     return hotspot_test.start(opts)
 end

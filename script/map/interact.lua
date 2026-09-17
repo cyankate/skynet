@@ -245,7 +245,7 @@ function M.interact_monster(player_id, monster_uid)
     end
 
     local ghost = map:get_obj(uid)
-    local owner_shard_id = ghost and tonumber(ghost.owner_shard_id)
+    local owner_shard_id = ghost and tonumber(ghost.shard_id)
     local req = {
         player_id = player_id,
         x = ax,
@@ -257,7 +257,7 @@ function M.interact_monster(player_id, monster_uid)
             map_id = map.map_id,
             monster_uid = uid,
             lock_key = nil,
-            owner_shard_id = result.owner_shard_id or nid,
+            owner_shard_id = result.shard_id or nid,
             inst_id = result.inst_id,
             start_tick = skynet.now(),
             deadline_tick = skynet.now() + ctx.BATTLE_TIMEOUT_TICK,
@@ -543,7 +543,6 @@ function M.try_interact_public(uid, req)
         inst_id = result_or_err.inst_id or "",
         scene_id = result_or_err.scene_id or 0,
         result = "accepted",
-        owner_shard_id = map.shard_id,
     })
 end
 

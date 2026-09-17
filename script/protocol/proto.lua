@@ -1036,7 +1036,6 @@ local s2c_builder = builder.new()
         target_uid = "string",
         battle_id = "string",
         battle_duration = "double",
-        shard_id = "integer",
         -- 心跳推算计划字段：x,y 为本包权威坐标（rebase 点），
         -- 客户端从 (x,y) 起按 waypoints[wp_index..] + speed 本地外推，停推每 tick 位置流
         speed = "double",
@@ -1080,7 +1079,6 @@ local s2c_builder = builder.new()
             scene_id = "integer",
             x = "integer",
             y = "integer",
-            shard_id = "integer",
         }
     })
 
@@ -1091,7 +1089,6 @@ local s2c_builder = builder.new()
             map_id = "integer",
             x = "integer",
             y = "integer",
-            shard_id = "integer",
         }
     })
 
@@ -1107,7 +1104,6 @@ local s2c_builder = builder.new()
             accepted = "boolean",
             march_uid = "string",
             state = "string",
-            shard_id = "integer",
         }
     })
 
@@ -1119,7 +1115,6 @@ local s2c_builder = builder.new()
             monster_uid = "string",
             win = "boolean",
             removed = "boolean",
-            shard_id = "integer",
         }
     })
 
@@ -1138,7 +1133,6 @@ local s2c_builder = builder.new()
             result = "integer",
             message = "string",
             map_id = "integer",
-            shard_id = "integer",
         }
     })
 
@@ -1154,7 +1148,6 @@ local s2c_builder = builder.new()
             resources = "*map_entity_resource",
             marches = "*map_march_info",
             buildings = "*map_entity_building",
-            shard_id = "integer",
         }
     })
 
@@ -1167,7 +1160,6 @@ local s2c_builder = builder.new()
             item_id = "integer",
             count = "integer",
             removed = "boolean",
-            shard_id = "integer",
         }
     })
 
@@ -1220,7 +1212,6 @@ local s2c_builder = builder.new()
             max_hp = "integer",
             state = "string",
             intent = "string",
-            shard_id = "integer",
         }
     })
 
@@ -1236,7 +1227,6 @@ local s2c_builder = builder.new()
             hp = "integer",
             max_hp = "integer",
             state = "string",
-            shard_id = "integer",
         }
     })
 
@@ -1248,7 +1238,6 @@ local s2c_builder = builder.new()
             target_uid = "string",
             state = "string",
             battle_id = "string",
-            shard_id = "integer",
         }
     })
 
@@ -1258,7 +1247,6 @@ local s2c_builder = builder.new()
             message = "string",
             march_uid = "string",
             removed = "boolean",
-            shard_id = "integer",
         }
     })
 
@@ -1267,7 +1255,6 @@ local s2c_builder = builder.new()
             map_id = "integer",
             marches = "*map_march_info",
             removed_uid = "string",
-            shard_id = "integer",
         }
     })
 
@@ -1282,7 +1269,6 @@ local s2c_builder = builder.new()
             defender_hp = "integer",
             duration = "double",
             reason = "string",
-            shard_id = "integer",
         }
     })
 
