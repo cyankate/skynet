@@ -9,7 +9,7 @@ local layout = require "cluster.layout"
 local M = {}
 local proxies = {}
 local proxy_fail_at = {}
-local PROXY_RETRY = 100 -- 1s 内不重连已失败的节点，避免 seed 时打几千次 Connection refused
+local PROXY_RETRY = 300 -- 3s 内不重连已失败的节点
 
 local function clusterd()
     return skynet.uniqueservice("clusterd")
@@ -66,6 +66,19 @@ local function get_proxy(node, name)
     return result
 end
 
+function M.has_proxy(name, node)
+    name = ensure_dot(name)
+    node = node or layout.self_node()
+    if not name then
+        return false
+    end
+    return proxies[node .. "\0" .. name] ~= nil
+end
+
+function M.try_proxy(name, node)
+    return get_proxy(node, name)
+end
+
 -- name: ".gate" / ".shard.1001.1"
 function M.named(name, node)
     name = ensure_dot(name)
@@ -76,16 +89,18 @@ function M.named(name, node)
     if layout.is_local(node) and not layout.loopback() then
         return M.local_addr(name)
     end
-    local local_addr = nil
     if layout.is_local(node) then
-        local_addr = M.local_addr(name)
-        if not local_addr then
+        if not M.local_addr(name) then
             return nil
         end
     end
     if not layout.use_cluster() then
         log.error("cluster rpc: remote node not enabled, name=%s node=%s", name, tostring(node))
-        return local_addr
+        return M.local_addr(name)
+    end
+    -- 其他 map 上的分片：热路径不主动连（对端未起时 cluster.proxy init 会 Connection refused 刷屏）
+    if not layout.is_local(node) and name:match("^%.shard%.") then
+        return proxies[node .. "\0" .. name]
     end
     return get_proxy(node, name)
 end
@@ -125,6 +140,41 @@ function M.export(name, addr)
     skynet.call(c, "lua", "register", cname, addr)
     log.info("cluster export [%s] node=%s", cname, layout.self_node())
     return true
+end
+
+-- split：后台连其他 map 上的分片，连上后再让本机片补 ghost
+function M.prefetch_remote_shards()
+    if not layout.split() then
+        return
+    end
+    skynet.fork(function()
+        local shard = require "map.shard"
+        local map_id = shard.default_def().map_id
+        while true do
+            local missing = 0
+            for _, sid in ipairs(shard.all_ids()) do
+                local node = layout.shard_node(map_id, sid)
+                if not layout.is_local(node) then
+                    local name = shard.service_name(map_id, sid)
+                    if not M.has_proxy(name, node) then
+                        missing = missing + 1
+                        M.try_proxy(name, node)
+                    end
+                end
+            end
+            if missing == 0 then
+                log.info("cluster remote shards ready, node=%s", layout.self_node())
+                for _, sid in ipairs(layout.local_shard_ids()) do
+                    local addr = skynet.localname(shard.service_name(map_id, sid))
+                    if addr then
+                        skynet.send(addr, "lua", "resync_border_ghosts")
+                    end
+                end
+                return
+            end
+            skynet.sleep(200)
+        end
+    end)
 end
 
 return M

@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local log = require "log"
 local shard = require "map.shard"
 local layout = require "cluster.layout"
+local rpc = require "cluster.rpc"
 require "skynet.manager"
 
 local function open_cluster()
@@ -41,7 +42,8 @@ skynet.start(function()
         local port = tonumber(skynet.getenv("debug_port")) or 8891
         skynet.newservice("debug_console", port)
         launch_local_shards()
-        skynet.exit()
+        rpc.prefetch_remote_shards()
+        -- split 下 main 不能 exit，否则 prefetch 协程被杀掉
         return
     end
 
@@ -68,12 +70,17 @@ skynet.start(function()
     skynet.newservice("pathfindingS")
     skynet.newservice("mapS", shard.default_def().map_id)
     skynet.newservice("registerS")
+    rpc.prefetch_remote_shards()
 
     skynet.call(gate, "lua", "open", {
         address = "0.0.0.0",
         port = 8888,
         maxclient = 8192,
     })
+
+    if layout.split() then
+        return
+    end
 
     skynet.exit()
 end)
