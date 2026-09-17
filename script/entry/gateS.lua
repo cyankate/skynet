@@ -3,6 +3,7 @@ local skynet = require "skynet"
 local gate_service = require "service.gate_service"
 local rpc = require "cluster.rpc"
 local layout = require "cluster.layout"
+require "skynet.manager"
 
 local handler = {}
 
@@ -35,9 +36,14 @@ function handler.command(cmd, source, ...)
     return gate_service.handler_command(cmd, source, ...)
 end
 
+-- embed：不让 gateserver 自己 skynet.start，避免在主线程里 call/export
+handler.embed = true
 gateserver.start(handler)
-skynet.name(".gate", skynet.self())
-if layout.use_cluster() then
-    rpc.export("gate", skynet.self())
-end
-skynet.send(".logger", "lua", "register_name", "gate")
+
+skynet.start(function()
+    skynet.name(".gate", skynet.self())
+    if layout.use_cluster() then
+        rpc.export("gate", skynet.self())
+    end
+    skynet.send(".logger", "lua", "register_name", "gate")
+end)
