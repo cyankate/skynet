@@ -95,6 +95,7 @@ function CMD.rebuild()
 end
 
 -- 拉起本图所有分片（幂等：已注册则跳过，崩溃重启安全）
+-- 等待就绪用 localname：这里是本进程刚 newservice 的片，不是 rpc 路由。
 local function launch_shards(map_id)
     for _, sid in ipairs(shard.all_ids()) do
         local name = shard.service_name(map_id, sid)

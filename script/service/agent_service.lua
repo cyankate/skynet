@@ -24,6 +24,8 @@ local gm_mgr = require "system.gm_mgr"
 local task_mgr = require "system.task.task_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
+local rpc = require "cluster.rpc"
+local shard = require "map.shard"
 
 local M = service_ctx.get("agent.agent", {})
 M.accounts = M.accounts or {}
@@ -35,7 +37,7 @@ local accounts = M.accounts
 local logout_timers = M.logout_timers
 
 local function get_gate()
-    return skynet.localname(".gate")
+    return rpc.local_gate()
 end
 
 local function bind_session(account, player_id, fd)
@@ -145,9 +147,8 @@ local function unload_account_from_agent(account_key, account)
         M.handle_offline(player)
     end
     if player and player_id then
-        local shard = require "map.shard"
         for _, sid in ipairs(shard.all_ids()) do
-            local mapS = skynet.localname(shard.service_name(player.map_id_ or shard.DEFAULT_MAP_ID, sid))
+            local mapS = shard.addr(player.map_id_ or shard.DEFAULT_MAP_ID, sid)
             if mapS then
                 skynet.send(mapS, "lua", "leave_map", player_id)
             end

@@ -10,12 +10,7 @@ friend_mgr.cache = friend_mgr.cache or nil
 
 -- 发送消息给玩家
 local function send_to_player(player_id, name, data)
-    local gate = skynet.localname(".gate")
-    if not gate then
-        log.error("Gate service not found")
-        return false
-    end
-    skynet.send(gate, "lua", "send_to_player", player_id, name, data)
+    return protocol_handler.send_to_player(player_id, name, data)
 end
 
 -- 添加好友

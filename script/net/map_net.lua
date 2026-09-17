@@ -81,7 +81,7 @@ local function call_march_map(player, player_id, march_uid, cmd, ...)
 end
 
 local function shard_addr(map_id, shard_id)
-    return skynet.localname(shard.service_name(map_id, shard_id))
+    return shard.addr(map_id, shard_id)
 end
 
 local function player_map_addr(player)

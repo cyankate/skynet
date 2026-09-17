@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local log = require "log"
 local protocol_handler = require "protocol_handler"
 local service_ctx = require "runtime.service_ctx"
+local rpc = require "cluster.rpc"
 
 local M = service_ctx.get("login.login", {})
 M.account_loading = M.account_loading or {}
@@ -119,7 +120,7 @@ function CLIENT.login(fd, msg, session)
         return
     end
     log.info("login request, fd=%d, account_key=%s", fd, account_key)
-    local gateS = skynet.localname(".gate")
+    local gateS = rpc.local_gate()
     local ainfo = account_info[account_key]
     if ainfo and ainfo.agent then
         if ainfo.logout then

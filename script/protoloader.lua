@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local sprotoloader = require "sprotoloader"
 local log = require "log"
 local proto_builder = require "utils.proto_builder"
+local rpc = require "cluster.rpc"
 require "skynet.manager"
 
 local CMD = {}
@@ -31,7 +32,7 @@ function CMD.reload()
         return false, tostring(err)
     end
 
-    local gate = skynet.localname(".gate")
+    local gate = rpc.local_gate()
     if gate then
         local gok, gret, gerr = pcall(skynet.call, gate, "lua", "reload_proto")
         if not gok or not gret then

@@ -1,5 +1,6 @@
-local skynet = require "skynet"
 local chunk = require "map.chunk"
+local rpc = require "cluster.rpc"
+local layout = require "cluster.layout"
 
 -- 一张连续大世界、一个 map_id；按 chunk 切成矩形分片，每片一个 map 服。
 -- 坐标不局部化：每个 scene 仍用全图宽高。权威实体在所属分片，贴边邻居以 ghost 进 AOI。
@@ -181,11 +182,11 @@ function M.scene_local_name(map_id, shard_id)
 end
 
 function M.addr(map_id, shard_id)
-    return skynet.localname(M.service_name(map_id, shard_id))
+    return rpc.named(M.service_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
 end
 
 function M.scene_addr(map_id, shard_id)
-    return skynet.localname(M.scene_name(map_id, shard_id))
+    return rpc.named(M.scene_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
 end
 
 -- 全图全局服务（每张图一个）：注册表 + 派生状态计算，权威数据仍在分片
@@ -198,7 +199,8 @@ function M.global_local_name(map_id)
 end
 
 function M.global_addr(map_id)
-    return skynet.localname(M.global_name(map_id))
+    local name = M.global_name(map_id)
+    return rpc.named(name, layout.named_node(name))
 end
 
 return M

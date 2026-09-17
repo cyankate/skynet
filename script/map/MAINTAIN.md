@@ -24,6 +24,8 @@
 | `service/shard_service.lua` | CMD 转发，不写玩法 |
 | `service/map_service.lua` | 全图派生状态，不进热路径 |
 | `net/map_net.lua` | 客户端路由（行军打到主城所在片） |
+| `cluster/layout.lua` | 节点放置（standalone 全在本机） |
+| `cluster/rpc.lua` | `.gate` / `.shard.*` 地址；可 `skynet.call/send` |
 | `hotspot_test.lua` | 热点回归 |
 
 ## 下发红线
