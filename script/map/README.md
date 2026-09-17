@@ -20,18 +20,28 @@ main
               └── map_store
 ```
 
-启动：`mapS` 拉起全部 `shardS`。分片名 `.shard.<map_id>.<shard_id>`，全局名见 `map.shard`。
-全图一份导航：`pathfindingS`（`.pathfinding`），主城占格写在这里，行军 `find_map_path` 都问它。
+启动：`mapS` 拉起 **本节点** 的 `shardS`。分片名 `.shard.<map_id>.<shard_id>`，全局名见 `map.shard`。
+全图一份导航：`pathfindingS`（`.pathfinding`）在 world 节点，主城占格写在这里，行军 `find_map_path` 都问它。
 
 跨服务不要再写 `skynet.localname(".gate")` / `localname(".shard.*")`。分片走 `shard.addr`，下行走 `protocol_handler.send_to_player`（内部 `cluster.rpc`）。
 
-`cluster_mode`（`init.config`）：
+`cluster_mode`（配置文件）：
 
-- `standalone`：本机消息队列，低在线用这个
-- `loopback`：仍一个进程，`rpc.named` 走 `cluster.proxy` 环回（当前默认，验证打包）
-- `split`：跨节点（下一步）
+- `standalone`：本机消息队列
+- `loopback`：仍一个进程，`rpc.named` 走 cluster 环回（`init.config` 当前默认）
+- `split`：world + map1 + map2（`init_world.config` / `init_map1.config` / `init_map2.config`）
 
-`fd` 相关仍走 `rpc.local_gate()`，不环回。节点表：`script/cluster/clustername.lua`，listen `127.0.0.1:2528`。
+split 分片：1、2 → map1，3、4 → map2。先起 world，再 map1、map2。
+
+```
+skynet script/init_world.config
+skynet script/init_map1.config
+skynet script/init_map2.config
+```
+
+debug：world `8890`；map1 `8891` 调 `.shard.1001.1` / `.2`；map2 `8892` 调 `.3` / `.4`。客户端仍连 world 的 `8888`。
+
+`fd` 相关仍走 `rpc.local_gate()`。节点表：`script/cluster/clustername.lua`。
 
 当前默认 2×2 = 4 片，id 为 1..N; 切分单位是 chunk，再聚合成分片矩形（`shard.pixel_rect`）。
 

@@ -10,10 +10,15 @@ local sockethelper = require "http.sockethelper"
 local log = require "log"
 local hotfix_cmd = require "tools.hotfix_cmd"
 
--- local arg = table.pack(...)
--- assert(arg.n <= 2)
+local arg = table.pack(...)
 local ip = "0.0.0.0"
 local port = 8890
+if arg.n == 1 then
+	port = tonumber(arg[1]) or 8890
+elseif arg.n >= 2 then
+	ip = arg[1]
+	port = tonumber(arg[2]) or 8890
+end
 local TIMEOUT = 300 -- 3 sec
 
 local COMMAND = {}

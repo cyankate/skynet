@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local log = require "log"
 local chunk = require "map.chunk"
 local service_ctx = require "runtime.service_ctx"
+local rpc = require "cluster.rpc"
 
 -- 地图世界权威冷库（格子上的、不属于某个玩家的数据）。
 -- 玩家坐标 / 私有怪物不进这里。
@@ -42,7 +43,7 @@ ctx.dirty = ctx.dirty or {}
 local dirty = ctx.dirty
 
 local function get_mongo()
-    return skynet.localname(".mongo")
+    return rpc.named_addr(".mongo")
 end
 
 function M.make_id(map_id, etype, uid)

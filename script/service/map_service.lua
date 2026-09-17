@@ -8,6 +8,7 @@
 local skynet = require "skynet"
 local log = require "log"
 local shard = require "map.shard"
+local layout = require "cluster.layout"
 local service_ctx = require "runtime.service_ctx"
 
 local ctx = service_ctx.get("map.map_global", {})
@@ -78,8 +79,8 @@ function CMD.rebuild()
     for _, sid in ipairs(shard.all_ids()) do
         local addr = shard.addr(ctx.map_id, sid)
         if addr then
-            local ok, list = skynet.call(addr, "lua", "list_contention_buildings")
-            if ok and type(list) == "table" then
+            local ok_call, ok, list = pcall(skynet.call, addr, "lua", "list_contention_buildings")
+            if ok_call and ok and type(list) == "table" then
                 for _, info in ipairs(list) do
                     ctx.building_owner[tostring(info.uid)] = info
                     count = count + 1
@@ -94,10 +95,12 @@ function CMD.rebuild()
     return true
 end
 
--- 拉起本图所有分片（幂等：已注册则跳过，崩溃重启安全）
+-- 只拉起本节点的分片。split 下 world 不启片，由 map1/map2 各自 main 拉起。
 -- 等待就绪用 localname：这里是本进程刚 newservice 的片，不是 rpc 路由。
 local function launch_shards(map_id)
-    for _, sid in ipairs(shard.all_ids()) do
+    local ids = layout.local_shard_ids()
+    log.info("mapS launch shards on %s: %s", layout.self_node(), table.concat(ids, ","))
+    for _, sid in ipairs(ids) do
         local name = shard.service_name(map_id, sid)
         if not skynet.localname(name) then
             skynet.newservice("shardS", map_id, sid)
@@ -124,15 +127,21 @@ function CMD.init()
         return false, "map global missing map_id"
     end
     ctx.map_id = map_id
-    -- 全局服拥有本地图生命周期：分片由它拉起
     launch_shards(map_id)
-    -- 延迟重建：等分片 bootstrap 完成（注册名不等于 map 数据就绪，双保险）
-    skynet.timeout(200, function()
-        local ok, err = pcall(CMD.rebuild)
-        if not ok then
-            log.error("map global rebuild failed: %s", tostring(err))
-        end
-    end)
+    local delay = layout.split() and 500 or 200
+    local retries = layout.split() and 5 or 0
+    local function schedule(left)
+        skynet.timeout(delay, function()
+            local ok, err = pcall(CMD.rebuild)
+            if not ok then
+                log.error("map global rebuild failed: %s", tostring(err))
+            end
+            if left > 0 then
+                schedule(left - 1)
+            end
+        end)
+    end
+    schedule(retries)
     log.info("Map global service initialized, map_id=%s", tostring(map_id))
     return true
 end

@@ -9,6 +9,7 @@ local aoi_object = require "map.aoi_object"
 local service_ctx = require "runtime.service_ctx"
 local view = require "map.view_sync"
 local helpers = require "map.helpers"
+local rpc = require "cluster.rpc"
 
 local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
@@ -279,7 +280,7 @@ local function try_handoff_march(map, m)
 end
 
 function M.find_map_path(map, x1, y1, x2, y2, keep_end)
-    local addr = skynet.localname(ctx.PATHFINDING_NAME)
+    local addr = rpc.named_addr(ctx.PATHFINDING_NAME)
     if not addr then
         log.warning("pathfinding unavailable, fallback straight line")
         return { { x = x1, y = y1 }, { x = x2, y = y2 } }

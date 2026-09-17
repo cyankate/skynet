@@ -27,6 +27,8 @@
 | `cluster/layout.lua` | 节点放置、cluster_mode |
 | `cluster/rpc.lua` | `.gate` / `.shard.*` 地址；loopback 时 proxy |
 | `cluster/clustername.lua` | cluster 节点 IP/端口 |
+| `init.config` | 单进程 loopback |
+| `init_world.config` / `init_map1.config` / `init_map2.config` | split 三进程 |
 | `hotspot_test.lua` | 热点回归 |
 
 ## 下发红线

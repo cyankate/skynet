@@ -3,12 +3,13 @@ local skynet = require "skynet"
 local log = require "log"
 local aoi_object = require "map.aoi_object"
 local MapPath = require "map.pathfinding"
+local rpc = require "cluster.rpc"
 
 local M = {}
 local NAME = ".pathfinding"
 
 local function addr()
-    return skynet.localname(NAME)
+    return rpc.named_addr(NAME)
 end
 
 function M.blocks(obj)

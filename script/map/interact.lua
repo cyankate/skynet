@@ -7,6 +7,7 @@ local shard = require "map.shard"
 local service_ctx = require "runtime.service_ctx"
 local view = require "map.view_sync"
 local helpers = require "map.helpers"
+local rpc = require "cluster.rpc"
 
 local ctx = service_ctx.get("map.shard_service", {})
 local M = {}
@@ -119,7 +120,7 @@ local function resolve_city_pos(map, player_id)
 end
 
 local function start_monster_instance(map, player_id, uid)
-    local instanceS = skynet.localname(".instance")
+    local instanceS = rpc.named_addr(".instance")
     if not instanceS then
         return false, "instance service unavailable"
     end
