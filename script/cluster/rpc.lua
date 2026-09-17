@@ -10,6 +10,7 @@ local M = {}
 local proxies = {}
 local proxy_fail_at = {}
 local node_listen = {}
+local node_fail_at = {}
 local cluster_nodes
 local PROXY_RETRY = 300
 
@@ -38,6 +39,10 @@ local function node_reachable(node)
     if node_listen[node] then
         return true
     end
+    local last_fail = node_fail_at[node]
+    if last_fail and skynet.now() - last_fail < PROXY_RETRY then
+        return false
+    end
     local spec = node_spec(node)
     if type(spec) ~= "string" then
         return false
@@ -50,10 +55,12 @@ local function node_reachable(node)
     local socket = require "skynet.socket"
     local ok, fd = pcall(socket.open, host, port)
     if not ok or not fd then
+        node_fail_at[node] = skynet.now()
         return false
     end
     socket.close(fd)
     node_listen[node] = true
+    node_fail_at[node] = nil
     return true
 end
 
@@ -140,9 +147,17 @@ function M.named(name, node)
         log.error("cluster rpc: remote node not enabled, name=%s node=%s", name, tostring(node))
         return M.local_addr(name)
     end
-    -- 其他 map 上的分片：热路径不主动连（对端未起时 cluster.proxy init 会 Connection refused 刷屏）
+    -- 跨节点分片：每个服务一份 VM，main 的 prefetch 填不满 shardS 的 proxies。
+    -- 有缓存直接用；没有则先探端口再建 proxy（对端未起不走 cluster.proxy）。
     if not layout.is_local(node) and name:match("^%.shard%.") then
-        return proxies[node .. "\0" .. name]
+        local cached = proxies[node .. "\0" .. name]
+        if cached then
+            return cached
+        end
+        if not node_reachable(node) then
+            return nil
+        end
+        return get_proxy(node, name)
     end
     return get_proxy(node, name)
 end
