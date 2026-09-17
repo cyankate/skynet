@@ -5,7 +5,6 @@
 local skynet = require "skynet"
 local log = require "log"
 local layout = require "cluster.layout"
-local socket = require "skynet.socket"
 
 local M = {}
 local proxies = {}
@@ -48,8 +47,9 @@ local function node_reachable(node)
     if not host or not port then
         return false
     end
-    local fd, err = socket.open(host, port)
-    if not fd then
+    local socket = require "skynet.socket"
+    local ok, fd = pcall(socket.open, host, port)
+    if not ok or not fd then
         return false
     end
     socket.close(fd)
