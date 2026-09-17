@@ -5,14 +5,56 @@
 local skynet = require "skynet"
 local log = require "log"
 local layout = require "cluster.layout"
+local socket = require "skynet.socket"
 
 local M = {}
 local proxies = {}
 local proxy_fail_at = {}
-local PROXY_RETRY = 300 -- 3s 内不重连已失败的节点
+local node_listen = {}
+local cluster_nodes
+local PROXY_RETRY = 300
 
 local function clusterd()
     return skynet.uniqueservice("clusterd")
+end
+
+local function node_spec(node)
+    if not cluster_nodes then
+        cluster_nodes = {}
+        local path = skynet.getenv("cluster")
+        if path then
+            local env = {}
+            local chunk = loadfile(path, "t", env)
+            if chunk then
+                chunk()
+                cluster_nodes = env
+            end
+        end
+    end
+    return cluster_nodes[node]
+end
+
+-- 只判断端口有没有人听，失败不会走 cluster.proxy（避免 clusterd assert 刷屏）
+local function node_reachable(node)
+    if node_listen[node] then
+        return true
+    end
+    local spec = node_spec(node)
+    if type(spec) ~= "string" then
+        return false
+    end
+    local host, port = spec:match("([^:]+):(%d+)$")
+    port = tonumber(port)
+    if not host or not port then
+        return false
+    end
+    local fd, err = socket.open(host, port)
+    if not fd then
+        return false
+    end
+    socket.close(fd)
+    node_listen[node] = true
+    return true
 end
 
 local function ensure_dot(name)
@@ -150,15 +192,21 @@ function M.prefetch_remote_shards()
     skynet.fork(function()
         local shard = require "map.shard"
         local map_id = shard.default_def().map_id
+        skynet.sleep(100)
         while true do
             local missing = 0
+            local waiting = {}
             for _, sid in ipairs(shard.all_ids()) do
                 local node = layout.shard_node(map_id, sid)
                 if not layout.is_local(node) then
                     local name = shard.service_name(map_id, sid)
                     if not M.has_proxy(name, node) then
                         missing = missing + 1
-                        M.try_proxy(name, node)
+                        if node_reachable(node) then
+                            M.try_proxy(name, node)
+                        else
+                            waiting[node] = true
+                        end
                     end
                 end
             end
