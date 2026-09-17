@@ -8,6 +8,8 @@ local layout = require "cluster.layout"
 
 local M = {}
 local proxies = {}
+local proxy_fail_at = {}
+local PROXY_RETRY = 100 -- 1s 内不重连已失败的节点，避免 seed 时打几千次 Connection refused
 
 local function clusterd()
     return skynet.uniqueservice("clusterd")
@@ -49,9 +51,19 @@ local function get_proxy(node, name)
     if p then
         return p
     end
-    p = skynet.call(clusterd(), "lua", "proxy", node, "@" .. cluster_name(name))
-    proxies[key] = p
-    return p
+    local last_fail = proxy_fail_at[key]
+    if last_fail and skynet.now() - last_fail < PROXY_RETRY then
+        return nil
+    end
+    -- 对端进程未起时 cluster.proxy 会在 init 里连 TCP 失败；不能让业务 init 跟着死。
+    local ok, result = pcall(skynet.call, clusterd(), "lua", "proxy", node, "@" .. cluster_name(name))
+    if not ok or not result then
+        proxy_fail_at[key] = skynet.now()
+        return nil
+    end
+    proxy_fail_at[key] = nil
+    proxies[key] = result
+    return result
 end
 
 -- name: ".gate" / ".shard.1001.1"
