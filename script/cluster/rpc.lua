@@ -9,6 +9,10 @@ local layout = require "cluster.layout"
 local M = {}
 local proxies = {}
 
+local function clusterd()
+    return skynet.uniqueservice("clusterd")
+end
+
 local function ensure_dot(name)
     if type(name) ~= "string" or name == "" then
         return nil
@@ -45,8 +49,7 @@ local function get_proxy(node, name)
     if p then
         return p
     end
-    local cluster = require "skynet.cluster"
-    p = cluster.proxy(node, "@" .. cluster_name(name))
+    p = skynet.call(clusterd(), "lua", "proxy", node, "@" .. cluster_name(name))
     proxies[key] = p
     return p
 end
@@ -105,9 +108,9 @@ function M.export(name, addr)
         return false
     end
     addr = addr or skynet.self()
-    local cluster = require "skynet.cluster"
-    pcall(cluster.unregister, cname)
-    cluster.register(cname, addr)
+    local c = clusterd()
+    pcall(skynet.call, c, "lua", "unregister", cname)
+    skynet.call(c, "lua", "register", cname, addr)
     log.info("cluster export [%s] node=%s", cname, layout.self_node())
     return true
 end
