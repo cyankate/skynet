@@ -23,7 +23,15 @@ main
 启动：`mapS` 拉起全部 `shardS`。分片名 `.shard.<map_id>.<shard_id>`，全局名见 `map.shard`。
 全图一份导航：`pathfindingS`（`.pathfinding`），主城占格写在这里，行军 `find_map_path` 都问它。
 
-跨服务不要再写 `skynet.localname(".gate")` / `localname(".shard.*")`。分片走 `shard.addr`，下行走 `protocol_handler.send_to_player`（内部 `cluster.rpc`）。当前 `cluster_mode=standalone`：仍是一个进程、消息队列，和拆机前一样。
+跨服务不要再写 `skynet.localname(".gate")` / `localname(".shard.*")`。分片走 `shard.addr`，下行走 `protocol_handler.send_to_player`（内部 `cluster.rpc`）。
+
+`cluster_mode`（`init.config`）：
+
+- `standalone`：本机消息队列，低在线用这个
+- `loopback`：仍一个进程，`rpc.named` 走 `cluster.proxy` 环回（当前默认，验证打包）
+- `split`：跨节点（下一步）
+
+`fd` 相关仍走 `rpc.local_gate()`，不环回。节点表：`script/cluster/clustername.lua`，listen `127.0.0.1:2528`。
 
 当前默认 2×2 = 4 片，id 为 1..N; 切分单位是 chunk，再聚合成分片矩形（`shard.pixel_rect`）。
 

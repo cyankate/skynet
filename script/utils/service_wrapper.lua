@@ -1,5 +1,7 @@
 local skynet = require "skynet"
 local log = require "log"
+local rpc = require "cluster.rpc"
+local layout = require "cluster.layout"
 
 local M = {}
 
@@ -106,6 +108,9 @@ function M.wrap_service(startup_func, options)
         -- 设置服务名
         if options.name then
             skynet.name("." .. options.name, skynet.self())
+            if layout.use_cluster() then
+                rpc.export(options.name, skynet.self())
+            end
         end
         -- 调用原始启动函数
         startup_func()

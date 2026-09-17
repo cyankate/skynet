@@ -1,6 +1,8 @@
 local gateserver = require "snax.gateserver"
 local skynet = require "skynet"
 local gate_service = require "service.gate_service"
+local rpc = require "cluster.rpc"
+local layout = require "cluster.layout"
 
 local handler = {}
 
@@ -35,4 +37,7 @@ end
 
 gateserver.start(handler)
 skynet.name(".gate", skynet.self())
+if layout.use_cluster() then
+    rpc.export("gate", skynet.self())
+end
 skynet.send(".logger", "lua", "register_name", "gate")

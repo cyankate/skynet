@@ -2,12 +2,19 @@ local skynet = require "skynet"
 local log = require "log"
 local tableUtils = require "utils.tableUtils"
 local shard = require "map.shard"
+local layout = require "cluster.layout"
 require "skynet.manager"
 
 skynet.start(function()
     skynet.newservice("hotfixS")
     
     skynet.uniqueservice("protoloader")
+
+    if layout.use_cluster() then
+        local cluster = require "skynet.cluster"
+        cluster.open(layout.self_node())
+        log.info("cluster opened, node=%s mode=%s", layout.self_node(), layout.mode())
+    end
 
     local db = skynet.newservice("dbS")
 

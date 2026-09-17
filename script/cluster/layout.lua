@@ -1,5 +1,8 @@
--- 节点放置：谁在哪台机器。standalone 时全部等于本节点，调用仍走进程内队列。
--- 拆机时只改这里和启动入口，不要在业务里写 localname(".gate") / localname(".shard.*")。
+-- 节点放置：谁在哪台机器。
+-- cluster_mode:
+--   standalone  本机 localname，不走 TCP（低在线 / 开发默认可改回这个）
+--   loopback    本机服务仍在、但 rpc.named 走 cluster.proxy 环回（第 2 步验证打包）
+--   split       跨节点 cluster（第 3 步）
 local skynet = require "skynet"
 
 local M = {}
@@ -22,6 +25,15 @@ end
 
 function M.mode()
     return skynet.getenv("cluster_mode") or "standalone"
+end
+
+function M.use_cluster()
+    local mode = M.mode()
+    return mode == "loopback" or mode == "split"
+end
+
+function M.loopback()
+    return M.mode() == "loopback"
 end
 
 function M.is_local(node)
