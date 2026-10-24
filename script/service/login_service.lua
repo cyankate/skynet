@@ -233,7 +233,7 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
     end
 end
 
-function M.token_login(fd, msg, gate, gate_name, gate_node)
+function CLIENT.token_login(fd, msg, session, gate, gate_name, gate_node)
     local ip = msg.ip
     local device_id = msg.device_id
     local token_str = msg.token
@@ -262,7 +262,7 @@ function M.token_login(fd, msg, gate, gate_name, gate_node)
         return
     end
 
-    CLIENT.login(fd, { account_id = account_key, ip = ip, device_id = device_id }, nil, gate, gate_name, gate_node)
+    CLIENT.login(fd, { account_id = account_key, ip = ip, device_id = device_id }, session, gate, gate_name, gate_node)
 end
 
 function M.account_update(account_key, account_data)
