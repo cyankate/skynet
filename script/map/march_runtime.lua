@@ -136,7 +136,7 @@ function M.notify_march_sync(map, m, removed)
         removed_uid = removed and (m.uid or "") or "",
     }
     if m.owner_player_id then
-        protocol_handler.send_to_player(m.owner_player_id, "map_march_sync_notify", payload)
+        protocol_handler.send_to_conn(m.owner_player_id, "map_march_sync_notify", payload)
     end
 end
 

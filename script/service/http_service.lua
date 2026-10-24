@@ -1054,12 +1054,8 @@ local function register_default_routes()
             return
         end
 
-        local registerS = skynet.localname(".register")
-        if not registerS then
-            error_response(fd, interface, 503, "Register service unavailable")
-            return
-        end
-        local agent = skynet.call(registerS, "lua", "get_agent", player_id)
+        local locator = require "cluster.locator"
+        local agent = locator.get_agent(player_id)
         if not agent then
             error_response(fd, interface, 400, "Player not online")
             return

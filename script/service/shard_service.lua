@@ -20,6 +20,7 @@ local march_battle = require "map.march_battle"
 local monster_ai = require "map.monster_ai"
 local move_test = require "map.move_test"
 local hotspot_test = require "map.hotspot_test"
+local rpc = require "cluster.rpc"
 
 -- observer
 function CMD.enter_map(player_id, player_name, map_id)
@@ -75,6 +76,12 @@ function CMD.accept_observer(snap)
         end
     end
     return ok, result
+end
+
+-- 只清本 VM 的 rpc 下行缓存，不是玩法状态
+function CMD.forget_player_gate(player_id)
+    rpc.forget_player_gate(player_id)
+    return true
 end
 
 function CMD.leave_map(player_id)

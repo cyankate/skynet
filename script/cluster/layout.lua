@@ -2,13 +2,12 @@
 -- cluster_mode:
 --   standalone  本机 localname，不走 TCP
 --   loopback    仍一个进程，rpc.named 走 cluster.proxy 环回
---   split       world + map1 + map2 多进程
+--   split       game + map1 + map2 多进程
 local skynet = require "skynet"
 
 local M = {}
 
-M.STANDALONE = "standalone"
-M.WORLD = "world"
+M.GAME = "game"
 
 -- split 时：1、2 同行在 map1，3、4 同行在 map2（贴边尽量同进程）
 local SHARD_NODE = {
@@ -19,16 +18,15 @@ local SHARD_NODE = {
 }
 
 local NAMED_NODE = {
-    [".gate"] = "world",
-    [".register"] = "world",
-    [".pathfinding"] = "world",
-    [".mongo"] = "world",
-    [".login"] = "world",
-    [".instance"] = "world",
+    [".locator"] = M.GAME,
+    [".pathfinding"] = M.GAME,
+    [".mongo"] = M.GAME,
+    [".login"] = M.GAME,
+    [".instance"] = M.GAME,
 }
 
 function M.self_node()
-    return skynet.getenv("node_name") or M.STANDALONE
+    return skynet.getenv("node_name") or "standalone"
 end
 
 function M.mode()
@@ -44,8 +42,8 @@ function M.role()
     if n == "map1" or n == "map2" then
         return "map"
     end
-    if n == M.WORLD then
-        return "world"
+    if n == M.GAME then
+        return "game"
     end
     return "all"
 end
@@ -78,27 +76,73 @@ function M.shard_node(_map_id, shard_id)
     if sid and SHARD_NODE[sid] then
         return SHARD_NODE[sid]
     end
-    return M.WORLD
+    return M.GAME
 end
 
-function M.gate_node(_player_id)
+-- 所有 gate 目前都在 game/本进程；按 player_id 找具体 gate 走 locator
+function M.gate_home_node()
     if M.split() then
-        return M.WORLD
+        return M.GAME
     end
     return M.self_node()
+end
+
+function M.gate_count()
+    local n = tonumber(skynet.getenv("gate_count")) or 1
+    if n < 1 then
+        n = 1
+    end
+    return n
+end
+
+function M.gate_ids()
+    local t = {}
+    for i = 1, M.gate_count() do
+        t[#t + 1] = i
+    end
+    return t
+end
+
+function M.gate_name(id)
+    return ".gate." .. tostring(id)
+end
+
+-- 前面挂 nginx 时：门只听本机 19001/19002，公网 8000 由 nginx 转。开发不配这项，直接连 8888。
+function M.behind_lb()
+    local v = skynet.getenv("gate_behind_lb")
+    return v == "1" or v == "true"
+end
+
+function M.gate_listen_addr()
+    if M.behind_lb() then
+        return "127.0.0.1"
+    end
+    return "0.0.0.0"
+end
+
+function M.gate_port(id)
+    id = tonumber(id) or 1
+    if M.behind_lb() then
+        return (tonumber(skynet.getenv("gate_internal_port")) or 19000) + id
+    end
+    local base = tonumber(skynet.getenv("gate_port")) or 8888
+    return base + (id - 1)
 end
 
 function M.named_node(name)
     if not M.split() then
         return M.self_node()
     end
+    if type(name) == "string" and name:match("^%.gate%.") then
+        return M.GAME
+    end
     if type(name) == "string" and NAMED_NODE[name] then
         return NAMED_NODE[name]
     end
     if type(name) == "string" and name:match("^%.map%.") then
-        return M.WORLD
+        return M.GAME
     end
-    return M.WORLD
+    return M.GAME
 end
 
 function M.local_shard_ids()

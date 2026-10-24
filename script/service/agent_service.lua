@@ -25,6 +25,7 @@ local task_mgr = require "system.task.task_mgr"
 local effect_mgr = require "system.effect_mgr"
 local service_ctx = require "runtime.service_ctx"
 local rpc = require "cluster.rpc"
+local locator = require "cluster.locator"
 local shard = require "map.shard"
 
 local M = service_ctx.get("agent.agent", {})
@@ -36,15 +37,27 @@ M._inited = M._inited or false
 local accounts = M.accounts
 local logout_timers = M.logout_timers
 
-local function get_gate()
-    return rpc.local_gate()
+local function apply_gate(account, args)
+    args = args or {}
+    if not args.gate then
+        return
+    end
+    account.gate = args.gate
 end
 
-local function bind_session(account, player_id, fd)
+local function get_gate(account)
+    if account and account.gate then
+        return account.gate
+    end
+    log.error("account missing gate, account_key=%s", account and tostring(account.account_key) or "nil")
+    return nil
+end
+
+local function bind_locator(account, player_id, fd)
     if not account or not fd or not player_id then
         return false
     end
-    local gateS = get_gate()
+    local gateS = get_gate(account)
     if not gateS then
         return false
     end
@@ -52,12 +65,34 @@ local function bind_session(account, player_id, fd)
     return skynet.call(gateS, "lua", "register_player", fd, player_id)
 end
 
-local function kick_player_sync(player_id, reason, message)
-    local gateS = get_gate()
-    if not gateS or not player_id then
+function M.push_client(player_id, name, data)
+    local player = user_mgr.get_player_obj(player_id)
+    if not player then
         return false
     end
-    return skynet.call(gateS, "lua", "kick_player", player_id, reason, message)
+    local account = accounts[player.account_key_]
+    local gateS = get_gate(account)
+    if not gateS then
+        return false
+    end
+    return skynet.send(gateS, "lua", "send_to_player", player_id, name, data)
+end
+
+function M.push_clients(player_ids, name, data)
+    if type(player_ids) ~= "table" then
+        return 0
+    end
+    local n = 0
+    for _, player_id in ipairs(player_ids) do
+        if M.push_client(player_id, name, data) then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+function M.has_player(player_id)
+    return user_mgr.get_player_obj(player_id) ~= nil
 end
 
 local function ctn_loaded(player_id, _ctn)
@@ -148,9 +183,9 @@ local function unload_account_from_agent(account_key, account)
     end
     if player and player_id then
         for _, sid in ipairs(shard.all_ids()) do
-            local mapS = shard.addr(player.map_id_ or shard.DEFAULT_MAP_ID, sid)
-            if mapS then
-                skynet.send(mapS, "lua", "leave_map", player_id)
+            local shardS = shard.addr(player.map_id_ or shard.DEFAULT_MAP_ID, sid)
+            if shardS then
+                skynet.send(shardS, "lua", "leave_map", player_id)
             end
         end
     end
@@ -158,7 +193,7 @@ local function unload_account_from_agent(account_key, account)
     logout_timers[account_key] = nil
     if player_id then
         user_mgr.del_player_obj(player_id)
-        skynet.send(skynet.localname(".register"), "lua", "unregister", player_id)
+        locator.remove(player_id)
     end
     log.info("unload account from agent, account_key=%s, player_id=%d", account_key, player_id)
 end
@@ -228,10 +263,10 @@ function M.on_player_loaded(player_id)
     account.loaded = true
     account.args = nil
     if account.cur_fd then
-        bind_session(account, player_id, account.cur_fd)
+        bind_locator(account, player_id, account.cur_fd)
     end
     skynet.send(skynet.localname(".login"), "lua", "account_loaded", player.account_key_)
-    skynet.send(skynet.localname(".register"), "lua", "register", player_id, skynet.self())
+    locator.set_agent(player_id, skynet.self())
     notify_player_online(player)
 end
 
@@ -291,6 +326,7 @@ function M.start(account_key, account_data, args)
         cur_fd = args and args.fd,
         args = args,
     }
+    apply_gate(accounts[account_key], args)
     if not M.load(account_key) then
         accounts[account_key] = nil
         return false, "load player failed"
@@ -298,11 +334,12 @@ function M.start(account_key, account_data, args)
     return true
 end
 
-function M.reconnect(account_key, fd)
+function M.reconnect(account_key, fd, gate_args)
     local account = accounts[account_key]
     if not account then
         return false, "Account not found"
     end
+    apply_gate(account, gate_args)
     if logout_timers[account_key] then
         logout_timers[account_key]()
         logout_timers[account_key] = nil
@@ -313,12 +350,12 @@ function M.reconnect(account_key, fd)
     end
     log.info("reconnect, fd=%d, account_key=%s, player_id=%d", fd, account_key, account.player_id)
     account.disconnect_pending = false
-    bind_session(account, account.player_id, fd)
+    bind_locator(account, account.player_id, fd)
     notify_player_online(player)
     return true
 end
 
-function M.kicked_out(account_key, new_fd)
+function M.kicked_out(account_key, new_fd, gate_args)
     local account = accounts[account_key]
     if not account then
         return false, "Account not found"
@@ -331,13 +368,14 @@ function M.kicked_out(account_key, new_fd)
     if not player then
         return false, "Player not found"
     end
-    kick_player_sync(account.player_id, "kicked_out", "您的账号在其他设备登录，已被强制下线")
+    locator.kick(account.player_id, "kicked_out", "您的账号在其他设备登录，已被强制下线")
+    apply_gate(account, gate_args)
     if player.loaded_ then
         player:save_to_db()
     end
     log.info("kicked_out, new_fd=%d, account_key=%s, player_id=%d", new_fd, account_key, account.player_id)
     account.disconnect_pending = false
-    bind_session(account, account.player_id, new_fd)
+    bind_locator(account, account.player_id, new_fd)
     notify_player_online(player)
     return true
 end
@@ -545,6 +583,7 @@ end
 
 function M.init()
     M.register_client_protocol()
+    protocol_handler.set_local_agent(M)
     if M._inited then
         return
     end

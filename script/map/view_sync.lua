@@ -344,7 +344,7 @@ local function send_one_delta(player_id, map, delta)
     stats.delta_leave_total = stats.delta_leave_total + leave_count
     stats.delta_update_total = stats.delta_update_total + update_count
     note_pkt_items(n)
-    protocol_handler.send_to_player(player_id, "map_visible_delta_notify", {
+    protocol_handler.send_to_conn(player_id, "map_visible_delta_notify", {
         map_id = map and map.map_id or 0,
         enter_monsters = enter_m,
         enter_resources = enter_i,
@@ -372,7 +372,7 @@ local function send_full_notify(player_id, map, monsters, resources, marches, bu
     marches = marches or {}
     buildings = buildings or {}
     note_pkt_items(#monsters + #resources + #marches + #buildings)
-    protocol_handler.send_to_player(player_id, "map_visible_sync_notify", {
+    protocol_handler.send_to_conn(player_id, "map_visible_sync_notify", {
         map_id = map and map.map_id or 0,
         monsters = monsters,
         resources = resources,

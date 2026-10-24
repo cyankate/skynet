@@ -24,11 +24,14 @@
 | `service/shard_service.lua` | CMD 转发，不写玩法 |
 | `service/map_service.lua` | 全图派生状态，不进热路径 |
 | `net/map_net.lua` | 客户端路由（行军打到主城所在片） |
-| `cluster/layout.lua` | 节点放置、cluster_mode |
-| `cluster/rpc.lua` | `.gate` / `.shard.*` 地址；loopback 时 proxy |
+| `cluster/layout.lua` | 节点放置、cluster_mode、gate_count |
+| `cluster/rpc.lua` | `.gate.N` / `.shard.*`；分片直推的门缓存 |
+| `cluster/README.md` | 拆节点与 Skynet cluster 用法 |
+| `cluster/locator.lua` | 在线目录客户端 |
+| `service/locator_service.lua` | player_id → gate + agent |
 | `cluster/clustername.lua` | cluster 节点 IP/端口 |
-| `init.config` | 单进程 loopback |
-| `init_world.config` / `init_map1.config` / `init_map2.config` | split 三进程 |
+| `init.config` | 单进程 loopback，1 gate |
+| `init_game.config` / `init_map1.config` / `init_map2.config` | split；game 2 gate + nginx |
 | `hotspot_test.lua` | 热点回归 |
 
 ## 下发红线
@@ -36,8 +39,8 @@
 场景里「别人也能看见的东西」禁止：
 
 ```lua
-protocol_handler.send_to_player(pid, "map_visible_sync_notify", ...)
-protocol_handler.send_to_player(pid, "map_visible_delta_notify", ...)
+protocol_handler.send_to_conn(pid, "map_visible_sync_notify", ...)
+protocol_handler.send_to_conn(pid, "map_visible_delta_notify", ...)
 ```
 
 也不要在 tick 里对 `observers_around` 手写 for 发包。应调用：

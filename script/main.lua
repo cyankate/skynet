@@ -55,6 +55,7 @@ skynet.start(function()
     skynet.newservice("debug_console")
     skynet.newservice("eventS")
     skynet.newservice("securityS")
+    skynet.newservice("locatorS")
     skynet.newservice("loginS")
     skynet.newservice("rankS")
     skynet.newservice("guildS")
@@ -64,19 +65,28 @@ skynet.start(function()
     skynet.newservice("mailS")
     skynet.newservice("friendS")
     skynet.newservice("paymentS")
-    local gate = skynet.newservice("gateS")
+    if layout.gate_count() > 1 and not layout.behind_lb() then
+        log.warning("gate_count>1 需要 nginx + gate_behind_lb=1，否则会和 http 8889 抢端口")
+    end
+    local gates = {}
+    for _, id in ipairs(layout.gate_ids()) do
+        gates[#gates + 1] = { id = id, addr = skynet.newservice("gateS", id) }
+    end
     skynet.newservice("matchS")
     skynet.newservice("instanceS")
     skynet.newservice("pathfindingS")
     skynet.newservice("mapS", shard.default_def().map_id)
-    skynet.newservice("registerS")
     rpc.prefetch_remote_shards()
 
-    skynet.call(gate, "lua", "open", {
-        address = "0.0.0.0",
-        port = 8888,
-        maxclient = 8192,
-    })
+    for _, g in ipairs(gates) do
+        skynet.call(g.addr, "lua", "open", {
+            address = layout.gate_listen_addr(),
+            port = layout.gate_port(g.id),
+            maxclient = 8192,
+        })
+        log.info("gate listen, name=%s %s:%s", layout.gate_name(g.id),
+            layout.gate_listen_addr(), tostring(layout.gate_port(g.id)))
+    end
 
     if layout.split() then
         return

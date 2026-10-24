@@ -2,7 +2,6 @@ local skynet = require "skynet"
 local log = require "log"
 local protocol_handler = require "protocol_handler"
 local service_ctx = require "runtime.service_ctx"
-local rpc = require "cluster.rpc"
 
 local M = service_ctx.get("login.login", {})
 M.account_loading = M.account_loading or {}
@@ -77,12 +76,12 @@ local function assign_account_to_agent(agent, account_key)
     table.insert(agent_to_accounts[agent], account_key)
 end
 
-local function login_rpc_ok(fd, session, player_id, player_name)
+local function login_rpc_ok(fd, session, player_id, player_name, gate)
     protocol_handler.rpc_response(fd, session, {
         success = true,
         player_id = player_id or 0,
         player_name = player_name or "",
-    })
+    }, gate)
 end
 
 local function remove_account_from_agent(agent, account_key)
@@ -97,46 +96,60 @@ local function remove_account_from_agent(agent, account_key)
     end
 end
 
-function CLIENT.login(fd, msg, session)
+local function reply_client(fd, gate, name, data)
+    protocol_handler.send_to_client(fd, name, data, gate)
+end
+
+function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
+    if not gate or type(gate_name) ~= "string" or gate_name == "" then
+        log.error("login missing gate, fd=%s", tostring(fd))
+        return
+    end
     local account_key = msg.account_id
     local ip = msg.ip
     local device_id = msg.device_id
+    local gateS = gate
+    local gate_args = {
+        fd = fd,
+        gate = gateS,
+    }
 
     if not account_key or account_key == "" then
         log.warning("Login rejected: empty account_id, fd=%d", fd)
-        protocol_handler.send_to_client(fd, "error", { code = 1001, message = "账号标识无效" })
+        reply_client(fd, gateS, "error", { code = 1001, message = "账号标识无效" })
         return
     end
     if #account_key > 20 then
         log.warning("Login rejected: account_id too long, fd=%d, len=%d", fd, #account_key)
-        protocol_handler.send_to_client(fd, "error", { code = 1001, message = "账号标识长度不能超过20" })
+        reply_client(fd, gateS, "error", { code = 1001, message = "账号标识长度不能超过20" })
         return
     end
 
     local is_safe, message = check_security(ip, account_key)
     if not is_safe then
         log.warning("Login rejected due to security concerns: %s, account_key: %s", message, account_key)
-        protocol_handler.rpc_response(fd, session, { success = false, player_id = 0, player_name = "" })
+        protocol_handler.rpc_response(fd, session, { success = false, player_id = 0, player_name = "" }, gateS)
         return
     end
-    log.info("login request, fd=%d, account_key=%s", fd, account_key)
-    local gateS = rpc.local_gate()
+    log.info("login request, fd=%d, account_key=%s gate=%s", fd, account_key, tostring(gate_name))
     local ainfo = account_info[account_key]
     if ainfo and ainfo.agent then
         if ainfo.logout then
-            local ok = M.reconnect(account_key, fd)
+            local ok = M.reconnect(account_key, fd, gate_args)
             if ok then
-                login_rpc_ok(fd, session)
-                skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+                login_rpc_ok(fd, session, nil, nil, gateS)
+                if gateS then
+                    skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+                end
                 return
             end
-            protocol_handler.send_to_client(fd, "login_failed", { reason = "重连失败，请重新登录" })
+            reply_client(fd, gateS, "login_failed", { reason = "重连失败，请重新登录" })
             return
         end
 
         local ready = skynet.call(ainfo.agent, "lua", "is_account_ready", account_key)
         if not ready then
-            protocol_handler.send_to_client(fd, "login_failed", { reason = "账号加载中，请稍后再试" })
+            reply_client(fd, gateS, "login_failed", { reason = "账号加载中，请稍后再试" })
             return
         end
 
@@ -144,19 +157,21 @@ function CLIENT.login(fd, msg, session)
         ainfo.last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time())
         ainfo.device_id = device_id
         ainfo.logout = false
-        local kick_ok = skynet.call(ainfo.agent, "lua", "kicked_out", account_key, fd)
+        local kick_ok = skynet.call(ainfo.agent, "lua", "kicked_out", account_key, fd, gate_args)
         if not kick_ok then
-            protocol_handler.send_to_client(fd, "login_failed", { reason = "顶号失败，请稍后重试" })
+            reply_client(fd, gateS, "login_failed", { reason = "顶号失败，请稍后重试" })
             return
         end
-        login_rpc_ok(fd, session)
-        skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+        login_rpc_ok(fd, session, nil, nil, gateS)
+        if gateS then
+            skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+        end
         return
     end
 
     if account_loading[account_key] then
         log.error(string.format("Account %s is already loading", account_key))
-        protocol_handler.send_to_client(fd, "login_failed", { reason = "账号正在加载中，请稍后再试" })
+        reply_client(fd, gateS, "login_failed", { reason = "账号正在加载中，请稍后再试" })
         return
     end
 
@@ -178,7 +193,7 @@ function CLIENT.login(fd, msg, session)
         if not ret then
             log.error(string.format("Failed to create account %s", account_key))
             account_loading[account_key] = nil
-            protocol_handler.send_to_client(fd, "login_failed", { reason = "创建账号失败" })
+            reply_client(fd, gateS, "login_failed", { reason = "创建账号失败" })
             return
         end
     else
@@ -196,11 +211,11 @@ function CLIENT.login(fd, msg, session)
     end
 
     local agent = get_available_agent()
-    local ok, err = skynet.call(agent, "lua", "start", account_key, account_data, { fd = fd })
+    local ok, err = skynet.call(agent, "lua", "start", account_key, account_data, gate_args)
     if not ok then
         log.error("Failed to start agent for account %s: %s", account_key, tostring(err))
         account_loading[account_key] = nil
-        protocol_handler.send_to_client(fd, "login_failed", { reason = "登录失败" })
+        reply_client(fd, gateS, "login_failed", { reason = "登录失败" })
         return
     end
 
@@ -212,11 +227,13 @@ function CLIENT.login(fd, msg, session)
         last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time()),
         device_id = device_id,
     }
-    login_rpc_ok(fd, session)
-    skynet.send(gateS, "lua", "bound_agent", fd, account_key, agent)
+    login_rpc_ok(fd, session, nil, nil, gateS)
+    if gateS then
+        skynet.send(gateS, "lua", "bound_agent", fd, account_key, agent)
+    end
 end
 
-function M.token_login(fd, msg)
+function M.token_login(fd, msg, gate, gate_name, gate_node)
     local ip = msg.ip
     local device_id = msg.device_id
     local token_str = msg.token
@@ -224,14 +241,14 @@ function M.token_login(fd, msg)
     local is_valid, account_key, token_data = verify_token(token_str)
     if not is_valid then
         log.warning("Invalid token login attempt from IP: %s", ip or "unknown")
-        protocol_handler.send_to_client(fd, "login_failed", { reason = "令牌无效或已过期" })
+        protocol_handler.send_to_client(fd, "login_failed", { reason = "令牌无效或已过期" }, gate)
         return
     end
 
     local is_safe, message = check_security(ip, account_key, "token_login")
     if not is_safe then
         log.warning("Token login rejected due to security concerns: %s", message)
-        protocol_handler.send_to_client(fd, "login_failed", { reason = message })
+        protocol_handler.send_to_client(fd, "login_failed", { reason = message }, gate)
         return
     end
 
@@ -241,11 +258,11 @@ function M.token_login(fd, msg)
         if security then
             skynet.send(security, "lua", "add_to_blacklist", ip, "设备不匹配，可能的令牌盗用", 3600)
         end
-        protocol_handler.send_to_client(fd, "login_failed", { reason = "设备不匹配，拒绝登录" })
+        protocol_handler.send_to_client(fd, "login_failed", { reason = "设备不匹配，拒绝登录" }, gate)
         return
     end
 
-    CLIENT.login(fd, { account_id = account_key, ip = ip, device_id = device_id })
+    CLIENT.login(fd, { account_id = account_key, ip = ip, device_id = device_id }, nil, gate, gate_name, gate_node)
 end
 
 function M.account_update(account_key, account_data)
@@ -299,13 +316,13 @@ function M.logout(account_key)
     return true
 end
 
-function M.reconnect(account_key, fd)
+function M.reconnect(account_key, fd, gate_args)
     local ainfo = account_info[account_key]
     if not ainfo or not ainfo.agent or not ainfo.logout then
         return false
     end
     ainfo.reconnecting = true
-    local ok = skynet.call(ainfo.agent, "lua", "reconnect", account_key, fd)
+    local ok = skynet.call(ainfo.agent, "lua", "reconnect", account_key, fd, gate_args)
     if not ok then
         log.error(string.format("Failed to reconnect account %s", account_key))
         ainfo.reconnecting = false
@@ -362,9 +379,9 @@ function M.after_hotfix(hotfix_name)
     end)
 end
 
-function M.dispatch_client(fd, name, args, session)
+function M.dispatch_client(fd, name, args, session, gate, gate_name, gate_node)
     if CLIENT[name] then
-        local ok = pcall(CLIENT[name], fd, args, session)
+        local ok = pcall(CLIENT[name], fd, args, session, gate, gate_name, gate_node)
         if not ok then
             log.error(string.format("Error handling message %s from fd: %s", name, fd))
         end
@@ -384,9 +401,9 @@ function M.register_client_protocol()
         unpack = function(msg, sz)
             return skynet.unpack(msg, sz)
         end,
-        dispatch = function(fd, _, name, args, session)
+        dispatch = function(fd, gate, name, args, session, gate_name, gate_node)
             skynet.ignoreret()
-            M.dispatch_client(fd, name, args, session)
+            M.dispatch_client(fd, name, args, session, gate, gate_name, gate_node)
         end,
     })
 end

@@ -21,27 +21,29 @@ main
 ```
 
 启动：`mapS` 拉起 **本节点** 的 `shardS`。分片名 `.shard.<map_id>.<shard_id>`，全局名见 `map.shard`。
-全图一份导航：`pathfindingS`（`.pathfinding`）在 world 节点，主城占格写在这里，行军 `find_map_path` 都问它。
+全图一份导航：`pathfindingS`（`.pathfinding`）在 game 节点，主城占格写在这里，行军 `find_map_path` 都问它。
 
-跨服务不要再写 `skynet.localname(".gate")` / `localname(".shard.*")`。分片走 `shard.addr`，下行走 `protocol_handler.send_to_player`（内部 `cluster.rpc`）。
+跨服务不要再写 `skynet.localname(".gate")` / `localname(".shard.*")`。分片走 `shard.addr`。分片热路径下行走 `protocol_handler.send_to_conn`（session 查门直推）；其它业务走 `send_to_player`（经 agent 转出）。
 
-`cluster_mode`（配置文件）：
+`cluster_mode`（配置文件）以及 **Skynet cluster 怎么用、layout/rpc 在做什么**，见 [cluster/README.md](../cluster/README.md)。
 
 - `standalone`：本机消息队列
-- `loopback`：仍一个进程，`rpc.named` 走 cluster 环回（`init.config` 当前默认）
-- `split`：world + map1 + map2（`init_world.config` / `init_map1.config` / `init_map2.config`）
+- `loopback`：仍一个进程，`rpc.named` 走 cluster 环回（`init.config` 当前默认，1 个 gate）
+- `split`：game + map1 + map2（`init_game.config` / `init_map1.config` / `init_map2.config`）
 
-split 分片：1、2 → map1，3、4 → map2。先起 world，再 map1、map2。
+split 分片：1、2 → map1，3、4 → map2。先起 game，再 map1、map2。
 
 ```
-skynet script/init_world.config
+skynet script/init_game.config
 skynet script/init_map1.config
 skynet script/init_map2.config
 ```
 
-debug：world `8890`；map1 `8891` 调 `.shard.1001.1` / `.2`；map2 `8892` 调 `.3` / `.4`。客户端仍连 world 的 `8888`。
+debug：game `8890`；map1 `8891` 调 `.shard.1001.1` / `.2`；map2 `8892` 调 `.3` / `.4`。
 
-`fd` 相关仍走 `rpc.local_gate()`。节点表：`script/cluster/clustername.lua`。
+客户端：单进程 `init.config` 直连 **8888**。split 双门必须挂 nginx（`gate_behind_lb=1`，门听 `127.0.0.1:19001/19002`），客户端连 **8000**（见 `script/cluster/nginx-gate.conf`）。http 仍占 **8889**。locator 记下实际进了哪扇门；重连换门按账号是否还在内存走重连，不靠粘滞。
+
+`call .locator "count"` / `call .locator "get", 玩家id` 查连接；`call .locator "get_agent", 玩家id` 查 agent。节点表：`script/cluster/clustername.lua`。
 
 当前默认 2×2 = 4 片，id 为 1..N; 切分单位是 chunk，再聚合成分片矩形（`shard.pixel_rect`）。
 
@@ -113,7 +115,7 @@ CMD 只做对外入口，转发到模块。本片持有：
 - `map_visible_sync_notify`（805）：进图 / 重连快照
 - `map_visible_delta_notify`（806）：enter / leave / update 四类桶
 
-业务禁止直接 `send_to_player` 这两条。入口是 `view_sync`：
+业务禁止直接 `send_to_conn` / `send_to_player` 这两条。入口是 `view_sync`：
 
 - 进/离/跨格 → 实体侧扫周围观察者，补 enter 或 leave
 - 属性变化 → `mark_dirty` + `sync_obj_attr_around`（100ms 合批，只打包脏字段）

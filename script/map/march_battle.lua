@@ -32,10 +32,10 @@ local function notify_field_battle(map, battle, phase, extra)
         reason = extra.reason or "",
     }
     if battle.attacker_player_id then
-        protocol_handler.send_to_player(battle.attacker_player_id, "map_march_battle_notify", msg)
+        protocol_handler.send_to_conn(battle.attacker_player_id, "map_march_battle_notify", msg)
     end
     if battle.defender_player_id and battle.defender_player_id ~= battle.attacker_player_id then
-        protocol_handler.send_to_player(battle.defender_player_id, "map_march_battle_notify", msg)
+        protocol_handler.send_to_conn(battle.defender_player_id, "map_march_battle_notify", msg)
     end
 end
 
@@ -273,7 +273,7 @@ local function kill_monster(map, mon, killer_id)
     end
     local player_ids = helpers.get_players_in_map(map.map_id)
     if #player_ids > 0 then
-        protocol_handler.send_to_players(player_ids, "map_monster_removed_notify", {
+        protocol_handler.send_to_conns(player_ids, "map_monster_removed_notify", {
             map_id = map.map_id,
             monster_uid = mon.uid,
             x = mon.x or 0,

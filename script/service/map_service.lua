@@ -95,7 +95,7 @@ function CMD.rebuild()
     return true
 end
 
--- 只拉起本节点的分片。split 下 world 不启片，由 map1/map2 各自 main 拉起。
+-- 只拉起本节点的分片。split 下 game 不启片，由 map1/map2 各自 main 拉起。
 -- 等待就绪用 localname：这里是本进程刚 newservice 的片，不是 rpc 路由。
 local function launch_shards(map_id)
     local ids = layout.local_shard_ids()

@@ -5,13 +5,18 @@ local tableUtils = require "utils.tableUtils"
 local log = require "log"
 local proto_builder = require "utils.proto_builder"
 local service_ctx = require "runtime.service_ctx"
+local rpc = require "cluster.rpc"
+local locator = require "cluster.locator"
+local layout = require "cluster.layout"
 
 local M = service_ctx.get("gate.gate", {})
 M.connection = M.connection or {}
-M.fd_player_map = M.fd_player_map or {}
 M.player_fd_map = M.player_fd_map or {}
 M.pending_responses = M.pending_responses or {}
 M.message_count = M.message_count or {}
+M.gate_id = M.gate_id or 1
+M.gate_name = M.gate_name or ".gate.1"
+M.gate_node = M.gate_node or layout.self_node()
 
 local host = M.host
 local sender = M.sender
@@ -24,6 +29,12 @@ skynet.register_protocol({
     name = "client",
     id = skynet.PTYPE_CLIENT,
 })
+
+function M.init_identity(gate_id)
+    M.gate_id = tonumber(gate_id) or 1
+    M.gate_name = layout.gate_name(M.gate_id)
+    M.gate_node = layout.self_node()
+end
 
 function M.reload_proto()
     proto_builder.clear_schemas()
@@ -113,16 +124,6 @@ function M.bound_agent(fd, account_key, agent)
     c.agent = agent
 end
 
-function M.broadcast_message(msg)
-    local count = 0
-    for fd, _ in pairs(connection) do
-        if M.send_message(fd, msg) then
-            count = count + 1
-        end
-    end
-    return count
-end
-
 function M.register_player(fd, player_id)
     if not fd or not player_id then
         return false
@@ -140,6 +141,7 @@ function M.register_player(fd, player_id)
     end
     c.player_id = player_id
     player_fd_map[player_id] = fd
+    locator.bind(player_id, M.gate_name, M.gate_node)
     return true
 end
 
@@ -155,24 +157,6 @@ function M.kick_player(player_id, reason, message)
         c.player_id = nil
     end
     return M.kick_client(old_fd, reason, message)
-end
-
-function M.get_player_fd(player_id)
-    return player_fd_map[player_id]
-end
-
-function M.get_players_fd(player_ids)
-    if type(player_ids) ~= "table" then
-        return {}
-    end
-    local result = {}
-    for _, player_id in ipairs(player_ids) do
-        local fd = player_fd_map[player_id]
-        if fd then
-            table.insert(result, fd)
-        end
-    end
-    return result
 end
 
 function M.send_to_client(fd, name, data)
@@ -227,20 +211,12 @@ function M.rpc_response(fd, session, data)
     return true
 end
 
-function M.get_online_count()
-    local count = 0
-    for _ in pairs(player_fd_map) do
-        count = count + 1
-    end
-    return count
-end
-
 function M.handler_open(conf)
     local ok, err = M.reload_proto()
     if not ok then
         error("gate init proto failed: " .. tostring(err))
     end
-    log.info("Gate service opened")
+    log.info("Gate service opened, name=%s node=%s", M.gate_name, M.gate_node)
 end
 
 function M.handler_message(fd, msg, sz)
@@ -278,8 +254,11 @@ function M.handler_message(fd, msg, sz)
         if c.agent and c.player_id then
             skynet.redirect(c.agent, fd, "client", fd, skynet.pack(c.player_id, name, args, session))
         else
-            local loginS = skynet.localname(".login")
-            skynet.redirect(loginS, fd, "client", fd, skynet.pack(name, args, session))
+            local loginS = rpc.named_addr(".login")
+            if loginS then
+                skynet.redirect(loginS, skynet.self(), "client", fd,
+                    skynet.pack(name, args, session, M.gate_name, M.gate_node))
+            end
         end
     elseif msg_type == "RESPONSE" then
         log.debug("收到响应: fd=%d, session=%s", fd, tostring(name))
@@ -296,10 +275,13 @@ function M.handler_disconnect(fd)
     if c then
         if c.player_id and player_fd_map[c.player_id] == fd then
             player_fd_map[c.player_id] = nil
+            locator.unbind(c.player_id, M.gate_name, M.gate_node)
         end
         if c.account_key then
-            local loginS = skynet.localname(".login")
-            skynet.send(loginS, "lua", "disconnect", c.account_key, fd)
+            local loginS = rpc.named_addr(".login")
+            if loginS then
+                skynet.send(loginS, "lua", "disconnect", c.account_key, fd)
+            end
             log.info("client disconnected, fd=%d, account_key=%s", fd, c.account_key)
         end
     end

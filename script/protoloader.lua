@@ -32,14 +32,17 @@ function CMD.reload()
         return false, tostring(err)
     end
 
-    local gate = rpc.local_gate()
-    if gate then
+    local failed
+    for _, gate in ipairs(rpc.all_gates()) do
         local gok, gret, gerr = pcall(skynet.call, gate, "lua", "reload_proto")
         if not gok or not gret then
             local msg = tostring(gerr or gret or "unknown gate reload error")
             log.error("protoloader reload gate proto failed: %s", msg)
-            return false, msg
+            failed = msg
         end
+    end
+    if failed then
+        return false, failed
     end
 
     return true

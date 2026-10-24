@@ -128,7 +128,7 @@ function M.try_proxy(name, node)
     return get_proxy(node, name)
 end
 
--- name: ".gate" / ".shard.1001.1"
+-- name: ".gate.1" / ".shard.1001.1"
 function M.named(name, node)
     name = ensure_dot(name)
     if not name then
@@ -147,9 +147,9 @@ function M.named(name, node)
         log.error("cluster rpc: remote node not enabled, name=%s node=%s", name, tostring(node))
         return M.local_addr(name)
     end
-    -- 跨节点分片：每个服务一份 VM，main 的 prefetch 填不满 shardS 的 proxies。
-    -- 有缓存直接用；没有则先探端口再建 proxy（对端未起不走 cluster.proxy）。
-    if not layout.is_local(node) and name:match("^%.shard%.") then
+    -- 每个服务一份 VM，main 的 prefetch 填不满其它服务的 proxies。
+    -- 跨节点：有缓存直接用；没有则先探端口再建 proxy（对端未起不走 cluster.proxy）。
+    if not layout.is_local(node) then
         local cached = proxies[node .. "\0" .. name]
         if cached then
             return cached
@@ -157,7 +157,6 @@ function M.named(name, node)
         if not node_reachable(node) then
             return nil
         end
-        return get_proxy(node, name)
     end
     return get_proxy(node, name)
 end
@@ -167,14 +166,93 @@ function M.shard_addr(map_id, shard_id)
     return M.named(shard.service_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
 end
 
--- 本节点 gate：绑定 fd、顶号踢本连接、reload proto。多 gate 之后仍然只打自己，不走 cluster。
-function M.local_gate()
-    return M.local_addr(".gate")
+local player_gates = {} -- 本 VM：player_id => { name, node }
+
+function M.forget_player_gate(player_id)
+    player_id = tonumber(player_id)
+    if player_id then
+        player_gates[player_id] = nil
+    end
 end
 
--- 玩家当前所在 gate（下行）。loopback 时走 cluster 环回。
+local function fetch_gates(player_ids)
+    local a = M.named_addr(".locator")
+    if not a then
+        return {}
+    end
+    local ok, sesses = pcall(skynet.call, a, "lua", "get_gates", player_ids)
+    if not ok or type(sesses) ~= "table" then
+        return {}
+    end
+    return sesses
+end
+
+local function store_gate(pid, sess)
+    if type(sess) ~= "table" or not sess.name then
+        return nil
+    end
+    player_gates[pid] = { name = sess.name, node = sess.node }
+    return M.named(sess.name, sess.node)
+end
+
+function M.all_gates()
+    local t = {}
+    local seen = {}
+    for _, id in ipairs(layout.gate_ids()) do
+        local a = M.named(layout.gate_name(id), layout.gate_home_node())
+        if a and not seen[a] then
+            seen[a] = true
+            t[#t + 1] = a
+        end
+    end
+    return t
+end
+
+-- 玩家当前所在 gate。本 VM 缓存，miss 才问 locator；换门由 locator 通知分片 forget。仅分片直推连接用。
 function M.player_gate(player_id)
-    return M.named(".gate", layout.gate_node(player_id))
+    local pid = tonumber(player_id)
+    if not pid then
+        return nil
+    end
+    local c = player_gates[pid]
+    if c then
+        return M.named(c.name, c.node)
+    end
+    return store_gate(pid, fetch_gates({ pid })[pid])
+end
+
+-- 群发：缓存命中的直接用，剩下一次 get_gates。回填本 VM 缓存，后续 send_to_conn 也能打中。
+function M.player_gates(player_ids)
+    if type(player_ids) ~= "table" then
+        return {}
+    end
+    local result = {}
+    local missing = {}
+    for _, player_id in ipairs(player_ids) do
+        local pid = tonumber(player_id)
+        if pid then
+            local c = player_gates[pid]
+            if c then
+                local gate = M.named(c.name, c.node)
+                if gate then
+                    result[pid] = gate
+                end
+            else
+                missing[#missing + 1] = pid
+            end
+        end
+    end
+    if #missing == 0 then
+        return result
+    end
+    local sesses = fetch_gates(missing)
+    for _, pid in ipairs(missing) do
+        local gate = store_gate(pid, sesses[pid])
+        if gate then
+            result[pid] = gate
+        end
+    end
+    return result
 end
 
 function M.named_addr(name)
@@ -210,7 +288,6 @@ function M.prefetch_remote_shards()
         skynet.sleep(100)
         while true do
             local missing = 0
-            local waiting = {}
             for _, sid in ipairs(shard.all_ids()) do
                 local node = layout.shard_node(map_id, sid)
                 if not layout.is_local(node) then
@@ -219,8 +296,6 @@ function M.prefetch_remote_shards()
                         missing = missing + 1
                         if node_reachable(node) then
                             M.try_proxy(name, node)
-                        else
-                            waiting[node] = true
                         end
                     end
                 end

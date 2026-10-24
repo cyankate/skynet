@@ -146,7 +146,7 @@ local function notify_monster_removed(map_id, monster_uid, x, y, killer_player_i
     if #player_ids == 0 then
         return
     end
-    protocol_handler.send_to_players(player_ids, "map_monster_removed_notify", {
+    protocol_handler.send_to_conns(player_ids, "map_monster_removed_notify", {
         map_id = map_id,
         monster_uid = monster_uid,
         x = x or 0,
@@ -160,7 +160,7 @@ local function notify_item_removed(map_id, item_uid, x, y, picker_player_id)
     if #player_ids == 0 then
         return
     end
-    protocol_handler.send_to_players(player_ids, "map_item_removed_notify", {
+    protocol_handler.send_to_conns(player_ids, "map_item_removed_notify", {
         map_id = map_id,
         item_uid = item_uid,
         x = x or 0,
@@ -580,7 +580,7 @@ function M.apply_battle_result(player_id, monster_uid, win)
         map:detach(monster)
         map:save(monster)
         notify_monster_removed(map.map_id, uid, monster.x, monster.y, player_id)
-        protocol_handler.send_to_player(player_id, "map_monster_removed_notify", {
+        protocol_handler.send_to_conn(player_id, "map_monster_removed_notify", {
             map_id = map.map_id,
             monster_uid = uid,
             x = monster.x or 0,

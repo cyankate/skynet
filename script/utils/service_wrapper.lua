@@ -64,34 +64,39 @@ function M.wrap_service(startup_func, options)
     -- 返回包装后的启动函数
     return function()
         -- 创建一个标准的handler函数，用于处理所有lua消息请求
+        local function record_cost(cmd, start_time)
+            local cost_time = skynet.now() - start_time
+            function_stats.calls = function_stats.calls + 1
+            function_stats.total_time = function_stats.total_time + cost_time
+            function_stats.max_time = math.max(function_stats.max_time, cost_time)
+            function_stats.min_time = math.min(function_stats.min_time, cost_time)
+            if cost_time > 500 then
+                log.debug("max_time cmd:%s cost:%s ", cmd, cost_time)
+                tableUtils.print_table(function_stats.cost[coroutine.running()])
+            end
+            local current_time = skynet.now()
+            if current_time - function_stats.last_rps_time >= 1000 then
+                function_stats.current_rps = function_stats.calls - function_stats.last_rps_count
+                function_stats.last_rps_time = current_time
+                function_stats.last_rps_count = function_stats.calls
+            end
+        end
+
+        -- CMD 抛错：本端打 cmd + 栈，再 error 让框架给 call 方发 PTYPE_ERROR（对端是 "call failed"，不是 return false）。
         local function message_handler(session, source, cmd, ...)
             function_stats.cost[coroutine.running()] = {}
             local start_time = skynet.now()
             local f = _G.CMD[cmd]
             if f then
-                local result = {f(...)}
-                local end_time = skynet.now()
-                local cost_time = end_time - start_time
-                
-                -- 更新统计信息
-                function_stats.calls = function_stats.calls + 1
-                function_stats.total_time = function_stats.total_time + cost_time
-                local old_max_time = function_stats.max_time
-                function_stats.max_time = math.max(function_stats.max_time, cost_time)
-                function_stats.min_time = math.min(function_stats.min_time, cost_time)
-                if cost_time > 500 then
-                    log.debug("max_time cmd:%s cost:%s ", cmd, cost_time)
-                    tableUtils.print_table(function_stats.cost[coroutine.running()])
+                local packed = table.pack(xpcall(function(...)
+                    return f(...)
+                end, debug.traceback, ...))
+                record_cost(cmd, start_time)
+                if not packed[1] then
+                    log.error("service:%s cmd:%s failed:\n%s", options.name or "?", tostring(cmd), tostring(packed[2]))
+                    error(packed[2])
                 end
-                -- 计算RPS
-                local current_time = skynet.now()
-                if current_time - function_stats.last_rps_time >= 1000 then
-                    function_stats.current_rps = function_stats.calls - function_stats.last_rps_count
-                    function_stats.last_rps_time = current_time
-                    function_stats.last_rps_count = function_stats.calls
-                end
-                
-                skynet.ret(skynet.pack(table.unpack(result)))
+                skynet.ret(skynet.pack(table.unpack(packed, 2, packed.n)))
             else
                 log.error("service:%s, Unknown command: %s", options.name, cmd)
                 skynet.ret(skynet.pack(false, "未知命令"))
