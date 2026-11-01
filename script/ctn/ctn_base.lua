@@ -106,6 +106,15 @@ function CtnBase:onsave()
     return self.data_
 end
 
+-- 关键提交用：当前内存状态对应的库行
+function CtnBase:snapshot_rows()
+    return self:onsave() or {}
+end
+
+-- 关键提交成功后更新“已入库”标记（CtnMf 覆写）
+function CtnBase:mark_rows_saved(_rows)
+end
+
 -- 加载数据
 function CtnBase:onload(data)
     -- 子类需要实现具体的加载逻辑
@@ -152,14 +161,11 @@ function CtnBase:save()
     end
 
     skynet.fork(function()
-        local ok, err = pcall(function()
-            self:dosave()
-        end)
-
-        if not ok then
-            self:set_error(err)
+        local ok, ret, err = pcall(self.dosave, self)
+        if not ok or ret == false then
+            self:set_error(ok and err or ret)
             log.error(string.format("[CtnBase] Failed to save data for ctn: %s, name: %s, error: %s",
-                self.owner_, self.name_, err))
+                self.owner_, self.name_, tostring(ok and err or ret)))
             return
         end
 

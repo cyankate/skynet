@@ -89,7 +89,18 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 - **玩家级保存锁**：`Player:exclusive(fn)` 用 `skynet.queue` 串行化同一玩家的定时保存和关键提交；`Player:save_to_db()` 异步但串行，`Player:save_to_db_sync()` 用于卸载/关服等需要确认落库的场景。
 - **容器同步保存**：`CtnBase:save_now()`，由 Player 的锁串行调用；定时保存也走同一条路径，避免旧快照覆盖新提交。
 - **关键提交**：后续业务应复用 `Player:exclusive`，把“受影响的容器 + op_log”放在 `dbS` 的同一个事务里；只提交这次操作必须一起变的字段，其他模块继续等定时保存。
-- 现状：`CtnMf:dosave` 对已有行仍用 `skynet.send(update)`（发出去不等结果），关键路径后续要改用 `batch_update` 或同步事务。
+- 定时保存走 `batch_insert` / `batch_update`，同步返回结果；关键提交走 `Player:commit_critical`。
+
+### 关键提交（op_log）
+
+- `op_log` 表（迁移 `[#5]`）：`op_id` 唯一主键、`status`、`result`、时间。
+- `dbS.commit_op(op_id, ops, result)`：`ops` 是 `{op="insert|update|upsert|delete", tbl=..., data/rows/cond}` 的列表；内部在同一事务里写 `op_log` + 业务行；重复 `op_id` 返回上次结果。
+- `dbS.transaction(ops)`：只做多表事务，不写 `op_log`。
+- `dbS.op_get(op_id)`：查询操作是否已完成及结果。
+- `Player:commit_critical(op_id, {"bag"}, extra_ops, result)`：复用玩家保存锁，把容器快照 + `op_log` 同事务提交。
+- `Player:grant_items_critical(op_id, items, reason)`：单玩家发奖的幂等入口；提交失败时保留 pending，定时保存会跳过该容器，按同一 `op_id` 重试。
+- 支付奖励：`paymentS.handle_notify` 更新订单后尝试发奖；玩家离线时登录 agent 触发 `paymentS.claim_player_rewards` 补发；agent 侧按 `pay:<order_id>` 幂等。
+- outbox / 死信重放仍属于后续阶段。
 
 ## 常见反模式（新人别踩）
 

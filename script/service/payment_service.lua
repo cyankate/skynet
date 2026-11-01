@@ -3,6 +3,8 @@ local log = require "log"
 local payment_security = require "security.payment"
 local encrypt = require "security.encrypt"
 local service_ctx = require "runtime.service_ctx"
+local rpc = require "cluster.rpc"
+local locator = require "cluster.locator"
 
 local PAYMENT_STATUS = { CREATED = 0, PROCESSING = 1, SUCCESS = 2, FAILED = 3, REFUND = 4 }
 local PAYMENT_CHANNEL = {
@@ -26,6 +28,83 @@ function M.init()
     M.db = skynet.localname(".db")
     local ok, product_config = pcall(require, "define.product_config")
     if ok then M.products = product_config end
+end
+
+local function find_product(product_id)
+    for _, p in ipairs(M.products or {}) do
+        if p.id == product_id then
+            return p
+        end
+    end
+    return nil
+end
+
+local function build_reward_items(product)
+    local items = {}
+    if not product then
+        return items
+    end
+    for _, it in ipairs(product.items or {}) do
+        if it.id and it.count then
+            items[it.id] = (items[it.id] or 0) + it.count
+        end
+    end
+    local diamond = (product.diamond or 0) + (product.bonus or 0)
+    if diamond > 0 then
+        items["diamond"] = (items["diamond"] or 0) + diamond
+    end
+    return items
+end
+
+-- 发放订单奖励：op_id = pay:<order_id>，agent 侧幂等；离线时等下次登录补发
+function M.grant_order_reward(order)
+    if not order then
+        return false
+    end
+    local product = find_product(order.product_id)
+    local items = build_reward_items(product)
+    if not next(items) then
+        return true
+    end
+    local agent = locator.get_agent(order.player_id)
+    if not agent then
+        return false, "offline"
+    end
+    local ok, result, err = rpc.call_timeout(agent, 500, "grant_items_critical", {
+        player_id = order.player_id,
+        op_id = "pay:" .. tostring(order.order_id),
+        items = items,
+        reason = "payment_reward",
+    })
+    if not ok or not result then
+        log.error("grant payment reward failed, order=%s err=%s",
+            tostring(order.order_id), tostring(err))
+        return false, err or "grant failed"
+    end
+    return true
+end
+
+-- 玩家登录后补发已支付但未发放的订单（幂等）
+function M.claim_player_rewards(player_id)
+    player_id = tonumber(player_id)
+    if not player_id then
+        return false
+    end
+    local orders = skynet.call(M.db, "lua", "find", "payment", {
+        player_id = player_id,
+        status = PAYMENT_STATUS.SUCCESS,
+    }, { limit = 100 })
+    local granted = 0
+    for _, order in ipairs(orders or {}) do
+        local exists = skynet.call(M.db, "lua", "op_get", "pay:" .. tostring(order.order_id))
+        if not exists then
+            local ok = M.grant_order_reward(order)
+            if ok then
+                granted = granted + 1
+            end
+        end
+    end
+    return true, granted
 end
 
 function M.create_order(player_id, account_id, product_id, channel, device_id, ip_address, extra_data)
@@ -83,7 +162,11 @@ function M.handle_notify(channel, notify_data)
     if not order_id then return { code = 3, message = "无法识别订单" } end
     local order = skynet.call(M.db, "lua", "find_one", "payment", { order_id = order_id })
     if not order then return { code = 4, message = "订单不存在" } end
-    if order.status == PAYMENT_STATUS.SUCCESS then return { code = 0, message = "订单已处理" } end
+    if order.status == PAYMENT_STATUS.SUCCESS then
+        -- 回调重试：订单已成功，但奖励可能因离线/崩溃没发出去，这里补发（agent 侧幂等）
+        M.grant_order_reward(order)
+        return { code = 0, message = "订单已处理" }
+    end
     local is_payment_success = false
     if channel == PAYMENT_CHANNEL.ALIPAY then
         is_payment_success = (notify_data.trade_status == "TRADE_SUCCESS" or notify_data.trade_status == "TRADE_FINISHED")
@@ -100,6 +183,10 @@ function M.handle_notify(channel, notify_data)
     local result = skynet.call(M.db, "lua", "update", "payment", { order_id = order_id }, update_data)
     if not result then return { code = 5, message = "更新订单状态失败" } end
     log_payment(order_id, status, is_payment_success and "支付成功" or "支付失败")
+    if is_payment_success then
+        -- 订单已落库；奖励发放失败不影响支付回调，登录时会补发
+        M.grant_order_reward(order)
+    end
     return { code = 0, message = "处理成功" }
 end
 

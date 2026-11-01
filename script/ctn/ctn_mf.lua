@@ -34,83 +34,85 @@ function CtnMf:set_max_data_size(size)
     self.max_data_size_ = size
 end
 
+-- 主键字符串（player_id_idx 形式），doload / dosave / 关键提交共用
+function CtnMf:prikeys_str(data)
+    local primary_keys = table_schema[self.tbl_].primary_keys
+    local vals = {}
+    for _, field in ipairs(primary_keys) do
+        if data[field] ~= nil then
+            vals[#vals + 1] = tostring(data[field])
+        end
+    end
+    return table.concat(vals, "_")
+end
+
 -- 从数据库加载数据
 function CtnMf:doload()
     local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
     local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
-    
-    if ret.badresult then
+
+    if not ret or ret.badresult then
         self:set_error("Failed to load data from database")
         return false, ERROR_CODE.DB_ERROR
     end
-    local primary_keys = table_schema[self.tbl_].primary_keys
     for _, row in ipairs(ret) do
-        -- 构建主键字符串作为唯一标识
-        local prikeys_values = {}
-        for _, field in pairs(primary_keys) do
-            if row[field] then
-                table.insert(prikeys_values, tostring(row[field]))
-            end
-        end
-        local prikeys_str = table.concat(prikeys_values, "_")
-        self.sub_inserted_[prikeys_str] = true
+        self.sub_inserted_[self:prikeys_str(row)] = true
     end
     self:onload(ret)
-    
+
     return true
 end
 
--- 保存数据到数据库
+-- 保存数据到数据库：批量插入/更新，失败不再静默
 function CtnMf:dosave()
-    -- 获取需要保存的数据
     local datas, err_code = self:onsave()
     if not datas then
         return false, err_code
     end
-    
-    -- 获取表结构信息
-    local primary_keys = table_schema[self.tbl_].primary_keys
-    local non_primary_fields = table_schema[self.tbl_].non_primary_fields
+
     local fields = table_schema[self.tbl_].fields
-    
-    -- 获取数据库连接
-    local dbc = skynet.localname(".db")
-    -- 遍历所有数据行
+    local insert_rows, update_rows = {}, {}
     for _, data in pairs(datas) do
-        -- 提取有效字段值
         local values = {}
         for field, _ in pairs(fields) do
-            if data[field] then
+            if data[field] ~= nil then
                 values[field] = data[field]
             end
         end
-        
-        -- 构建主键字符串作为唯一标识
-        local prikeys_values = {}
-        for _, field in pairs(primary_keys) do
-            if data[field] then
-                table.insert(prikeys_values, tostring(data[field]))
-            end
+        local key = self:prikeys_str(values)
+        if not self.sub_inserted_[key] then
+            insert_rows[#insert_rows + 1] = values
+        else
+            update_rows[#update_rows + 1] = values
         end
-        local prikeys_str = table.concat(prikeys_values, "_")
-        
-        -- 根据是否已插入决定执行insert还是update
-        if not self.sub_inserted_[prikeys_str] then
-            -- 执行插入操作
-            local ret = skynet.call(dbc, "lua", "insert", self.tbl_, values)
-            if not ret then
-                error(string.format("Failed to insert data with primary keys: %s", prikeys_str))
-                return
-            end
-            self.sub_inserted_[prikeys_str] = true
-        else 
-            -- 执行更新操作
-            skynet.send(dbc, "lua", "update", self.tbl_, values)
-        end 
     end
-    
+
+    local dbc = skynet.localname(".db")
+    if #insert_rows > 0 then
+        local ret = skynet.call(dbc, "lua", "batch_insert", self.tbl_, insert_rows, { lba = self.prikey_ })
+        if not ret then
+            return false, "batch_insert failed"
+        end
+        for _, row in ipairs(insert_rows) do
+            self.sub_inserted_[self:prikeys_str(row)] = true
+        end
+    end
+    if #update_rows > 0 then
+        local ret = skynet.call(dbc, "lua", "batch_update", self.tbl_, update_rows, { lba = self.prikey_ })
+        if not ret then
+            return false, "batch_update failed"
+        end
+    end
+
     return true
+end
+
+-- 关键提交成功后，把对应行标记为已存在，后续定时保存走 update
+function CtnMf:mark_rows_saved(rows)
+    for _, row in ipairs(rows or {}) do
+        self.sub_inserted_[self:prikeys_str(row)] = true
+    end
 end
 
 -- 获取所有字段

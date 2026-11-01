@@ -53,3 +53,14 @@ CREATE TABLE IF NOT EXISTS `player_condition` (
 
 DROP TABLE IF EXISTS `condition`;
 
+
+[#5]
+-- 操作日志表（幂等 / 关键提交）
+CREATE TABLE IF NOT EXISTS `op_log` (
+    `op_id` varchar(128) NOT NULL COMMENT '操作ID',
+    `status` tinyint NOT NULL DEFAULT '1' COMMENT '状态:1=完成',
+    `result` text COMMENT '操作结果',
+    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`op_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';

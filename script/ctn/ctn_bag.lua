@@ -35,27 +35,23 @@ function CtnBag:onsave()
     -- 保存配置信息
     datas[SPECIAL_KEYS.CONFIG] = self.config_
     datas[SPECIAL_KEYS.VIRTUAL_ITEMS] = self.virtual_items_
-    -- 将物品数据分批存储
-    local batch_index = 1
-    local current_batch = {}
-    
+
+    -- 按 slot 固定分批，保证同一格永远落在同一行，避免批次重排留下脏行
+    local batches = {}
+    local batch_count = math.max(1, math.ceil(self.config_.max_slots / BAG_CONFIG.BATCH_SIZE))
+    for b = 1, batch_count do
+        batches[string.format("items_batch_%d", b)] = {}
+    end
     for slot, item in pairs(self.slots_) do
-        current_batch[slot] = item
-        
-        -- 当达到批次大小时，保存当前批次
-        if #current_batch >= BAG_CONFIG.BATCH_SIZE then
-            local batch_key = string.format("items_batch_%d", batch_index)
-            datas[batch_key] = current_batch
-            current_batch = {}
-            batch_index = batch_index + 1
-        end
-    end
-    
-    -- 保存最后一个不完整的批次
-    if next(current_batch) then
+        local batch_index = math.floor((slot - 1) / BAG_CONFIG.BATCH_SIZE) + 1
         local batch_key = string.format("items_batch_%d", batch_index)
-        datas[batch_key] = current_batch
+        batches[batch_key] = batches[batch_key] or {}
+        batches[batch_key][slot] = item
     end
+    for key, batch in pairs(batches) do
+        datas[key] = batch
+    end
+
     local rows = {}
     for idx, data in pairs(datas) do
         table.insert(rows, {player_id = self.owner_, idx = idx, data = data})

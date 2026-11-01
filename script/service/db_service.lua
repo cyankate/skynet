@@ -745,6 +745,246 @@ function CMD.update(_tbl, _data, _options)
     return CMD.batch_update(_tbl, {_data}, _options)
 end
 
+local function sql_value(info, value)
+    if info.type == "text" and type(value) == "table" then
+        value = tableUtils.serialize_table(value)
+    end
+    return mysql.quote_sql_str(tostring(value))
+end
+
+local function check_required(struct, data)
+    for name, info in pairs(struct.fields) do
+        if info.is_required and not info.is_auto_increment and data[name] == nil then
+            return nil, "missing field " .. name
+        end
+    end
+    return true
+end
+
+local function build_insert_sql(tbl, data)
+    local struct = table_schema[tbl]
+    local ok, err = check_required(struct, data)
+    if not ok then
+        return nil, err
+    end
+    local fields, values = {}, {}
+    for name, info in pairs(struct.fields) do
+        if not info.is_auto_increment and data[name] ~= nil then
+            fields[#fields + 1] = "`" .. name .. "`"
+            values[#values + 1] = sql_value(info, data[name])
+        end
+    end
+    if #fields == 0 then
+        return nil, "no fields"
+    end
+    return string.format("INSERT INTO `%s` (%s) VALUES (%s)",
+        tbl, table.concat(fields, ","), table.concat(values, ","))
+end
+
+local function build_update_sql(tbl, data)
+    local struct = table_schema[tbl]
+    local pk = {}
+    for _, name in ipairs(struct.primary_keys) do
+        pk[name] = true
+    end
+    local sets, conds = {}, {}
+    for name, info in pairs(struct.fields) do
+        if not info.is_auto_increment and data[name] ~= nil then
+            local q = string.format("`%s`=%s", name, sql_value(info, data[name]))
+            if pk[name] then
+                conds[#conds + 1] = q
+            else
+                sets[#sets + 1] = q
+            end
+        end
+    end
+    if #sets == 0 then
+        return nil, "no fields to update"
+    end
+    if #conds == 0 then
+        return nil, "missing primary key"
+    end
+    return string.format("UPDATE `%s` SET %s WHERE %s",
+        tbl, table.concat(sets, ","), table.concat(conds, " AND "))
+end
+
+local function build_upsert_sql(tbl, data)
+    local struct = table_schema[tbl]
+    local ok, err = check_required(struct, data)
+    if not ok then
+        return nil, err
+    end
+    local pk = {}
+    for _, name in ipairs(struct.primary_keys) do
+        pk[name] = true
+    end
+    local fields, values, updates = {}, {}, {}
+    for name, info in pairs(struct.fields) do
+        if not info.is_auto_increment and data[name] ~= nil then
+            fields[#fields + 1] = "`" .. name .. "`"
+            values[#values + 1] = sql_value(info, data[name])
+            if not pk[name] then
+                updates[#updates + 1] = string.format("`%s`=VALUES(`%s`)", name, name)
+            end
+        end
+    end
+    if #fields == 0 then
+        return nil, "no fields"
+    end
+    local sql = string.format("INSERT INTO `%s` (%s) VALUES (%s)",
+        tbl, table.concat(fields, ","), table.concat(values, ","))
+    if #updates > 0 then
+        sql = sql .. " ON DUPLICATE KEY UPDATE " .. table.concat(updates, ",")
+    end
+    return sql
+end
+
+local function build_delete_sql(tbl, cond)
+    local struct = table_schema[tbl]
+    local conds = {}
+    for name, value in pairs(cond or {}) do
+        local info = struct.fields[name]
+        if info then
+            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+        end
+    end
+    if #conds == 0 then
+        return nil, "empty condition"
+    end
+    return string.format("DELETE FROM `%s` WHERE %s", tbl, table.concat(conds, " AND "))
+end
+
+-- 多表事务：ops = { {op="insert|update|upsert|delete", tbl=..., data=...|rows=...|cond=...} }
+function CMD.transaction(ops, _options)
+    if type(ops) ~= "table" or #ops == 0 then
+        return nil, "empty ops"
+    end
+    local lba = _options and _options.lba or 0
+    local db = get_connection(lba)
+    if not db then
+        return nil, "no connection"
+    end
+
+    local sqls = {}
+    for _, op in ipairs(ops) do
+        local tbl = op.tbl
+        local struct = tbl and table_schema[tbl]
+        if not struct then
+            release(db)
+            return nil, "table not found: " .. tostring(tbl)
+        end
+        if op.op == "delete" then
+            local sql, err = build_delete_sql(tbl, op.cond)
+            if not sql then
+                release(db)
+                return nil, err
+            end
+            sqls[#sqls + 1] = sql
+        else
+            local rows = op.rows or (op.data and { op.data }) or {}
+            if #rows == 0 then
+                release(db)
+                return nil, "no rows for " .. tostring(op.op)
+            end
+            for _, data in ipairs(rows) do
+                local sql, err
+                if op.op == "insert" then
+                    sql, err = build_insert_sql(tbl, data)
+                elseif op.op == "update" then
+                    sql, err = build_update_sql(tbl, data)
+                elseif op.op == "upsert" then
+                    sql, err = build_upsert_sql(tbl, data)
+                else
+                    err = "unknown op: " .. tostring(op.op)
+                end
+                if not sql then
+                    release(db)
+                    return nil, err
+                end
+                sqls[#sqls + 1] = sql
+            end
+        end
+    end
+
+    local ret = db:query("START TRANSACTION")
+    if ret and ret.badresult then
+        release(db)
+        return nil, ret.err or ret.badresult
+    end
+    for _, sql in ipairs(sqls) do
+        local r = db:query(sql)
+        if not r or r.badresult then
+            db:query("ROLLBACK")
+            release(db)
+            return nil, (r and (r.err or r.badresult)) or "query failed"
+        end
+    end
+    local commit = db:query("COMMIT")
+    if commit and commit.badresult then
+        db:query("ROLLBACK")
+        release(db)
+        return nil, commit.err or commit.badresult
+    end
+    release(db)
+    return true
+end
+
+-- 按 op_id 查已完成的操作；返回 exists, result
+function CMD.op_get(op_id)
+    if type(op_id) ~= "string" or op_id == "" then
+        return false
+    end
+    local rows = CMD.select("op_log", { op_id = op_id }, { limit = 1 })
+    if rows and rows[1] then
+        local payload = rows[1].result
+        if type(payload) == "table" then
+            return true, payload.data
+        end
+        return true, nil
+    end
+    return false
+end
+
+-- 关键提交：业务行 + op_log 在同一个事务里；重复 op_id 返回上次结果
+function CMD.commit_op(op_id, ops, result, _options)
+    if type(op_id) ~= "string" or op_id == "" then
+        return nil, "invalid op_id"
+    end
+    local exists, old = CMD.op_get(op_id)
+    if exists then
+        return true, old, "duplicate"
+    end
+
+    local now = os.date("%Y-%m-%d %H:%M:%S")
+    local list = {
+        {
+            op = "insert",
+            tbl = "op_log",
+            data = {
+                op_id = op_id,
+                status = 1,
+                result = tableUtils.serialize_table({ data = result }),
+                created_at = now,
+                updated_at = now,
+            },
+        },
+    }
+    for _, op in ipairs(ops or {}) do
+        list[#list + 1] = op
+    end
+
+    local ok, err = CMD.transaction(list, _options)
+    if ok then
+        return true, result
+    end
+    -- 并发重复：唯一键冲突后回查
+    local exists2, old2 = CMD.op_get(op_id)
+    if exists2 then
+        return true, old2, "duplicate"
+    end
+    return nil, err
+end
+
 function CMD.delete(_tbl, _cond, _options)
     local lba = _options and _options.lba or 0
     local db = get_connection(lba)

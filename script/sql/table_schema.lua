@@ -1223,5 +1223,61 @@ local config = {
             ["data"] = true,
         },
     },
+    ["op_log"] = {
+        table_name = "op_log",
+        fields = {
+            ["op_id"] = {
+                type = "varchar(128)",
+                is_required = true,
+                is_primary = true,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "操作ID",
+            },
+            ["status"] = {
+                type = "tinyint",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "1",
+                comment = "状态:1=完成",
+            },
+            ["result"] = {
+                type = "text",
+                is_required = false,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "nil",
+                comment = "操作结果",
+            },
+            ["created_at"] = {
+                type = "datetime",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "创建时间",
+            },
+            ["updated_at"] = {
+                type = "datetime",
+                is_required = true,
+                is_primary = false,
+                is_auto_increment = false,
+                default = "CURRENT_TIMESTAMP",
+                comment = "更新时间",
+            },
+        },
+        primary_keys = {
+            "op_id",
+        },
+        indexes = {
+        },
+        non_primary_fields = {
+            ["status"] = true,
+            ["result"] = true,
+            ["created_at"] = true,
+            ["updated_at"] = true,
+        },
+    },
 }
 return config

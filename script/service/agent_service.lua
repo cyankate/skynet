@@ -274,7 +274,13 @@ function M.on_player_loaded(player_id)
                 tostring(player.account_key_), tostring(err))
         end
     end
+    -- 补发离线期间支付的奖励（幂等；失败下次登录再试）
+    -- 必须放在 locator.set_agent 之后，paymentS 才能通过 locator 找到本 agent
     locator.set_agent(player_id, skynet.self())
+    local paymentS = rpc.named_addr(".payment")
+    if paymentS then
+        skynet.send(paymentS, "lua", "claim_player_rewards", player_id)
+    end
     notify_player_online(player)
 end
 
@@ -522,6 +528,22 @@ function M.add_items(data)
         return false, "invalid items"
     end
     return item_mgr.add_items(player, data.items, data.reason or "map_gather")
+end
+
+-- 关键发奖：items 和 op_log 在同一个 DB 事务里；同一 op_id 只生效一次
+function M.grant_items_critical(data)
+    data = data or {}
+    if not data.op_id then
+        return false, "missing op_id"
+    end
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    if type(data.items) ~= "table" then
+        return false, "invalid items"
+    end
+    return player:grant_items_critical(data.op_id, data.items, data.reason or "critical_grant")
 end
 
 function M.gm_command(data)

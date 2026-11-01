@@ -75,10 +75,13 @@ end
 
 local function save_ctns(player)
     local ok = true
-    for _, ctn in pairs(player.ctns_) do
-        local saved = ctn:save_now()
-        if not saved then
-            ok = false
+    for name, ctn in pairs(player.ctns_) do
+        -- 关键提交还没成功时，先不把这个容器写出去，避免“内存已生效、op_log 未提交”
+        if not (player.pending_critical_ and player.pending_critical_[name]) then
+            local saved = ctn:save_now()
+            if not saved then
+                ok = false
+            end
         end
     end
     return ok
@@ -96,6 +99,82 @@ end
 function Player:save_to_db_sync()
     return self:exclusive(function()
         return save_ctns(self)
+    end)
+end
+
+-- 关键提交：把指定容器的当前快照 + op_log 放进同一个 DB 事务。
+-- 调用方应先改内存；返回 false 时内存改动仍在，调用方需按同一 op_id 重试。
+function Player:commit_critical(op_id, container_names, extra_ops, result)
+    local db = skynet.localname(".db")
+    if not db then
+        return false, "db unavailable"
+    end
+    return self:exclusive(function()
+        local ops = {}
+        for _, op in ipairs(extra_ops or {}) do
+            ops[#ops + 1] = op
+        end
+        local snapshots = {}
+        for _, name in ipairs(container_names or {}) do
+            local ctn = self.ctns_[name]
+            local tbl = ctn and ctn.tbl_
+            if ctn and tbl then
+                local rows = ctn:snapshot_rows()
+                snapshots[#snapshots + 1] = { ctn = ctn, rows = rows }
+                for _, row in ipairs(rows) do
+                    ops[#ops + 1] = { op = "upsert", tbl = tbl, data = row }
+                end
+            end
+        end
+        if #ops == 0 then
+            return false, "no ops"
+        end
+        local call_ok, ok, res, err = pcall(skynet.call, db, "lua", "commit_op", op_id, ops, result)
+        if not call_ok then
+            return false, ok
+        end
+        if not ok then
+            return false, err or res
+        end
+        for _, item in ipairs(snapshots) do
+            item.ctn:mark_rows_saved(item.rows)
+            item.ctn:clear_dirty()
+            item.ctn.last_save_time_ = skynet.time()
+        end
+        return true, res
+    end)
+end
+
+-- 单玩家关键发奖：op_id 幂等；提交失败时保留 pending，定时保存先跳过背包
+function Player:grant_items_critical(op_id, items, reason)
+    if type(op_id) ~= "string" or op_id == "" then
+        return false, "invalid op_id"
+    end
+    self.pending_ops_ = self.pending_ops_ or {}
+    self.pending_critical_ = self.pending_critical_ or {}
+    return self:exclusive(function()
+        local db = skynet.localname(".db")
+        if db then
+            local call_ok, exists, old = pcall(skynet.call, db, "lua", "op_get", op_id)
+            if call_ok and exists then
+                return true, old
+            end
+        end
+        if not self.pending_ops_[op_id] then
+            local ok, err = item_mgr.add_items(self, items, reason or "critical_grant")
+            if not ok then
+                return false, err
+            end
+            self.pending_ops_[op_id] = true
+            self.pending_critical_["bag"] = true
+        end
+        local ok, res, err = self:commit_critical(op_id, { "bag" }, nil, { items = items })
+        if ok then
+            self.pending_ops_[op_id] = nil
+            self.pending_critical_["bag"] = nil
+            return true, res
+        end
+        return false, err or res
     end)
 end
 
