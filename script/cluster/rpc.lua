@@ -533,4 +533,36 @@ function M.prefetch_remote_shards()
     end)
 end
 
+-- 带超时的 call：对端卡死时不会把调用方一起拖死。
+-- timeout 单位是 0.01 秒；超时后远端仍可能继续处理，重试需要幂等。
+-- 返回：completed（调用是否完成）、ret1/ret2（远端返回值），失败时 err。
+function M.call_timeout(addr, timeout, method, ...)
+    if not addr then
+        return false, nil, "no address"
+    end
+    local args = table.pack(...)
+    local token = {}
+    local done = false
+    local completed, ret1, ret2 = false, nil, nil
+    skynet.fork(function()
+        local ok, r1, r2 = pcall(skynet.call, addr, "lua", method, table.unpack(args, 1, args.n))
+        completed = ok
+        if ok then
+            ret1, ret2 = r1, r2
+        else
+            ret2 = r1
+        end
+        done = true
+        skynet.wakeup(token)
+    end)
+    skynet.sleep(timeout, token)
+    if not done then
+        return false, nil, "timeout"
+    end
+    if not completed then
+        return false, nil, ret2
+    end
+    return true, ret1, ret2
+end
+
 return M

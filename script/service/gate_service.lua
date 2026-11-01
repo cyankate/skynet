@@ -59,6 +59,11 @@ function M.reload_proto()
     return true
 end
 
+-- supervisor 心跳用
+function M.ping()
+    return true
+end
+
 function M.send_message(fd, name, data)
     local c = connection[fd]
     if not c then
@@ -327,7 +332,11 @@ function M.handler_disconnect(fd)
         if c.account_key then
             local loginS = rpc.named_addr(".login")
             if loginS then
-                skynet.send(loginS, "lua", "disconnect", c.account_key, fd)
+                local ok, result, err = rpc.call_timeout(loginS, 100, "disconnect", c.account_key, fd)
+                if not ok or not result then
+                    log.error("login disconnect notify failed, account=%s err=%s",
+                        tostring(c.account_key), tostring(err))
+                end
             end
             log.info("client disconnected, fd=%d, account_key=%s", fd, c.account_key)
         end

@@ -84,6 +84,10 @@ function M.wrap_service(startup_func, options)
 
         -- CMD 抛错：本端打 cmd + 栈，再 error 让框架给 call 方发 PTYPE_ERROR（对端是 "call failed"，不是 return false）。
         local function message_handler(session, source, cmd, ...)
+            if cmd == "ping" then
+                skynet.ret(skynet.pack(true))
+                return
+            end
             function_stats.cost[coroutine.running()] = {}
             local start_time = skynet.now()
             local f = _G.CMD[cmd]

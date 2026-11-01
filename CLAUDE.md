@@ -24,7 +24,8 @@
 - 分片下行走 `send_to_conn`，不要拿 agent 记下的 gate handle 去 send
 - 热路径（移动 / 视野 / 战斗结算）只在分片内，不要路由进全局 map 服务
 - 加服务：entry → service → main.lua（服务名自动登记到 locator，layout 静态表只做兜底；见 docs/dev-guide.md「加一个服务」）
-- 服务崩溃：本进程由 `.supervisor` 自动重启（退避上限 10 次）；agent 池由 supervisor + 登录服协同恢复；`eventS` 暂不自动重启
+- 服务崩溃：本进程由 `.supervisor` 自动重启（退避上限 10 次）；卡死由 30 秒心跳看门狗判断（连续 3 次不响应则通知并尝试 kill）；agent 池由 supervisor + 登录服协同恢复；`eventS` 暂不自动重启
+- 关键跨服务调用（绑定 / 上下线 / 结算 / 状态变更）用 `rpc.call_timeout`，不要裸 `skynet.send`；通知类消息才用 `send`
 
 ## 文档与检查
 

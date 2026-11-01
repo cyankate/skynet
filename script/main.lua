@@ -72,9 +72,10 @@ skynet.start(function()
 
     skynet.uniqueservice("protoloader")
 
-    spawn("dbS")
-    spawn("redisS")
-    spawn("mongoS")
+    -- 基础设施可能卡在长查询里，卡死只告警不自动 kill
+    spawn("dbS", { entry = "dbS", kind = "named", kill_on_hang = false })
+    spawn("redisS", { entry = "redisS", kind = "named", kill_on_hang = false })
+    spawn("mongoS", { entry = "mongoS", kind = "named", kill_on_hang = false })
     skynet.newservice("debug_console")
     -- eventS 的订阅表在内存里，重启后订阅方不会自动重订阅（见后续改造）；先只感知不自动拉起
     spawn("eventS", { entry = "eventS", kind = "named", restart = false })

@@ -64,7 +64,9 @@ call .shard.1001.1 "hotspot_stop"
 
 - `main.lua` 里创建的有名服务、门、`mapS` 由 main 登记；分片和 agent 在自己的 init 里延迟登记（避免重启时反向调用 supervisor 卡住启动）。
 - 重启带退避（1s 起，上限 30s；60 秒窗口内超过 10 次就放弃并打错误日志）。门的重启会通过 `start_call` 重新 `open` 监听。
+- **卡死看门狗**：每 30 秒 ping 一次被监督服务（0.5 秒超时），连续 3 次无响应先通知 `on_down`（agent 会走登录服剔除/踢人），再尝试 `skynet.kill`；真正的重启仍由退出通知统一处理，避免重复拉起。基础设施（`dbS` / `redisS` / `mongoS`）和 `eventS` 只告警不自动 kill，避免长查询误杀或订阅表丢失后无人重订阅。
 - **只监督同一个 OS 进程**：map1/map2 各自有一个 supervisor，负责本节点的分片；跨进程的服务由所在节点的 supervisor 负责。
+- 服务需要响应 `ping` 才能被看门狗正确判断：`service_wrapper` 已内置，`gateS` / `redisS` 已单独处理；新增不走 wrapper 的服务要自己实现。
 
 agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录服重启时据此接管）。agent 退出时：
 
@@ -74,6 +76,13 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 4. 客户端重连时重新登录，按现有分配策略落到健康 agent，玩家数据从 DB 恢复（最多丢最近一次保存，agent 保存间隔 180 秒）。
 
 `eventS` 目前只监督不自动重启：它的订阅表在内存里，重启后订阅方不会自动重订阅，待后续补上再打开自动重启。
+
+## 跨服务调用与关键消息
+
+- 关键路径（账号绑定、上下线、结算、物品/支付）用 `rpc.call_timeout(addr, timeout, method, ...)`：`timeout` 单位 0.01 秒，返回 `completed, ret1, ret2`；超时返回 `false, nil, "timeout"`，不会把调用方一起拖死。
+- 超时后远端仍可能继续处理，**重试必须幂等**；agent 的 `start` 已用 `req_id` + `script/utils/idempotent.lua` 去重，支付/物品类后续要接同一套或落库 outbox。
+- 通知类（视野、AOI、ghost、日志、在线状态）继续用 `skynet.send`，丢了靠下一次同步或补偿。
+- 不要把 `send` 全量改成 `call`：会造成阻塞和级联故障。
 
 ## 常见反模式（新人别踩）
 

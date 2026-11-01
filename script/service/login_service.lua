@@ -148,6 +148,23 @@ local function login_rpc_ok(fd, session, player_id, player_name, gate)
     }, gate)
 end
 
+-- 登录成功后把 agent 绑到门上；这是关键路径，失败必须能感知
+local function bind_gate_agent(gate, fd, account_key, agent)
+    if not gate then
+        return true
+    end
+    for _ = 1, 3 do
+        local ok, result = rpc.call_timeout(gate, 50, "bound_agent", fd, account_key, agent)
+        if ok and result then
+            return true
+        end
+        skynet.sleep(10)
+    end
+    log.error("bind agent to gate failed, fd=%s account=%s agent=%s",
+        tostring(fd), tostring(account_key), tostring(agent))
+    return false
+end
+
 local function remove_account_from_agent(agent, account_key)
     if not agent_to_accounts[agent] then
         return
@@ -177,6 +194,8 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
         fd = fd,
         gate = gateS,
     }
+    -- 同一次登录请求的重试共用一个 req_id，agent 侧据此幂等
+    local req_id = tostring(skynet.genid()) .. ":" .. tostring(account_key)
 
     if not account_key or account_key == "" then
         log.warning("Login rejected: empty account_id, fd=%d", fd)
@@ -204,20 +223,29 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
     end
     if ainfo and ainfo.agent then
         if ainfo.logout then
-            local ok = M.reconnect(account_key, fd, gate_args)
+            local ok, re_err = M.reconnect(account_key, fd, gate_args)
             if ok then
-                login_rpc_ok(fd, session, nil, nil, gateS)
-                if gateS then
-                    skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+                if not bind_gate_agent(gateS, fd, account_key, ainfo.agent) then
+                    reply_client(fd, gateS, "login_failed", { reason = "登录绑定失败，请重试" })
+                    return
                 end
+                login_rpc_ok(fd, session, nil, nil, gateS)
+                return
+            end
+            if re_err == "timeout" then
+                reply_client(fd, gateS, "login_failed", { reason = "重连超时，请重试" })
                 return
             end
             -- 重连失败：清掉旧信息，继续按新登录处理
             account_info[account_key] = nil
             ainfo = nil
         else
-            local call_ok, ready = pcall(skynet.call, ainfo.agent, "lua", "is_account_ready", account_key)
+            local call_ok, ready, call_err = rpc.call_timeout(ainfo.agent, 100, "is_account_ready", account_key)
             if not call_ok then
+                if call_err == "timeout" then
+                    reply_client(fd, gateS, "login_failed", { reason = "账号处理超时，请重试" })
+                    return
+                end
                 M.agent_down(ainfo.agent, account_key)
                 account_info[account_key] = nil
                 ainfo = nil
@@ -229,8 +257,12 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
                 ainfo.last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time())
                 ainfo.device_id = device_id
                 ainfo.logout = false
-                local kick_ok, kicked = pcall(skynet.call, ainfo.agent, "lua", "kicked_out", account_key, fd, gate_args)
+                local kick_ok, kicked, kick_err = rpc.call_timeout(ainfo.agent, 100, "kicked_out", account_key, fd, gate_args)
                 if not kick_ok then
+                    if kick_err == "timeout" then
+                        reply_client(fd, gateS, "login_failed", { reason = "账号处理超时，请重试" })
+                        return
+                    end
                     M.agent_down(ainfo.agent, account_key)
                     account_info[account_key] = nil
                     ainfo = nil
@@ -238,10 +270,11 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
                     reply_client(fd, gateS, "login_failed", { reason = "顶号失败，请稍后重试" })
                     return
                 else
-                    login_rpc_ok(fd, session, nil, nil, gateS)
-                    if gateS then
-                        skynet.send(gateS, "lua", "bound_agent", fd, account_key, ainfo.agent)
+                    if not bind_gate_agent(gateS, fd, account_key, ainfo.agent) then
+                        reply_client(fd, gateS, "login_failed", { reason = "登录绑定失败，请重试" })
+                        return
                     end
+                    login_rpc_ok(fd, session, nil, nil, gateS)
                     return
                 end
             end
@@ -296,13 +329,50 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
         reply_client(fd, gateS, "login_failed", { reason = "登录失败" })
         return
     end
-    local call_ok, start_ok, start_err = pcall(skynet.call, agent, "lua", "start", account_key, account_data, gate_args)
+    -- 先把账号登记到 agent 和登录服，确保加载期间 account_loaded / agent_down 都能找到它
+    local function claim_account(target)
+        assign_account_to_agent(target, account_key)
+        account_info[account_key] = {
+            agent = target,
+            logout = false,
+            last_login_ip = ip,
+            last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time()),
+            device_id = device_id,
+        }
+    end
+    claim_account(agent)
+    local call_ok, start_ok, start_err = rpc.call_timeout(agent, 100, "start", account_key, account_data, gate_args, req_id)
+    if not (call_ok and start_ok) then
+        remove_account_from_agent(agent, account_key)
+    end
+    if not call_ok and start_err == "timeout" then
+        -- 同一 req_id 重试一次：agent 侧幂等，超时但实际已成功的情况能拿回首次结果
+        log.error("agent start timeout, retry idempotently, account=%s agent=%s", account_key, tostring(agent))
+        call_ok, start_ok, start_err = rpc.call_timeout(agent, 100, "start", account_key, account_data, gate_args, req_id)
+        if not (call_ok and start_ok) then
+            remove_account_from_agent(agent, account_key)
+        end
+    end
     if not call_ok then
+        if start_err == "timeout" then
+            -- 超时不换 agent：卡死的 agent 可能稍后才处理，换一个会造成同账号双开
+            log.error("agent start timeout, account=%s agent=%s", account_key, tostring(agent))
+            account_info[account_key] = nil
+            account_loading[account_key] = nil
+            reply_client(fd, gateS, "login_failed", { reason = "登录超时，请重试" })
+            return
+        end
         -- agent 已死：剔除后换一个重试一次
         M.agent_down(agent, account_key)
+        account_info[account_key] = nil
         local retry = get_available_agent()
         if retry and retry ~= agent then
-            call_ok, start_ok, start_err = pcall(skynet.call, retry, "lua", "start", account_key, account_data, gate_args)
+            claim_account(retry)
+            call_ok, start_ok, start_err = rpc.call_timeout(retry, 100, "start", account_key, account_data, gate_args, req_id)
+            if not (call_ok and start_ok) then
+                remove_account_from_agent(retry, account_key)
+                account_info[account_key] = nil
+            end
             if call_ok then
                 agent = retry
             end
@@ -310,23 +380,18 @@ function CLIENT.login(fd, msg, session, gate, gate_name, gate_node)
     end
     if not (call_ok and start_ok) then
         log.error("Failed to start agent for account %s: %s", account_key, tostring(start_err))
+        account_info[account_key] = nil
         account_loading[account_key] = nil
         reply_client(fd, gateS, "login_failed", { reason = "登录失败" })
         return
     end
 
-    assign_account_to_agent(agent, account_key)
-    account_info[account_key] = {
-        agent = agent,
-        logout = false,
-        last_login_ip = ip,
-        last_login_time = os.date("%Y-%m-%d %H:%M:%S", os.time()),
-        device_id = device_id,
-    }
-    login_rpc_ok(fd, session, nil, nil, gateS)
-    if gateS then
-        skynet.send(gateS, "lua", "bound_agent", fd, account_key, agent)
+    if not bind_gate_agent(gateS, fd, account_key, agent) then
+        account_loading[account_key] = nil
+        reply_client(fd, gateS, "login_failed", { reason = "登录绑定失败，请重试" })
+        return
     end
+    login_rpc_ok(fd, session, nil, nil, gateS)
 end
 
 function CLIENT.token_login(fd, msg, session, gate, gate_name, gate_node)
@@ -372,6 +437,7 @@ function M.account_loaded(account_key)
         return false
     end
     account_loading[account_key] = nil
+    return true
 end
 
 function M.account_exit(account_key)
@@ -397,8 +463,15 @@ function M.disconnect(account_key, fd)
         return true
     end
     if ainfo.agent then
-        local call_ok, should = pcall(skynet.call, ainfo.agent, "lua", "should_handle_disconnect", account_key, fd)
+        local call_ok, should, call_err = rpc.call_timeout(ainfo.agent, 100, "should_handle_disconnect", account_key, fd)
         if not call_ok then
+            if call_err == "timeout" then
+                -- 卡死不等于退出：不剔除 agent，断开照常处理，disconnect 尽力送达
+                log.error("disconnect: agent timeout, account=%s agent=%s", account_key, tostring(ainfo.agent))
+                ainfo.logout = true
+                pcall(skynet.send, ainfo.agent, "lua", "disconnect", account_key)
+                return true
+            end
             M.agent_down(ainfo.agent, account_key)
             ainfo.agent = nil
             ainfo.logout = true
@@ -411,7 +484,11 @@ function M.disconnect(account_key, fd)
     end
     ainfo.logout = true
     if ainfo.agent then
-        skynet.send(ainfo.agent, "lua", "disconnect", account_key)
+        local ok, result, err = rpc.call_timeout(ainfo.agent, 100, "disconnect", account_key)
+        if not ok or not result then
+            log.error("disconnect notify failed, account=%s agent=%s err=%s",
+                account_key, tostring(ainfo.agent), tostring(err))
+        end
     end
     return true
 end
@@ -431,18 +508,25 @@ function M.reconnect(account_key, fd, gate_args)
         return false
     end
     if dead_agents[ainfo.agent] then
-        return false
+        return false, "dead"
     end
     ainfo.reconnecting = true
-    local call_ok, ok = pcall(skynet.call, ainfo.agent, "lua", "reconnect", account_key, fd, gate_args)
-    if not call_ok or not ok then
-        if not call_ok then
-            M.agent_down(ainfo.agent, account_key)
-            ainfo.agent = nil
+    local call_ok, ok, call_err = rpc.call_timeout(ainfo.agent, 100, "reconnect", account_key, fd, gate_args)
+    if not call_ok then
+        if call_err == "timeout" then
+            log.error("reconnect timeout, account=%s agent=%s", account_key, tostring(ainfo.agent))
+            ainfo.reconnecting = false
+            return false, "timeout"
         end
+        M.agent_down(ainfo.agent, account_key)
+        ainfo.agent = nil
+        ainfo.reconnecting = false
+        return false, "dead"
+    end
+    if not ok then
         log.error(string.format("Failed to reconnect account %s", account_key))
         ainfo.reconnecting = false
-        return false
+        return false, "failed"
     end
     ainfo.logout = false
     ainfo.reconnecting = false
@@ -486,6 +570,7 @@ function M.agent_down(agent_handle, skip_account)
                 ainfo.agent = nil
                 ainfo.logout = true
             end
+            account_loading[account_key] = nil
             -- 正在处理这个账号的登录请求时不要踢，否则会误伤随后绑定的新连接
             if account_key ~= skip_account then
                 for _, gate in ipairs(gates) do

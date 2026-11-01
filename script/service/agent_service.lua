@@ -8,6 +8,7 @@ local CtnWeek = require "ctn.ctn_week"
 local CtnCondition = require "ctn.ctn_condition"
 local CtnTask = require "ctn.ctn_task"
 local common = require "utils.common"
+local idem = require "utils.idempotent"
 local msg_handle = require "net.msg_net"
 local event_def = require "define.event_def"
 local user_mgr = require "user_mgr"
@@ -265,7 +266,14 @@ function M.on_player_loaded(player_id)
     if account.cur_fd then
         bind_locator(account, player_id, account.cur_fd)
     end
-    skynet.send(skynet.localname(".login"), "lua", "account_loaded", player.account_key_)
+    local loginS = skynet.localname(".login")
+    if loginS then
+        local ok, result, err = rpc.call_timeout(loginS, 100, "account_loaded", player.account_key_)
+        if not ok or not result then
+            log.error("account_loaded notify failed, account=%s err=%s",
+                tostring(player.account_key_), tostring(err))
+        end
+    end
     locator.set_agent(player_id, skynet.self())
     notify_player_online(player)
 end
@@ -315,7 +323,7 @@ function M.load(account_key)
     return true
 end
 
-function M.start(account_key, account_data, args)
+local function start_inner(account_key, account_data, args)
     if accounts[account_key] then
         return false, "account already exists"
     end
@@ -332,6 +340,16 @@ function M.start(account_key, account_data, args)
         return false, "load player failed"
     end
     return true
+end
+
+-- req_id 由登录服生成：同一请求因超时重试时，agent 侧只执行一次
+function M.start(account_key, account_data, args, req_id)
+    if not req_id then
+        return start_inner(account_key, account_data, args)
+    end
+    return idem.run(req_id, function()
+        return start_inner(account_key, account_data, args)
+    end)
 end
 
 function M.reconnect(account_key, fd, gate_args)
@@ -628,6 +646,12 @@ function M.init()
     if eventS then
         skynet.call(eventS, "lua", "subscribe", event_def.TIMER.DAY_RESET, skynet.self())
     end
+
+    local function idem_tick()
+        skynet.timeout(6000, idem_tick)
+        idem.prune()
+    end
+    skynet.timeout(6000, idem_tick)
 
     start_timer()
 end
