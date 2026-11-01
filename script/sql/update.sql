@@ -97,3 +97,21 @@ CREATE TABLE IF NOT EXISTS `trade_escrow` (
     PRIMARY KEY (`order_id`),
     KEY `idx_seller` (`seller_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易行托管表';
+
+[#7]
+-- 可靠投递 outbox（status=2 即死信）
+CREATE TABLE IF NOT EXISTS `op_outbox` (
+    `outbox_id` varchar(128) NOT NULL COMMENT '投递ID',
+    `target_type` varchar(16) NOT NULL DEFAULT 'agent' COMMENT '目标类型:agent/service',
+    `target_id` varchar(64) NOT NULL COMMENT '目标ID:玩家ID或服务名',
+    `method` varchar(64) NOT NULL COMMENT '目标方法',
+    `payload` text COMMENT '参数',
+    `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=待投递,1=完成,2=死信',
+    `retries` int NOT NULL DEFAULT '0' COMMENT '重试次数',
+    `next_retry_at` int NOT NULL DEFAULT '0' COMMENT '下次重试时间',
+    `last_error` varchar(255) DEFAULT '' COMMENT '最后错误',
+    `create_time` int NOT NULL COMMENT '创建时间',
+    `update_time` int NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (`outbox_id`),
+    KEY `idx_status_retry` (`status`, `next_retry_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='可靠投递 outbox';

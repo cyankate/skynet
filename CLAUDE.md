@@ -29,6 +29,7 @@
 - 同一玩家的定时保存与关键提交走 `Player:exclusive`，避免旧快照覆盖新数据
 - 关键发奖/物品变更用 `Player:grant_items_critical`（op_id 幂等），不要在定时 save 之外直接写库
 - 交易行：固定价 + 整堆 + 邮件交付；上架/购买走 `Player:cost_items_critical`，结算由 `tradeS` worker 按 op_log 幂等推进
+- 离线/跨服务关键投递走 `op_outbox`（`outboxS` 重试，10 次进死信），不要在业务里裸 `send` 后不管
 
 ## 文档与检查
 

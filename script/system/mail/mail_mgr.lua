@@ -3,6 +3,8 @@ local log = require "log"
 local mailbox = require "system.mail.mailbox"
 local service_ctx = require "runtime.service_ctx"
 local locator = require "cluster.locator"
+local rpc = require "cluster.rpc"
+local db_call = require "system.db_call"
 
 -- 邮件类型
 local MAIL_TYPE = {
@@ -89,7 +91,7 @@ end
 function mail_mgr.get_mail_detail(player_id, mail_id)
     local dbS = skynet.localname(".db")
     -- 获取完整邮件信息
-    local mail = skynet.call(dbS, "lua", "select", "mail", {
+    local mail = db_call.call("select", "mail", {
         mail_id = mail_id,
         receiver_id = player_id,
         is_deleted = 0
@@ -103,7 +105,7 @@ function mail_mgr.get_mail_detail(player_id, mail_id)
     
     -- 如果是未读，标记为已读
     if mail.status == MAIL_STATUS.UNREAD then
-        skynet.call(dbS, "lua", "update_where", "mail", {
+        db_call.call("update_where", "mail", {
             mail_id = mail_id,
             receiver_id = player_id,
         }, {
@@ -127,80 +129,23 @@ function mail_mgr.get_mail_detail(player_id, mail_id)
     return true, mail
 end
 
--- 领取附件
+-- 领取附件：校验 / 发奖 / 标记已领取由玩家 agent 在一个事务里完成
 function mail_mgr.claim_items(player_id, mail_id)
-    local dbS = skynet.localname(".db")
-    -- 获取邮件信息并锁定行
-    local mail = skynet.call(dbS, "lua", "select", "mail", {
-        mail_id = mail_id,
-        receiver_id = player_id,
-        is_deleted = 0
-    })
-    
-    if not mail or not mail[1] then
-        log.error("邮件不存在")
-        return false
-    end
-    
-    mail = mail[1]
-    
-    -- 检查附件状态
-    if mail.items_status ~= ITEMS_STATUS.UNCLAIMED then
-        log.error("附件已领取或不可领取")
-        return false
-    end
-    
-    -- 解析附件数据（dbS.select 已经对 text 字段反序列化，这里兼容旧字符串）
-    local items = mail.items
-    if type(items) == "string" and items ~= "" then
-        items = tableUtils.deserialize_table(items)
-    end
-    items = items or {}
-    if #items == 0 then
-        log.error("没有可领取的附件")
-        return false
-    end
-    
-    -- 发放物品
     local agent = locator.get_agent(player_id)
     if not agent then
         log.error("领取附件失败，玩家不在线: " .. tostring(player_id))
         return false, "player offline"
     end
-    local item_map = {}
-    for _, it in ipairs(items) do
-        local item_id = tonumber(it.item_id)
-        local count = tonumber(it.count)
-        if item_id and item_id > 0 and count and count > 0 then
-            item_map[item_id] = (item_map[item_id] or 0) + count
-        end
-    end
-    if not next(item_map) then
-        log.error("没有可领取的附件")
-        return false
-    end
-    local ok, err = skynet.call(agent, "lua", "add_items", {
+    local ok, result, err = rpc.call_timeout(agent, 500, "claim_mail_items", {
         player_id = player_id,
-        items = item_map,
-        reason = "mail_claim",
-    })
-    if not ok then
-        log.error("发放物品失败: " .. tostring(err))
-        return false
-    end
-    
-    -- 更新附件状态
-    skynet.call(dbS, "lua", "update_where", "mail", {
         mail_id = mail_id,
-        receiver_id = player_id,
-    }, {
-        items_status = ITEMS_STATUS.CLAIMED
     })
-    
-    -- 更新邮箱缓存
+    if not ok or not result then
+        log.error("领取附件失败: " .. tostring(err or result))
+        return false, err or result
+    end
     local box = mail_mgr.get_mailbox(player_id)
     box:update_attachments_claimed(mail_id, ITEMS_STATUS.CLAIMED)
-    
     return true
 end
 
@@ -208,7 +153,7 @@ end
 function mail_mgr.delete_mail(player_id, mail_id)
     local dbS = skynet.localname(".db")
     -- 检查是否有未领取的附件
-    local mail = skynet.call(dbS, "lua", "select", "mail", {
+    local mail = db_call.call("select", "mail", {
         mail_id = mail_id,
         receiver_id = player_id,
         is_deleted = 0
@@ -222,7 +167,7 @@ function mail_mgr.delete_mail(player_id, mail_id)
         return false, "请先领取附件"
     end
     -- 标记删除
-    local ok = skynet.call(dbS, "lua", "update_where", "mail", {
+    local ok = db_call.call("update_where", "mail", {
         mail_id = mail_id,
         receiver_id = player_id,
     }, {
@@ -282,7 +227,7 @@ function mail_mgr.send_player_mail(sender_id, receiver_id, title, content, items
     }
     
     -- 插入数据库
-    local ok = skynet.call(dbS, "lua", "insert", "mail", mail)
+    local ok = db_call.call("insert", "mail", mail)
     if not ok then
         return false, "发送邮件失败"
     end
@@ -323,7 +268,7 @@ function mail_mgr.send_global_mail(title, content, items, expire_days)
     
     -- 创建全局邮件模板
     local global_mail = {
-        mail_id = string.format("g_%d_%d", os.time(), skynet.call(dbS, "lua", "gen_id", "mail")),
+        mail_id = string.format("g_%d_%d", os.time(), db_call.call("gen_id", "mail")),
         title = title,
         content = content or "",
         items = items and tableUtils.serialize_table(items) or "",
@@ -333,7 +278,7 @@ function mail_mgr.send_global_mail(title, content, items, expire_days)
     }
     
     -- 保存全局邮件模板
-    local ok = skynet.call(dbS, "lua", "insert", "global_mail", global_mail)
+    local ok = db_call.call("insert", "global_mail", global_mail)
     if not ok then
         return false, "创建全局邮件失败"
     end
@@ -361,14 +306,14 @@ function mail_mgr.send_global_mail(title, content, items, expire_days)
         
         -- 每1000个玩家批量插入一次
         if #batch_mails >= 100 then
-            skynet.call(dbS, "lua", "batch_insert", "mail", batch_mails)
+            db_call.call("batch_insert", "mail", batch_mails)
             batch_mails = {}
         end
     end
     
     -- 插入剩余的邮件
     if #batch_mails > 0 then
-        skynet.call(dbS, "lua", "batch_insert", "mail", batch_mails)
+        db_call.call("batch_insert", "mail", batch_mails)
     end
     
     -- 广播新邮件通知
@@ -387,7 +332,7 @@ function mail_mgr.check_global_mails(player_id)
     local last_time = box:get_last_global_time()
     local dbS = skynet.localname(".db")
     -- 获取新的全局邮件
-    local new_globals = skynet.call(dbS, "lua", "select", "global_mail", {
+    local new_globals = db_call.call("select", "global_mail", {
         create_time = {[">"] = last_time},
         --status = 1,
         expire_time = {[">"] = os.time()}
@@ -417,7 +362,7 @@ function mail_mgr.check_global_mails(player_id)
             box:add_mail(mail)
         end
         
-        skynet.call(dbS, "lua", "batch_insert", "mail", values)
+        db_call.call("batch_insert", "mail", values)
         box:update_last_global_time(new_globals[#new_globals].create_time)
         return #values
     end
@@ -430,12 +375,12 @@ function mail_mgr.clean_expired_mails()
     local now = os.time()
     local dbS = skynet.localname(".db")
     -- 删除过期的个人邮件
-    skynet.call(dbS, "lua", "delete", "mail", {
+    db_call.call("delete", "mail", {
         expire_time = {["<"] = now}
     })
     
     -- 删除过期的全局邮件模板
-    skynet.call(dbS, "lua", "delete", "global_mail", {
+    db_call.call("delete", "global_mail", {
         expire_time = {["<"] = now}
     })
 end

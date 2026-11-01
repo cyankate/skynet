@@ -4,6 +4,7 @@ local log = require "log"
 local item_mgr = require "system.item_mgr"
 local trade_util = require "system.trade.trade_util"
 local item_def = require "define.item_def"
+local db_call = require "system.db_call"
 
 local M = {}
 
@@ -29,7 +30,7 @@ local function order_info(order)
 end
 
 local function get_order(d, order_id)
-    local rows = skynet.call(d, "lua", "select", "trade_order", { order_id = order_id }, { limit = 1 })
+    local rows = db_call.call("select", "trade_order", { order_id = order_id }, { limit = 1 })
     return rows and rows[1]
 end
 
@@ -158,7 +159,7 @@ function M.cancel(player, order_id)
           cond = { order_id = order_id, status = 0 },
           require_affected = 0 },
     }
-    local ok, res, err = skynet.call(d, "lua", "commit_op", op_id, ops, { order_id = order_id })
+    local ok, res, err = db_call.call("commit_op", op_id, ops, { order_id = order_id })
     if not ok then
         return false, err or res
     end
@@ -178,12 +179,12 @@ function M.query(page, page_size)
         return false, "db unavailable"
     end
     local cond = { status = LISTED }
-    local orders = skynet.call(d, "lua", "select", "trade_order", cond, {
+    local orders = db_call.call("select", "trade_order", cond, {
         limit = page_size,
         offset = (page - 1) * page_size,
         order_by = { create_time = "DESC" },
     })
-    local total = skynet.call(d, "lua", "count", "trade_order", cond)
+    local total = db_call.call("count", "trade_order", cond)
     local list = {}
     for _, order in ipairs(orders or {}) do
         list[#list + 1] = order_info(order)

@@ -3,6 +3,7 @@ local skynet = require "skynet"
 local log = require "log"
 local service_ctx = require "runtime.service_ctx"
 local trade_util = require "system.trade.trade_util"
+local db_call = require "system.db_call"
 
 local M = service_ctx.get("trade.trade_service", {})
 
@@ -18,24 +19,13 @@ local function db()
 end
 
 local function op_exists(op_id)
-    local d = db()
-    if not d then
-        return false
-    end
-    local call_ok, exists = pcall(skynet.call, d, "lua", "op_get", op_id)
-    return call_ok and exists
+    local exists = db_call.call("op_get", op_id)
+    return exists == true
 end
 
 local function commit(op_id, ops, result)
-    local d = db()
-    if not d then
-        return false, "db unavailable"
-    end
-    local call_ok, ok, res, err = pcall(skynet.call, d, "lua", "commit_op", op_id, ops, result)
-    if not call_ok then
-        return false, ok
-    end
-    return ok, res, err
+    local ok, res = db_call.call("commit_op", op_id, ops, result)
+    return ok, res
 end
 
 local function notify_mail(player_id)
@@ -121,7 +111,7 @@ local function tick()
         return
     end
     local now = os.time()
-    local purchased = skynet.call(d, "lua", "select", "trade_order",
+    local purchased = db_call.call("select", "trade_order",
         { status = PURCHASED }, { limit = BATCH, order_by = { update_time = "ASC" } })
     for _, order in ipairs(purchased or {}) do
         local ok = deliver(order)
@@ -136,7 +126,7 @@ local function tick()
         end
     end
 
-    local listed = skynet.call(d, "lua", "select", "trade_order",
+    local listed = db_call.call("select", "trade_order",
         { status = LISTED }, { limit = 50 })
     for _, order in ipairs(listed or {}) do
         if (order.expire_time or 0) <= now then

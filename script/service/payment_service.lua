@@ -6,6 +6,8 @@ local service_ctx = require "runtime.service_ctx"
 local rpc = require "cluster.rpc"
 local locator = require "cluster.locator"
 local item_def = require "define.item_def"
+local db_call = require "system.db_call"
+local tableUtils = require "utils.tableUtils"
 
 local PAYMENT_STATUS = { CREATED = 0, PROCESSING = 1, SUCCESS = 2, FAILED = 3, REFUND = 4 }
 local PAYMENT_CHANNEL = {
@@ -18,7 +20,7 @@ M.db = M.db or nil
 M._inited = M._inited or false
 
 local function log_payment(order_id, status, content, operator)
-    skynet.call(M.db, "lua", "insert", "payment_log", {
+    db_call.call("insert", "payment_log", {
         order_id = order_id, status = status, log_content = content, operator = operator or "system",
     })
 end
@@ -76,7 +78,43 @@ local function build_reward_items(product)
     return items
 end
 
--- 发放订单奖励：op_id = pay:<order_id>，agent 侧幂等；离线时等下次登录补发
+local function reward_outbox_op(order, items, now)
+    return {
+        op = "insert",
+        tbl = "op_outbox",
+        data = {
+            outbox_id = "pay:" .. tostring(order.order_id),
+            target_type = "agent",
+            target_id = tostring(order.player_id),
+            method = "grant_items_critical",
+            payload = tableUtils.serialize_table({
+                player_id = order.player_id,
+                op_id = "pay:" .. tostring(order.order_id),
+                items = items,
+                reason = "payment_reward",
+            }),
+            status = 0,
+            retries = 0,
+            next_retry_at = now,
+            last_error = "",
+            create_time = now,
+            update_time = now,
+        },
+    }
+end
+
+-- 把发奖写入可靠投递 outbox；已存在则跳过
+function M.enqueue_reward(order, items)
+    local outbox_id = "pay:" .. tostring(order.order_id)
+    local rows = db_call.call("select", "op_outbox", { outbox_id = outbox_id }, { limit = 1 })
+    if rows and rows[1] then
+        return true
+    end
+    local ok = db_call.call("transaction", { reward_outbox_op(order, items, os.time()) })
+    return ok and true or false
+end
+
+-- 发放订单奖励：op_id = pay:<order_id>，agent 侧幂等；离线时由 outbox worker 重试
 function M.grant_order_reward(order)
     if not order then
         return false
@@ -85,6 +123,9 @@ function M.grant_order_reward(order)
     local items = build_reward_items(product)
     if not next(items) then
         return true
+    end
+    if not M.enqueue_reward(order, items) then
+        log.error("enqueue payment reward failed, order=%s", tostring(order.order_id))
     end
     local agent = locator.get_agent(order.player_id)
     if not agent then
@@ -101,11 +142,17 @@ function M.grant_order_reward(order)
             tostring(order.order_id), tostring(err))
         return false, err or "grant failed"
     end
+    db_call.call("update_where", "op_outbox", {
+        outbox_id = "pay:" .. tostring(order.order_id),
+    }, {
+        status = 1,
+        update_time = os.time(),
+    })
     return true
 end
 
 local function get_order(order_id)
-    local rows = skynet.call(M.db, "lua", "select", "payment", { order_id = order_id }, { limit = 1 })
+    local rows = db_call.call("select", "payment", { order_id = order_id }, { limit = 1 })
     return rows and rows[1]
 end
 
@@ -115,13 +162,13 @@ function M.claim_player_rewards(player_id)
     if not player_id then
         return false
     end
-    local orders = skynet.call(M.db, "lua", "select", "payment", {
+    local orders = db_call.call("select", "payment", {
         player_id = player_id,
         status = PAYMENT_STATUS.SUCCESS,
     }, { limit = 100 })
     local granted = 0
     for _, order in ipairs(orders or {}) do
-        local exists = skynet.call(M.db, "lua", "op_get", "pay:" .. tostring(order.order_id))
+        local exists = db_call.call("op_get", "pay:" .. tostring(order.order_id))
         if not exists then
             local ok = M.grant_order_reward(order)
             if ok then
@@ -146,7 +193,7 @@ function M.create_order(player_id, account_id, product_id, channel, device_id, i
         amount = product.amount, currency = product.currency or "CNY", channel = channel, status = PAYMENT_STATUS.CREATED,
         create_time = current_time, ip_address = ip_address, device_id = device_id, extra_data = extra_data and skynet.packstring(extra_data) or nil,
     }
-    local result = skynet.call(M.db, "lua", "insert", "payment", payment_data)
+    local result = db_call.call("insert", "payment", payment_data)
     if not result then return { code = 4, message = "订单创建失败" } end
     log_payment(order_id, PAYMENT_STATUS.CREATED, "订单创建成功")
     local pay_params = {}
@@ -205,11 +252,21 @@ function M.handle_notify(channel, notify_data)
         status = status, pay_time = is_payment_success and os.date("%Y-%m-%d %H:%M:%S") or nil, channel_order_id = notify_data.trade_no or notify_data.transaction_id,
         notify_data = skynet.packstring(notify_data), notify_time = os.date("%Y-%m-%d %H:%M:%S"),
     }
-    local result = skynet.call(M.db, "lua", "update_where", "payment", { order_id = order_id }, update_data)
+    local ops = {
+        { op = "update_where", tbl = "payment", data = update_data, cond = { order_id = order_id } },
+    }
+    if is_payment_success then
+        local product = find_product(order.product_id)
+        local items = build_reward_items(product)
+        if next(items) then
+            ops[#ops + 1] = reward_outbox_op(order, items, os.time())
+        end
+    end
+    local result = db_call.call("transaction", ops)
     if not result then return { code = 5, message = "更新订单状态失败" } end
     log_payment(order_id, status, is_payment_success and "支付成功" or "支付失败")
     if is_payment_success then
-        -- 订单已落库；奖励发放失败不影响支付回调，登录时会补发
+        -- 订单和 outbox 已同事务落库；在线直接发，离线由 outbox worker 重试
         M.grant_order_reward(order)
     end
     return { code = 0, message = "处理成功" }
@@ -228,10 +285,10 @@ function M.query_player_orders(player_id, status, limit, offset)
     offset = offset or 0
     local query = { player_id = player_id }
     if status then query.status = status end
-    local orders = skynet.call(M.db, "lua", "select", "payment", query, {
+    local orders = db_call.call("select", "payment", query, {
         limit = limit, offset = offset, order_by = { create_time = "DESC" },
     })
-    local total = skynet.call(M.db, "lua", "count", "payment", query)
+    local total = db_call.call("count", "payment", query)
     return { code = 0, data = { list = orders, total = total, limit = limit, offset = offset } }
 end
 
@@ -249,7 +306,7 @@ function M.manual_deliver(order_id, admin_id)
     if order.status ~= PAYMENT_STATUS.SUCCESS then
         order.status = PAYMENT_STATUS.SUCCESS
         order.pay_time = os.date("%Y-%m-%d %H:%M:%S")
-        skynet.call(M.db, "lua", "update_where", "payment", { order_id = order_id }, { status = order.status, pay_time = order.pay_time })
+        db_call.call("update_where", "payment", { order_id = order_id }, { status = order.status, pay_time = order.pay_time })
         log_payment(order_id, PAYMENT_STATUS.SUCCESS, "管理员手动确认支付", admin_id or "admin")
     end
     return { code = 0, message = "商品发放成功" }

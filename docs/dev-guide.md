@@ -99,9 +99,18 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 - `dbS.update_where(tbl, cond, data)`：按非主键条件更新；`dbS.count(tbl, cond)`：条件计数。
 - `dbS.op_get(op_id)`：查询操作是否已完成及结果。
 - `Player:commit_critical(op_id, {"bag"}, extra_ops, result)`：复用玩家保存锁，把容器快照 + `op_log` 同事务提交。
-- `Player:grant_items_critical(op_id, items, reason)`：单玩家发奖的幂等入口；提交失败时保留 pending，定时保存会跳过该容器，按同一 `op_id` 重试。
-- 支付奖励：`paymentS.handle_notify` 更新订单后尝试发奖；玩家离线时登录 agent 触发 `paymentS.claim_player_rewards` 补发；agent 侧按 `pay:<order_id>` 幂等。
-- outbox / 死信重放仍属于后续阶段。
+- `Player:grant_items_critical(op_id, items, reason, extra_ops)`：单玩家发奖的幂等入口；提交失败时保留 pending，定时保存会跳过该容器，按同一 `op_id` 重试。
+- 支付奖励：`paymentS.handle_notify` 更新订单后写 `op_outbox` 并尝试发奖；在线直接发，离线由 `outboxS` 重试；agent 侧按 `pay:<order_id>` 幂等。
+- 邮件领取：`agent.claim_mail_items` 把附件、邮件已领取标记和 `op_log` 放在同一个事务里。
+
+### 可靠投递 outbox
+
+- 表 `op_outbox`（迁移 `[#7]`）：`status` 0=待投递、1=完成、2=死信。
+- `outboxS` 每 5 秒扫待投递记录：
+  - 目标是玩家 agent 时，离线则顺延 60 秒再试；
+  - 投递失败按退避重试，10 次后进入死信；
+  - 支持 `target_type = agent / service`。
+- 死信查询/重放：`call .outbox "list_dead"`、`call .outbox "replay", outbox_id`。
 
 ### 交易行（Phase 2 最小版）
 

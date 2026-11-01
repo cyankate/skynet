@@ -17,6 +17,7 @@ local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
 local trade_mgr = require "system.trade.trade_mgr"
+local db_call = require "system.db_call"
 local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
@@ -294,7 +295,7 @@ function M.load(account_key)
     local db = skynet.localname(".db")
     local player_data
     if player_info then
-        local data = skynet.call(db, "lua", "query_player", player_info.player_id)
+        local data = db_call.call("query_player", player_info.player_id)
         if not data then
             return false
         end
@@ -307,7 +308,7 @@ function M.load(account_key)
         account.player_id = data.player_id
         log.info("load player, account_key=%s, player_id=%d", account_key, data.player_id)
     else
-        local player_id = skynet.call(db, "lua", "gen_id", "player")
+        local player_id = db_call.call("gen_id", "player")
         player_data = {
             account_key = account_key,
             player_id = player_id,
@@ -315,7 +316,7 @@ function M.load(account_key)
             info = {},
             is_new = true,
         }
-        local ret = skynet.call(db, "lua", "create_player", player_id, player_data)
+        local ret = db_call.call("create_player", player_id, player_data)
         if not ret then
             return false
         end
@@ -545,6 +546,65 @@ function M.grant_items_critical(data)
         return false, "invalid items"
     end
     return player:grant_items_critical(data.op_id, data.items, data.reason or "critical_grant")
+end
+
+-- 邮件领取：附件加背包 + 邮件标记已领取 + op_log 同一个事务
+function M.claim_mail_items(data)
+    data = data or {}
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    local mail_id = data.mail_id
+    if not mail_id then
+        return false, "invalid mail_id"
+    end
+    local rows = db_call.call("select", "mail", {
+        mail_id = mail_id,
+        receiver_id = data.player_id,
+        is_deleted = 0,
+    }, { limit = 1 })
+    if not rows then
+        return false, "db unavailable"
+    end
+    local mail = rows[1]
+    if not mail then
+        return false, "邮件不存在"
+    end
+    if mail.items_status == 1 then
+        return true, { already = true }
+    end
+    local items = mail.items
+    if type(items) == "string" and items ~= "" then
+        items = tableUtils.deserialize_table(items)
+    end
+    items = items or {}
+    if #items == 0 then
+        return false, "没有可领取的附件"
+    end
+    local item_map = {}
+    for _, it in ipairs(items) do
+        local item_id = tonumber(it.item_id)
+        local count = tonumber(it.count)
+        if item_id and item_id > 0 and count and count > 0 then
+            item_map[item_id] = (item_map[item_id] or 0) + count
+        end
+    end
+    if not next(item_map) then
+        return false, "没有可领取的附件"
+    end
+    local extra = {
+        { op = "update_where", tbl = "mail",
+          data = { items_status = 1 },
+          cond = { mail_id = mail_id, receiver_id = data.player_id, items_status = 0 },
+          require_affected = 1 },
+    }
+    local ok, res, err = player:grant_items_critical(
+        "mail:" .. tostring(mail_id) .. ":claim", item_map, "mail_claim", extra)
+    if not ok then
+        return false, err or res
+    end
+    return true, { items = items }
 end
 
 -- 交易行（GM / 调试入口；正常走 C2S net.trade_net）

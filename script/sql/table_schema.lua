@@ -1328,5 +1328,31 @@ local config = {
             ["status"] = true, ["create_time"] = true, ["update_time"] = true,
         },
     },
+    ["op_outbox"] = {
+        table_name = "op_outbox",
+        fields = {
+            ["outbox_id"] = { type = "varchar(128)", is_required = true, is_primary = true, is_auto_increment = false, default = "nil", comment = "投递ID" },
+            ["target_type"] = { type = "varchar(16)", is_required = true, is_primary = false, is_auto_increment = false, default = "agent", comment = "目标类型:agent/service" },
+            ["target_id"] = { type = "varchar(64)", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "目标ID:玩家ID或服务名" },
+            ["method"] = { type = "varchar(64)", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "目标方法" },
+            ["payload"] = { type = "text", is_required = false, is_primary = false, is_auto_increment = false, default = "nil", comment = "参数" },
+            ["status"] = { type = "tinyint", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "0=待投递,1=完成,2=死信" },
+            ["retries"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "重试次数" },
+            ["next_retry_at"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "下次重试时间" },
+            ["last_error"] = { type = "varchar(255)", is_required = false, is_primary = false, is_auto_increment = false, default = "", comment = "最后错误" },
+            ["create_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "创建时间" },
+            ["update_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "更新时间" },
+        },
+        primary_keys = { "outbox_id" },
+        indexes = {
+            ["idx_status_retry"] = { unique = false, columns = { "status", "next_retry_at" } },
+        },
+        non_primary_fields = {
+            ["target_type"] = true, ["target_id"] = true, ["method"] = true,
+            ["payload"] = true, ["status"] = true, ["retries"] = true,
+            ["next_retry_at"] = true, ["last_error"] = true,
+            ["create_time"] = true, ["update_time"] = true,
+        },
+    },
 }
 return config

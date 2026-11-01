@@ -3,6 +3,7 @@ local CtnBase = require "ctn.ctn_base"
 local tableUtils = require "utils.tableUtils"
 local log = require "log"
 local table_schema = require "sql/table_schema"
+local db_call = require "system.db_call"
 
 local CtnMf = class("CtnMf", CtnBase)
 
@@ -48,9 +49,8 @@ end
 
 -- 从数据库加载数据
 function CtnMf:doload()
-    local dbc = skynet.localname(".db")
     local cond = {player_id = self.prikey_}
-    local ret = skynet.call(dbc, "lua", "select", self.tbl_, cond, {lba = self.prikey_})
+    local ret = db_call.call("select", self.tbl_, cond, {lba = self.prikey_})
 
     if not ret or ret.badresult then
         self:set_error("Failed to load data from database")
@@ -88,9 +88,8 @@ function CtnMf:dosave()
         end
     end
 
-    local dbc = skynet.localname(".db")
     if #insert_rows > 0 then
-        local ret = skynet.call(dbc, "lua", "batch_insert", self.tbl_, insert_rows, { lba = self.prikey_ })
+        local ret = db_call.call("batch_insert", self.tbl_, insert_rows, { lba = self.prikey_ })
         if not ret then
             return false, "batch_insert failed"
         end
@@ -99,7 +98,7 @@ function CtnMf:dosave()
         end
     end
     if #update_rows > 0 then
-        local ret = skynet.call(dbc, "lua", "batch_update", self.tbl_, update_rows, { lba = self.prikey_ })
+        local ret = db_call.call("batch_update", self.tbl_, update_rows, { lba = self.prikey_ })
         if not ret then
             return false, "batch_update failed"
         end

@@ -2,6 +2,8 @@
 local skynet = require "skynet"
 local class = require "utils.class"
 local log = require "log"
+local rpc = require "cluster.rpc"
+local db_call = require "system.db_call"
 local item_mgr = require "system.item_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local head_mgr = require "system.head_mgr"
@@ -129,9 +131,23 @@ function Player:commit_critical(op_id, container_names, extra_ops, result)
         if #ops == 0 then
             return false, "no ops"
         end
-        local call_ok, ok, res, err = pcall(skynet.call, db, "lua", "commit_op", op_id, ops, result)
-        if not call_ok then
-            return false, ok
+        local completed, ok, res, err = rpc.call_timeout(db, 1000, "commit_op", op_id, ops, result)
+        if not completed then
+            -- 超时：事务可能已经提交，按 op_id 回查，避免误判后回滚内存
+            local recovered, recovered_result = false, nil
+            for _ = 1, 2 do
+                local rec_ok, exists, old = rpc.call_timeout(db, 500, "op_get", op_id)
+                if rec_ok and exists then
+                    recovered, recovered_result = true, old
+                    break
+                end
+                skynet.sleep(100)
+            end
+            if recovered then
+                ok, res = true, recovered_result
+            else
+                return false, "commit timeout"
+            end
         end
         if not ok then
             return false, err or res
@@ -153,8 +169,8 @@ function Player:cost_items_critical(op_id, items, extra_ops, result, reason)
     return self:exclusive(function()
         local db = skynet.localname(".db")
         if db then
-            local call_ok, exists, old = pcall(skynet.call, db, "lua", "op_get", op_id)
-            if call_ok and exists then
+            local exists, old = db_call.call("op_get", op_id)
+            if exists then
                 return true, old
             end
         end
@@ -176,7 +192,7 @@ function Player:cost_items_critical(op_id, items, extra_ops, result, reason)
 end
 
 -- 单玩家关键发奖：op_id 幂等；提交失败时保留 pending，定时保存先跳过背包
-function Player:grant_items_critical(op_id, items, reason)
+function Player:grant_items_critical(op_id, items, reason, extra_ops)
     if type(op_id) ~= "string" or op_id == "" then
         return false, "invalid op_id"
     end
@@ -185,8 +201,8 @@ function Player:grant_items_critical(op_id, items, reason)
     return self:exclusive(function()
         local db = skynet.localname(".db")
         if db then
-            local call_ok, exists, old = pcall(skynet.call, db, "lua", "op_get", op_id)
-            if call_ok and exists then
+            local exists, old = db_call.call("op_get", op_id)
+            if exists then
                 return true, old
             end
         end
@@ -198,7 +214,7 @@ function Player:grant_items_critical(op_id, items, reason)
             self.pending_ops_[op_id] = true
             self.pending_critical_["bag"] = true
         end
-        local ok, res, err = self:commit_critical(op_id, { "bag" }, nil, { items = items })
+        local ok, res, err = self:commit_critical(op_id, { "bag" }, extra_ops, { items = items })
         if ok then
             self.pending_ops_[op_id] = nil
             self.pending_critical_["bag"] = nil
