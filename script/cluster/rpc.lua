@@ -14,6 +14,14 @@ local node_fail_at = {}
 local cluster_nodes
 local PROXY_RETRY = 300
 
+-- 运行时注册表缓存（每服务一份 VM）。节点不迁移，缓存主要挡重复查询。
+local registry_nodes = {}
+local registry_miss = {}
+local shard_nodes = {}
+local shard_miss = {}
+local REG_TTL = 1000
+local REG_RETRY = 100
+
 local function clusterd()
     return skynet.uniqueservice("clusterd")
 end
@@ -35,33 +43,34 @@ local function node_spec(node)
 end
 
 -- 只判断端口有没有人听，失败不会走 cluster.proxy（避免 clusterd assert 刷屏）
+-- 第二个返回值表示本次是否真的探测了（false = 命中缓存/节流，不代表状态变化）
 local function node_reachable(node)
     if node_listen[node] then
-        return true
+        return true, false
     end
     local last_fail = node_fail_at[node]
     if last_fail and skynet.now() - last_fail < PROXY_RETRY then
-        return false
+        return false, false
     end
     local spec = node_spec(node)
     if type(spec) ~= "string" then
-        return false
+        return false, false
     end
     local host, port = spec:match("([^:]+):(%d+)$")
     port = tonumber(port)
     if not host or not port then
-        return false
+        return false, false
     end
     local socket = require "skynet.socket"
     local ok, fd = pcall(socket.open, host, port)
     if not ok or not fd then
         node_fail_at[node] = skynet.now()
-        return false
+        return false, true
     end
     socket.close(fd)
     node_listen[node] = true
     node_fail_at[node] = nil
-    return true
+    return true, false
 end
 
 local function ensure_dot(name)
@@ -82,12 +91,193 @@ local function cluster_name(name)
     return name:sub(2)
 end
 
+-- 注册表的根是 locator，永远按静态布局解析，避免自调用。
+local function locator_addr()
+    return M.named(".locator", layout.named_node(".locator"))
+end
+
+-- 静态表只做兜底：服务启动后会向 locator 登记，节点位置以注册表为准。
+function M.node_of(name)
+    name = ensure_dot(name)
+    if not name then
+        return layout.self_node()
+    end
+    if name ~= ".locator" and layout.use_cluster() then
+        local c = registry_nodes[name]
+        if c and skynet.now() - c.ts < REG_TTL then
+            return c.node
+        end
+        local miss = registry_miss[name]
+        if not (miss and skynet.now() - miss < REG_RETRY) then
+            local loc = locator_addr()
+            if loc then
+                local ok, node = pcall(skynet.call, loc, "lua", "lookup_service", cluster_name(name))
+                if ok and type(node) == "string" and node ~= "" then
+                    registry_nodes[name] = { node = node, ts = skynet.now() }
+                    registry_miss[name] = nil
+                    return node
+                end
+            end
+            registry_miss[name] = skynet.now()
+        end
+    end
+    return layout.named_node(name)
+end
+
+function M.shard_node(map_id, shard_id)
+    map_id = tonumber(map_id) or 0
+    shard_id = tonumber(shard_id) or 0
+    local key = tostring(map_id) .. ":" .. tostring(shard_id)
+    if layout.use_cluster() then
+        local c = shard_nodes[key]
+        if c and skynet.now() - c.ts < REG_TTL then
+            return c.node
+        end
+        local miss = shard_miss[key]
+        if not (miss and skynet.now() - miss < REG_RETRY) then
+            local loc = locator_addr()
+            if loc then
+                local ok, info = pcall(skynet.call, loc, "lua", "lookup_shard", map_id, shard_id)
+                if ok and type(info) == "table" and type(info.node) == "string" and info.node ~= "" then
+                    shard_nodes[key] = { node = info.node, ts = skynet.now() }
+                    shard_miss[key] = nil
+                    return info.node
+                end
+            end
+            shard_miss[key] = skynet.now()
+        end
+    end
+    return layout.shard_node(map_id, shard_id)
+end
+
+-- 登记后转心跳：locator 重启丢表时，服务会在一个周期内自动补登。
+-- 被别的节点占着时 register 返回 conflict，直到旧租约过期才允许接管。
+local HEARTBEAT = 3000 -- 30s
+local function register_retry(desc, fn, on_reject)
+    skynet.fork(function()
+        local tries = 0
+        while true do
+            local loc = locator_addr()
+            if loc then
+                local ok, result, reason = pcall(skynet.call, loc, "lua", fn[1], table.unpack(fn, 2))
+                if ok and result then
+                    tries = 0
+                    skynet.sleep(HEARTBEAT)
+                elseif ok then
+                    log.error("cluster register rejected, %s (%s)", desc, tostring(reason))
+                    if on_reject then
+                        on_reject()
+                    end
+                    skynet.sleep(HEARTBEAT)
+                else
+                    skynet.sleep(100)
+                end
+            else
+                tries = tries + 1
+                if tries % 30 == 0 then
+                    log.warning("cluster registry unavailable, %s (retry %d)", desc, tries)
+                end
+                skynet.sleep(100)
+            end
+        end
+    end)
+end
+
+-- 服务启动时调用：向 locator 登记自己所在的节点。
+function M.register(name, node)
+    if not layout.use_cluster() then
+        return false
+    end
+    name = ensure_dot(name)
+    local cname = cluster_name(name)
+    if not cname or cname == "locator" then
+        return false
+    end
+    node = node or layout.self_node()
+    registry_nodes[name] = { node = node, ts = skynet.now() }
+    registry_miss[name] = nil
+    register_retry("service " .. cname .. " node " .. node, { "register_service", cname, node }, function()
+        registry_nodes[name] = nil
+    end)
+    return true
+end
+
+function M.unregister(name, node)
+    if not layout.use_cluster() then
+        return false
+    end
+    name = ensure_dot(name)
+    local cname = cluster_name(name)
+    if not cname then
+        return false
+    end
+    registry_nodes[name] = nil
+    local loc = locator_addr()
+    if not loc then
+        return false
+    end
+    local ok = pcall(skynet.call, loc, "lua", "unregister_service", cname, node or layout.self_node())
+    return ok
+end
+
+-- 分片启动时调用：登记 (map_id, shard_id) 落在哪个节点。
+function M.register_shard(map_id, shard_id, service_name, node)
+    if not layout.use_cluster() then
+        return false
+    end
+    node = node or layout.self_node()
+    local key = tostring(tonumber(map_id) or map_id) .. ":" .. tostring(tonumber(shard_id) or shard_id)
+    shard_nodes[key] = { node = node, ts = skynet.now() }
+    shard_miss[key] = nil
+    register_retry(
+        "shard " .. key .. " node " .. node,
+        { "register_shard", map_id, shard_id, node, service_name },
+        function()
+            shard_nodes[key] = nil
+        end
+    )
+    return true
+end
+
+-- 热更新节点地址：clusterd 会按新地址重连；这里清掉本 VM 的地址/探活缓存。
+function M.reload_cluster(config)
+    if not layout.use_cluster() then
+        return false
+    end
+    local ok, err = pcall(require("skynet.cluster").reload, config)
+    if not ok then
+        log.error("cluster reload failed: %s", tostring(err))
+        return false
+    end
+    cluster_nodes = nil
+    node_listen = {}
+    node_fail_at = {}
+    log.info("cluster reloaded, node caches cleared")
+    return true
+end
+
 function M.local_addr(name)
     name = ensure_dot(name)
     if not name then
         return nil
     end
     return skynet.localname(name)
+end
+
+-- 建 proxy 失败：立刻丢掉注册表缓存，下一次重新问 locator。
+-- TTL 仍保留，负责 send 静默失败这类感知不到的场景。
+local function forget_registry(name)
+    registry_nodes[name] = nil
+    registry_miss[name] = nil
+    local map_id, sid = name:match("^%.shard%.(%d+)%.(%d+)$")
+    if not map_id then
+        map_id, sid = name:match("^%.scene%.map%.(%d+)%.(%d+)$")
+    end
+    if map_id then
+        local key = map_id .. ":" .. sid
+        shard_nodes[key] = nil
+        shard_miss[key] = nil
+    end
 end
 
 local function get_proxy(node, name)
@@ -108,6 +298,7 @@ local function get_proxy(node, name)
     local ok, result = pcall(skynet.call, clusterd(), "lua", "proxy", node, "@" .. cluster_name(name))
     if not ok or not result then
         proxy_fail_at[key] = skynet.now()
+        forget_registry(name)
         return nil
     end
     proxy_fail_at[key] = nil
@@ -154,7 +345,12 @@ function M.named(name, node)
         if cached then
             return cached
         end
-        if not node_reachable(node) then
+        local reachable, probed = node_reachable(node)
+        if not reachable then
+            -- 端口探测失败：注册表里这个答案已经不可用，下次立刻重查
+            if probed then
+                forget_registry(name)
+            end
             return nil
         end
     end
@@ -163,7 +359,7 @@ end
 
 function M.shard_addr(map_id, shard_id)
     local shard = require "map.shard"
-    return M.named(shard.service_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
+    return M.named(shard.service_name(map_id, shard_id), M.shard_node(map_id, shard_id))
 end
 
 local player_gates = {} -- 本 VM：player_id => { name, node }
@@ -257,7 +453,7 @@ end
 
 function M.named_addr(name)
     name = ensure_dot(name)
-    return M.named(name, layout.named_node(name))
+    return M.named(name, M.node_of(name))
 end
 
 -- 把本服务登记到 clusterd，对端用 @name 访问。name 可带或不带点。
@@ -277,7 +473,8 @@ function M.export(name, addr)
     return true
 end
 
--- split：后台连其他 map 上的分片，连上后再让本机片补 ghost
+-- split：后台连其他 map 上的分片，连上后再让本机片补 ghost。
+-- 期望的远程片 = 静态布局 ∪ locator 注册表（注册表优先，支持分片换节点）。
 function M.prefetch_remote_shards()
     if not layout.split() then
         return
@@ -287,16 +484,37 @@ function M.prefetch_remote_shards()
         local map_id = shard.default_def().map_id
         skynet.sleep(100)
         while true do
-            local missing = 0
+            local want = {}
+            local function set(name, node)
+                if not name then
+                    return
+                end
+                if node and node ~= "" and not layout.is_local(node) then
+                    want[name] = node
+                else
+                    want[name] = nil
+                end
+            end
+            -- 静态兜底：远程片还没登记时也要等它
             for _, sid in ipairs(shard.all_ids()) do
-                local node = layout.shard_node(map_id, sid)
-                if not layout.is_local(node) then
-                    local name = shard.service_name(map_id, sid)
-                    if not M.has_proxy(name, node) then
-                        missing = missing + 1
-                        if node_reachable(node) then
-                            M.try_proxy(name, node)
-                        end
+                set(shard.service_name(map_id, sid), layout.shard_node(map_id, sid))
+            end
+            -- 注册表覆盖静态（包括动态增加/迁移/迁回本机的片）
+            local loc = locator_addr()
+            if loc then
+                local ok, list = pcall(skynet.call, loc, "lua", "list_shards", map_id)
+                if ok and type(list) == "table" then
+                    for _, info in ipairs(list) do
+                        set(info.name or shard.service_name(map_id, info.shard_id), info.node)
+                    end
+                end
+            end
+            local missing = 0
+            for name, node in pairs(want) do
+                if not M.has_proxy(name, node) then
+                    missing = missing + 1
+                    if node_reachable(node) then
+                        M.try_proxy(name, node)
                     end
                 end
             end

@@ -581,6 +581,20 @@ function M.on_event(event_name, reset_day_key, ts)
     end
 end
 
+function M.list_accounts()
+    local t = {}
+    for account_key, acc in pairs(accounts) do
+        if acc.player_id then
+            t[#t + 1] = {
+                account_key = account_key,
+                player_id = acc.player_id,
+                logout = acc.disconnect_pending == true,
+            }
+        end
+    end
+    return t
+end
+
 function M.init()
     M.register_client_protocol()
     protocol_handler.set_local_agent(M)
@@ -588,6 +602,27 @@ function M.init()
         return
     end
     M._inited = true
+
+    local bind = package.loaded["agent.worker_bind"]
+    local agent_id = bind and tonumber(bind.agent_id)
+    if agent_id then
+        skynet.name(".agent." .. agent_id, skynet.self())
+        -- 延迟到 init 返回之后：supervisor 重启本服务时正阻塞在 newservice，不能同步回 call
+        skynet.timeout(0, function()
+            local sup = skynet.localname(".supervisor")
+            if not sup then
+                return
+            end
+            pcall(skynet.call, sup, "lua", "watch", skynet.self(), {
+                entry = "agentS",
+                args = { agent_id },
+                kind = "agent",
+                agent_id = agent_id,
+                on_down = { name = ".login", method = "agent_down" },
+                on_up = { name = ".login", method = "agent_up", args = { agent_id } },
+            })
+        end)
+    end
 
     local eventS = skynet.localname(".event")
     if eventS then

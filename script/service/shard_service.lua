@@ -21,6 +21,8 @@ local monster_ai = require "map.monster_ai"
 local move_test = require "map.move_test"
 local hotspot_test = require "map.hotspot_test"
 local rpc = require "cluster.rpc"
+local layout = require "cluster.layout"
+local shard = require "map.shard"
 
 -- observer
 function CMD.enter_map(player_id, player_name, map_id)
@@ -290,6 +292,19 @@ function CMD.init()
     if not def then
         return false, "map def not found"
     end
+    rpc.register_shard(map_id, shard_id, shard.service_name(map_id, shard_id), layout.self_node())
+    -- 延迟到 init 返回之后：supervisor 重启本服务时会阻塞在 newservice
+    skynet.timeout(0, function()
+        local sup = skynet.localname(".supervisor")
+        if not sup then
+            return
+        end
+        pcall(skynet.call, sup, "lua", "watch", skynet.self(), {
+            entry = "shardS",
+            args = { map_id, shard_id },
+            kind = "shard",
+        })
+    end)
     ctx.map = Map.new(def, shard_id)
     ctx.map:bootstrap()
     move_test.seed(ctx.map)

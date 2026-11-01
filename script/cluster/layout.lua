@@ -147,6 +147,24 @@ end
 
 function M.local_shard_ids()
     local shard = require "map.shard"
+    -- 运行时分配优先：init_*.config 里 local_shards = "3,4" 即可接管指定片，
+    -- 不用改 SHARD_NODE（新片落地后由 shard_service 自己登记到 locator）。
+    local override = skynet.getenv("local_shards")
+    if type(override) == "string" and override ~= "" then
+        local max_id = shard.shard_count()
+        local ids = {}
+        for id in override:gmatch("%d+") do
+            id = tonumber(id)
+            if id >= 1 and id <= max_id then
+                ids[#ids + 1] = id
+            else
+                skynet.error(string.format("local_shards: id %s outside 1..%d", tostring(id), max_id))
+            end
+        end
+        if #ids > 0 then
+            return ids
+        end
+    end
     local ids = {}
     for _, sid in ipairs(shard.all_ids()) do
         if M.is_local(M.shard_node(nil, sid)) then

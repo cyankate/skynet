@@ -35,7 +35,30 @@ local function launch_local_shards()
 end
 
 skynet.start(function()
-    skynet.newservice("hotfixS")
+    -- supervisor 必须最先起来：它接管本进程的退出通知
+    local ok, sup_or_err = pcall(skynet.newservice, "supervisorS")
+    local supervisor
+    if ok then
+        supervisor = sup_or_err
+    else
+        log.error("supervisor start failed: %s", tostring(sup_or_err))
+    end
+
+    local function watch(handle, spec)
+        if supervisor and handle then
+            pcall(skynet.call, supervisor, "lua", "watch", handle, spec)
+        end
+        return handle
+    end
+
+    local function spawn(entry, spec)
+        local h = skynet.newservice(entry)
+        spec = spec or { entry = entry, kind = "named" }
+        spec.entry = spec.entry or entry
+        return watch(h, spec)
+    end
+
+    watch(skynet.newservice("hotfixS"), { entry = "hotfixS", kind = "named" })
     open_cluster()
 
     if layout.role() == "map" then
@@ -49,43 +72,57 @@ skynet.start(function()
 
     skynet.uniqueservice("protoloader")
 
-    skynet.newservice("dbS")
-    skynet.newservice("redisS")
-    skynet.newservice("mongoS")
+    spawn("dbS")
+    spawn("redisS")
+    spawn("mongoS")
     skynet.newservice("debug_console")
-    skynet.newservice("eventS")
-    skynet.newservice("securityS")
-    skynet.newservice("locatorS")
-    skynet.newservice("loginS")
-    skynet.newservice("rankS")
-    skynet.newservice("guildS")
-    skynet.newservice("globalS")
-    skynet.newservice("chatS")
-    skynet.newservice("httpS")
-    skynet.newservice("mailS")
-    skynet.newservice("friendS")
-    skynet.newservice("paymentS")
+    -- eventS 的订阅表在内存里，重启后订阅方不会自动重订阅（见后续改造）；先只感知不自动拉起
+    spawn("eventS", { entry = "eventS", kind = "named", restart = false })
+    spawn("securityS")
+    spawn("locatorS")
+    spawn("loginS")
+    spawn("rankS")
+    spawn("guildS")
+    spawn("globalS")
+    spawn("chatS")
+    spawn("httpS")
+    spawn("mailS")
+    spawn("friendS")
+    spawn("paymentS")
     if layout.gate_count() > 1 and not layout.behind_lb() then
         log.warning("gate_count>1 需要 nginx + gate_behind_lb=1，否则会和 http 8889 抢端口")
     end
     local gates = {}
     for _, id in ipairs(layout.gate_ids()) do
-        gates[#gates + 1] = { id = id, addr = skynet.newservice("gateS", id) }
+        local conf = {
+            address = layout.gate_listen_addr(),
+            port = layout.gate_port(id),
+            maxclient = 8192,
+        }
+        local h = skynet.newservice("gateS", id)
+        watch(h, {
+            entry = "gateS",
+            args = { id },
+            kind = "gate",
+            start_call = { method = "open", args = { conf } },
+        })
+        gates[#gates + 1] = { id = id, addr = h, conf = conf }
     end
-    skynet.newservice("matchS")
-    skynet.newservice("instanceS")
-    skynet.newservice("pathfindingS")
-    skynet.newservice("mapS", shard.default_def().map_id)
+    spawn("matchS")
+    spawn("instanceS")
+    spawn("pathfindingS")
+    local map_id = shard.default_def().map_id
+    watch(skynet.newservice("mapS", map_id), {
+        entry = "mapS",
+        args = { map_id },
+        kind = "map",
+    })
     rpc.prefetch_remote_shards()
 
     for _, g in ipairs(gates) do
-        skynet.call(g.addr, "lua", "open", {
-            address = layout.gate_listen_addr(),
-            port = layout.gate_port(g.id),
-            maxclient = 8192,
-        })
+        skynet.call(g.addr, "lua", "open", g.conf)
         log.info("gate listen, name=%s %s:%s", layout.gate_name(g.id),
-            layout.gate_listen_addr(), tostring(layout.gate_port(g.id)))
+            g.conf.address, tostring(g.conf.port))
     end
 
     if layout.split() then

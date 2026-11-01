@@ -23,7 +23,8 @@
 - 跨服务地址一律 `cluster.rpc` / `shard.addr`，不要 `skynet.localname(".gate" / ".locator" / ".shard.*")`
 - 分片下行走 `send_to_conn`，不要拿 agent 记下的 gate handle 去 send
 - 热路径（移动 / 视野 / 战斗结算）只在分片内，不要路由进全局 map 服务
-- 加服务：entry → service → main.lua → cluster/layout.lua 登记（docs/dev-guide.md「加一个服务」）
+- 加服务：entry → service → main.lua（服务名自动登记到 locator，layout 静态表只做兜底；见 docs/dev-guide.md「加一个服务」）
+- 服务崩溃：本进程由 `.supervisor` 自动重启（退避上限 10 次）；agent 池由 supervisor + 登录服协同恢复；`eventS` 暂不自动重启
 
 ## 文档与检查
 

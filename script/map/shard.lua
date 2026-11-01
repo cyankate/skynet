@@ -1,14 +1,15 @@
 local chunk = require "map.chunk"
 local rpc = require "cluster.rpc"
-local layout = require "cluster.layout"
+local skynet = require "skynet"
 
 -- 一张连续大世界、一个 map_id；按 chunk 切成矩形分片，每片一个 map 服。
 -- 坐标不局部化：每个 scene 仍用全图宽高。权威实体在所属分片，贴边邻居以 ghost 进 AOI。
 local M = {}
 
 M.DEFAULT_MAP_ID = 1001
-M.SHARD_COLS = 2
-M.SHARD_ROWS = 2
+-- 分片网格可由 init_*.config 覆盖；所有节点必须配同一组值（改变网格=重新切图）。
+M.SHARD_COLS = math.max(1, tonumber(skynet.getenv("shard_cols")) or 2)
+M.SHARD_ROWS = math.max(1, tonumber(skynet.getenv("shard_rows")) or 2)
 -- 贴边只读投影半径，需 >= 玩家视野，邻居实体进出才能进本片 AOI
 M.HALO_RANGE = 120
 
@@ -182,11 +183,11 @@ function M.scene_local_name(map_id, shard_id)
 end
 
 function M.addr(map_id, shard_id)
-    return rpc.named(M.service_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
+    return rpc.shard_addr(map_id, shard_id)
 end
 
 function M.scene_addr(map_id, shard_id)
-    return rpc.named(M.scene_name(map_id, shard_id), layout.shard_node(map_id, shard_id))
+    return rpc.named(M.scene_name(map_id, shard_id), rpc.shard_node(map_id, shard_id))
 end
 
 -- 全图全局服务（每张图一个）：注册表 + 派生状态计算，权威数据仍在分片
@@ -199,8 +200,7 @@ function M.global_local_name(map_id)
 end
 
 function M.global_addr(map_id)
-    local name = M.global_name(map_id)
-    return rpc.named(name, layout.named_node(name))
+    return rpc.named_addr(M.global_name(map_id))
 end
 
 return M

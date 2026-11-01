@@ -2,14 +2,25 @@ local skynet = require "skynet"
 local user_mgr = require "user_mgr"
 local protocol_handler = require "protocol_handler"
 local shard = require "map.shard"
+local locator = require "cluster.locator"
 
 local function remember(player, result)
     if player and type(result) == "table" then
+        local old_sid = player.map_shard_id_
         if result.map_id then
             player.map_id_ = result.map_id
         end
         if result.shard_id ~= nil then
             player.map_shard_id_ = result.shard_id
+        end
+        -- 只在切片时回报，避免移动热路径上每次都走一次 IPC
+        if result.shard_id ~= nil and result.shard_id ~= old_sid then
+            locator.set_scene(
+                player.player_id_,
+                player.map_id_ or shard.DEFAULT_MAP_ID,
+                result.shard_id,
+                result.scene_id
+            )
         end
     end
 end
@@ -20,6 +31,7 @@ local function forget(player)
         player.map_shard_id_ = nil
         player.march_shards_ = nil
         player.city_shard_id_ = nil
+        locator.clear_scene(player.player_id_)
     end
 end
 
@@ -71,6 +83,13 @@ local function call_march_map(player, player_id, march_uid, cmd, ...)
     if ok ~= nil then
         return ok, result
     end
+    local scene = locator.get_scene(player_id)
+    if scene and scene.shard_id then
+        ok, result = try_sid(scene.shard_id)
+        if ok ~= nil then
+            return ok, result
+        end
+    end
     for _, sid in ipairs(shard.all_ids()) do
         ok, result = try_sid(sid)
         if ok ~= nil then
@@ -97,6 +116,16 @@ local function call_player_map(player, player_id, cmd, ...)
         local ok, result = skynet.call(addr, "lua", cmd, player_id, ...)
         if not (ok == false and result == "player not in map") then
             return ok, result
+        end
+    end
+    local scene = locator.get_scene(player_id)
+    if scene and scene.shard_id then
+        local a = shard_addr(scene.map_id or shard.DEFAULT_MAP_ID, scene.shard_id)
+        if a and a ~= addr then
+            local ok, result = skynet.call(a, "lua", cmd, player_id, ...)
+            if not (ok == false and result == "player not in map") then
+                return ok, result
+            end
         end
     end
     for _, sid in ipairs(shard.all_ids()) do
@@ -327,6 +356,19 @@ local function on_map_state(player_id, msg)
     local result
     if addr then
         result = skynet.call(addr, "lua", "get_state", player_id)
+    end
+    if not result or (result.map_id or 0) <= 0 then
+        local scene = locator.get_scene(player_id)
+        local scene_addr = scene and scene.shard_id ~= nil
+            and shard_addr(scene.map_id or shard.DEFAULT_MAP_ID, scene.shard_id) or nil
+        if scene_addr and scene_addr ~= addr then
+            local st = skynet.call(scene_addr, "lua", "get_state", player_id)
+            if st and (st.map_id or 0) > 0 then
+                result = st
+                remember(player, st)
+            end
+            addr = scene_addr
+        end
     end
     if not result or (result.map_id or 0) <= 0 then
         for _, sid in ipairs(shard.all_ids()) do

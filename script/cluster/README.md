@@ -265,3 +265,51 @@ loopback 的意义：单进程也走 pack → clusterd → 自己，把「跨进
 - 客户端 8888；需要的话把 `cluster_mode` 改成 `standalone`，连 clusterd 都不开，`rpc.named` 退化成 `localname`
 
 加片、加门、加 map 进程都是改 `layout` + 配置，业务调用保持 `rpc.named*`。
+
+---
+
+## 11. 运行时注册表（服务 / 分片 / 玩家位置）
+
+`layout` 的静态表现在只做**启动兜底**：服务起来后会向 locator 登记自己所在的节点，寻址以注册表为准。这样新增节点/服务不用再改 `layout.lua` 的表。
+
+| 数据 | 谁登记 | 查询 |
+|------|--------|------|
+| 服务名 → 节点 | `service_wrapper`（有名服务）、`gateS`（门）启动时自动 `rpc.register` | `rpc.node_of(name)` |
+| (map_id, shard_id) → 节点 | `shard_service.init` 调 `rpc.register_shard` | `rpc.shard_node(map_id, shard_id)` |
+| 玩家 → gate + agent（分片位置是提示） | gate / agent 上报，locator 重启后自动重建 | `locator.get` / `get_scene` |
+
+要点：
+
+1. **登记有心跳**：`rpc.register*` 在后台协程里重试到 locator 可达，之后每 30 秒续租；locator 重启丢表时能在一个周期内自愈，game 先起、map 后起的顺序也不受影响。
+2. **租约 120 秒**：locator 每 30 秒清理一次超过 120 秒没续租的条目，节点下线后不会留下永远有效的死记录；查询时也会过滤过期项。
+3. **换节点要等租约过期**：同一名字/分片被别的节点登记、且旧记录还没过期时，`register_*` 返回 `conflict` 拒绝覆盖，防止两个节点同时认为自己拥有它。过期后允许接管，epoch 递增；旧持有者的迟到心跳会因冲突被拒。**迁移时先停旧、再起新**；强行先起新的，要等旧租约过期（最多 120 秒）。
+4. **解析有缓存**：每个服务 VM 自己缓存注册表结果（10 秒），只有 miss 才问 locator；`locator` 自己是注册表的根，永远按 `layout` 静态解析，不会自调用。**端口探测失败或建 proxy 失败时会立刻清掉该项缓存**并在下次重查，10 秒 TTL 只负责 `send` 静默失败这类感知不到的场景。
+5. **静态兜底**：注册表查不到（还没登记 / locator 不可达）时回退 `layout.named_node` / `layout.shard_node`，行为和以前一致。
+6. debug console 可直接查/操作：`call .locator "list_services"`、`"list_shards"`、`"get_scene", 玩家id`、`"prune"`、`"rebuild"`。
+
+玩家位置只在**切片**时回报（`map_net.remember` 比较新旧 shard_id），不在移动热路径上做 IPC。跨片兜底（`call_march_map` / `call_player_map` / `map_state`）会先问 `locator.get_scene`，再全片扫描。
+
+### 玩家目录重建
+
+locator 的玩家表是内存态：重启后向所有门要 `list_players`（门上的 `player_fd_map` + `connection.agent`），恢复 player → gate + agent。已被实时绑定覆盖的条目不回滚；game 先起、门后起也兼容，最多重试 120 秒。
+
+分片位置不在门的快照里，重建后暂时为空；跨片兜底会退回全片扫描，玩家下次切片时会重新回报 `set_scene`，不影响正确性。
+
+门缓存失效（换门 / 卸号）会遍历**所有已登记地图**的分片，不再只清默认图。
+
+### 节点热更新与分片分配
+
+- **节点地址热更新**：`rpc.reload_cluster(config)` 调 clusterd 的 `cluster.reload`，并清掉本 VM 的节点地址 / 探活缓存；集群节点表变更后不用重启进程。
+- **分片归属运行时分配**：`init_*.config` 里写 `local_shards = "3,4"`，该进程就只拉起指定的片，不再依赖 `SHARD_NODE`。新片启动后自己登记到 locator，其他节点通过 `list_shards` 发现它（`prefetch_remote_shards` 已经改成「注册表 ∪ 静态布局」）。
+- **分片网格**：`shard_cols` / `shard_rows` 可在配置里覆盖，但所有节点必须配同一组值。**改变网格等于重新切图**，需要处理数据迁移；`local_shards` 适合「已有片换节点」，不适合在线增加新片。
+
+### 门按协议直连（默认关闭）
+
+`script/cluster/gate_routes.lua` 是「协议名 → 目标服务名」的白名单，默认空表：所有 C2S 仍 redirect 给 agent。开启某条协议前必须确认：目标服务能独立处理该协议并通过门回包（`gate.send_message` / `rpc_response`），且该协议不再依赖 agent 维护的玩家缓存。
+
+### 还没动态化的部分
+
+- 门仍默认全在 game；`all_gates` / `gate_home_node` 还是静态。门拆独立进程时要改成按注册表解析。
+- `SHARD_NODE` 仍作为启动兜底和 `prefetch` 的静态期望；不用它也能跑，但建议保留一份一致的布局。
+
+

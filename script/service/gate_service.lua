@@ -8,6 +8,7 @@ local service_ctx = require "runtime.service_ctx"
 local rpc = require "cluster.rpc"
 local locator = require "cluster.locator"
 local layout = require "cluster.layout"
+local gate_routes = require "cluster.gate_routes"
 
 local M = service_ctx.get("gate.gate", {})
 M.connection = M.connection or {}
@@ -159,6 +160,19 @@ function M.kick_player(player_id, reason, message)
     return M.kick_client(old_fd, reason, message)
 end
 
+-- 按账号踢连接：agent 崩溃后让玩家重新登录
+function M.kick_account(account_key, reason, message)
+    if not account_key then
+        return false
+    end
+    for fd, c in pairs(connection) do
+        if c.account_key == account_key then
+            return M.kick_client(fd, reason, message)
+        end
+    end
+    return false
+end
+
 function M.send_to_client(fd, name, data)
     if not connection[fd] then
         return false
@@ -185,6 +199,22 @@ function M.send_to_players(player_ids, name, data)
         end
     end
     return count
+end
+
+-- locator 重启重建玩家目录用：当前连接上的 player → gate/agent 快照
+function M.list_players()
+    local t = {}
+    for player_id, fd in pairs(player_fd_map) do
+        local c = connection[fd]
+        if c then
+            t[#t + 1] = {
+                player_id = player_id,
+                agent = c.agent,
+                account_key = c.account_key,
+            }
+        end
+    end
+    return t
 end
 
 function M.rpc_response(fd, session, data)
@@ -219,6 +249,15 @@ function M.handler_open(conf)
     log.info("Gate service opened, name=%s node=%s", M.gate_name, M.gate_node)
 end
 
+local function direct_target(player_id, name)
+    local target = gate_routes[name]
+    if type(target) == "function" then
+        local ok, v = pcall(target, player_id)
+        return ok and v or nil
+    end
+    return target
+end
+
 function M.handler_message(fd, msg, sz)
     local c = connection[fd]
     if not c then
@@ -250,6 +289,14 @@ function M.handler_message(fd, msg, sz)
                 pending_responses[fd] = pr
             end
             pr[session] = response_func
+        end
+        local direct = c.player_id and direct_target(c.player_id, name)
+        if direct then
+            local target = rpc.named_addr(direct)
+            if target then
+                skynet.redirect(target, fd, "client", fd, skynet.pack(c.player_id, name, args, session))
+                return
+            end
         end
         if c.agent and c.player_id then
             skynet.redirect(c.agent, fd, "client", fd, skynet.pack(c.player_id, name, args, session))

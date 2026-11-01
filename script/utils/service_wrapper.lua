@@ -115,6 +115,7 @@ function M.wrap_service(startup_func, options)
             skynet.name("." .. options.name, skynet.self())
             if layout.use_cluster() then
                 rpc.export(options.name, skynet.self())
+                rpc.register(options.name, layout.self_node())
             end
         end
         -- 调用原始启动函数

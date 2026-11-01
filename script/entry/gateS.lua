@@ -48,6 +48,7 @@ skynet.start(function()
     skynet.name(name, skynet.self())
     if layout.use_cluster() then
         rpc.export(name, skynet.self())
+        rpc.register(name, layout.self_node())
     end
     skynet.send(".logger", "lua", "register_name", name:sub(2))
 end)
