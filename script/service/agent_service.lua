@@ -16,6 +16,7 @@ local talent_mgr = require "system.talent_mgr"
 local tableUtils = require "utils.tableUtils"
 local protocol_handler = require "protocol_handler"
 local item_mgr = require "system.item_mgr"
+local trade_mgr = require "system.trade.trade_mgr"
 local recovery_mgr = require "system.recovery_mgr"
 local weapon_mgr = require "system.weapon_mgr"
 local head_mgr = require "system.head_mgr"
@@ -544,6 +545,39 @@ function M.grant_items_critical(data)
         return false, "invalid items"
     end
     return player:grant_items_critical(data.op_id, data.items, data.reason or "critical_grant")
+end
+
+-- 交易行（GM / 调试入口；正常走 C2S net.trade_net）
+function M.trade_list(data)
+    data = data or {}
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    return trade_mgr.list(player, data.item_id, data.count, data.price, data.currency_item_id)
+end
+
+function M.trade_buy(data)
+    data = data or {}
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    return trade_mgr.buy(player, data.order_id)
+end
+
+function M.trade_cancel(data)
+    data = data or {}
+    local player = user_mgr.get_player_obj(data.player_id)
+    if not player then
+        return false, "Player not found"
+    end
+    return trade_mgr.cancel(player, data.order_id)
+end
+
+function M.trade_query(data)
+    data = data or {}
+    return trade_mgr.query(data.page, data.page_size)
 end
 
 function M.gm_command(data)

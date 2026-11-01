@@ -273,6 +273,37 @@ function item_mgr.add_items(player, items, reason, ext)
     return apply_add_items(ctx, player, reason, ext)
 end
 
+-- 回滚用：直接加回原物品，不跑礼包/自动开启等转换规则
+function item_mgr.restore_items(player, items, reason)
+    local bag = player:get_ctn("bag")
+    if not bag then
+        return false, "背包不存在"
+    end
+    local changes = {}
+    for item_id_raw, count_raw in pairs(items or {}) do
+        local item_id = num(item_id_raw)
+        local count = num(count_raw)
+        if item_id > 0 and count > 0 then
+            if is_virtual_item(item_id) then
+                bag:set_virtual_item_count(item_id, num(bag:get_virtual_item_count(item_id)) + count)
+            else
+                local ok, err = bag:add_item(item_id, count)
+                if not ok then
+                    return false, err
+                end
+            end
+            changes[#changes + 1] = build_change(player, item_id, count)
+        end
+    end
+    if #changes > 0 then
+        protocol_handler.send_to_player(player.player_id_, "item_update_notify", {
+            reason = reason or "restore",
+            changes = changes,
+        })
+    end
+    return true, changes
+end
+
 function item_mgr.cost_items(player, items, reason, ext)
     local ok, err = item_mgr.has_enough_items(player, items, ext)
     if not ok then

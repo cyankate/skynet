@@ -5,6 +5,7 @@ local encrypt = require "security.encrypt"
 local service_ctx = require "runtime.service_ctx"
 local rpc = require "cluster.rpc"
 local locator = require "cluster.locator"
+local item_def = require "define.item_def"
 
 local PAYMENT_STATUS = { CREATED = 0, PROCESSING = 1, SUCCESS = 2, FAILED = 3, REFUND = 4 }
 local PAYMENT_CHANNEL = {
@@ -39,19 +40,38 @@ local function find_product(product_id)
     return nil
 end
 
+local ITEM_NAME_TO_ID = {
+    diamond = item_def.ITEM_ID.DIAMOND,
+    gold = item_def.ITEM_ID.GOLD,
+}
+
+local function to_item_id(id)
+    local n = tonumber(id)
+    if n and n > 0 then
+        return n
+    end
+    return ITEM_NAME_TO_ID[id]
+end
+
 local function build_reward_items(product)
     local items = {}
     if not product then
         return items
     end
     for _, it in ipairs(product.items or {}) do
-        if it.id and it.count then
-            items[it.id] = (items[it.id] or 0) + it.count
+        local item_id = to_item_id(it.id)
+        local count = tonumber(it.count)
+        if item_id and count and count > 0 then
+            items[item_id] = (items[item_id] or 0) + count
+        else
+            log.warning("payment reward item unknown, product=%s item=%s",
+                tostring(product.id), tostring(it.id))
         end
     end
     local diamond = (product.diamond or 0) + (product.bonus or 0)
     if diamond > 0 then
-        items["diamond"] = (items["diamond"] or 0) + diamond
+        local diamond_id = item_def.ITEM_ID.DIAMOND
+        items[diamond_id] = (items[diamond_id] or 0) + diamond
     end
     return items
 end
@@ -84,13 +104,18 @@ function M.grant_order_reward(order)
     return true
 end
 
+local function get_order(order_id)
+    local rows = skynet.call(M.db, "lua", "select", "payment", { order_id = order_id }, { limit = 1 })
+    return rows and rows[1]
+end
+
 -- 玩家登录后补发已支付但未发放的订单（幂等）
 function M.claim_player_rewards(player_id)
     player_id = tonumber(player_id)
     if not player_id then
         return false
     end
-    local orders = skynet.call(M.db, "lua", "find", "payment", {
+    local orders = skynet.call(M.db, "lua", "select", "payment", {
         player_id = player_id,
         status = PAYMENT_STATUS.SUCCESS,
     }, { limit = 100 })
@@ -160,7 +185,7 @@ function M.handle_notify(channel, notify_data)
     if not is_valid then return { code = 2, message = "通知验证失败" } end
     local order_id = notify_data.out_trade_no or notify_data.order_id
     if not order_id then return { code = 3, message = "无法识别订单" } end
-    local order = skynet.call(M.db, "lua", "find_one", "payment", { order_id = order_id })
+    local order = get_order(order_id)
     if not order then return { code = 4, message = "订单不存在" } end
     if order.status == PAYMENT_STATUS.SUCCESS then
         -- 回调重试：订单已成功，但奖励可能因离线/崩溃没发出去，这里补发（agent 侧幂等）
@@ -180,7 +205,7 @@ function M.handle_notify(channel, notify_data)
         status = status, pay_time = is_payment_success and os.date("%Y-%m-%d %H:%M:%S") or nil, channel_order_id = notify_data.trade_no or notify_data.transaction_id,
         notify_data = skynet.packstring(notify_data), notify_time = os.date("%Y-%m-%d %H:%M:%S"),
     }
-    local result = skynet.call(M.db, "lua", "update", "payment", { order_id = order_id }, update_data)
+    local result = skynet.call(M.db, "lua", "update_where", "payment", { order_id = order_id }, update_data)
     if not result then return { code = 5, message = "更新订单状态失败" } end
     log_payment(order_id, status, is_payment_success and "支付成功" or "支付失败")
     if is_payment_success then
@@ -192,7 +217,7 @@ end
 
 function M.query_order(order_id)
     if not order_id then return { code = 1, message = "订单ID不能为空" } end
-    local order = skynet.call(M.db, "lua", "find_one", "payment", { order_id = order_id })
+    local order = get_order(order_id)
     if not order then return { code = 2, message = "订单不存在" } end
     return { code = 0, data = order }
 end
@@ -203,7 +228,9 @@ function M.query_player_orders(player_id, status, limit, offset)
     offset = offset or 0
     local query = { player_id = player_id }
     if status then query.status = status end
-    local orders = skynet.call(M.db, "lua", "find", "payment", query, { limit = limit, offset = offset, sort = { create_time = -1 } })
+    local orders = skynet.call(M.db, "lua", "select", "payment", query, {
+        limit = limit, offset = offset, order_by = { create_time = "DESC" },
+    })
     local total = skynet.call(M.db, "lua", "count", "payment", query)
     return { code = 0, data = { list = orders, total = total, limit = limit, offset = offset } }
 end
@@ -217,12 +244,12 @@ end
 
 function M.manual_deliver(order_id, admin_id)
     if not order_id then return { code = 1, message = "订单ID不能为空" } end
-    local order = skynet.call(M.db, "lua", "find_one", "payment", { order_id = order_id })
+    local order = get_order(order_id)
     if not order then return { code = 2, message = "订单不存在" } end
     if order.status ~= PAYMENT_STATUS.SUCCESS then
         order.status = PAYMENT_STATUS.SUCCESS
         order.pay_time = os.date("%Y-%m-%d %H:%M:%S")
-        skynet.call(M.db, "lua", "update", "payment", { order_id = order_id }, { status = order.status, pay_time = order.pay_time })
+        skynet.call(M.db, "lua", "update_where", "payment", { order_id = order_id }, { status = order.status, pay_time = order.pay_time })
         log_payment(order_id, PAYMENT_STATUS.SUCCESS, "管理员手动确认支付", admin_id or "admin")
     end
     return { code = 0, message = "商品发放成功" }

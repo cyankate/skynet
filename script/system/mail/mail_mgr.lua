@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local log = require "log"
 local mailbox = require "system.mail.mailbox"
 local service_ctx = require "runtime.service_ctx"
+local locator = require "cluster.locator"
 
 -- 邮件类型
 local MAIL_TYPE = {
@@ -57,6 +58,12 @@ function mail_mgr.remove_mailbox(player_id)
     player_mailboxes[player_id] = nil
 end
 
+-- 新邮件写入 DB 后调用：清掉缓存，让在线玩家下次拉取时重新加载
+function mail_mgr.on_new_mail(player_id)
+    mail_mgr.remove_mailbox(player_id)
+    return true
+end
+
 -- 连接断开（闪断宽限期内邮箱仍保留）
 function mail_mgr.on_player_logout(player_id)
 end
@@ -96,9 +103,10 @@ function mail_mgr.get_mail_detail(player_id, mail_id)
     
     -- 如果是未读，标记为已读
     if mail.status == MAIL_STATUS.UNREAD then
-        skynet.call(dbS, "lua", "update", "mail", {
+        skynet.call(dbS, "lua", "update_where", "mail", {
             mail_id = mail_id,
             receiver_id = player_id,
+        }, {
             status = MAIL_STATUS.READ
         })
         
@@ -107,13 +115,15 @@ function mail_mgr.get_mail_detail(player_id, mail_id)
         box:update_mail_status(mail_id, MAIL_STATUS.READ)
     end
     
-    -- 解析附件数据
-    if mail.items and mail.items ~= "" then
-        mail.items = tableUtils.deserialize_table(mail.items)
-    else
-        mail.items = nil
+    -- 解析附件数据（dbS.select 已经对 text 字段反序列化，这里兼容旧字符串）
+    local items = mail.items
+    if type(items) == "string" and items ~= "" then
+        items = tableUtils.deserialize_table(items)
+    elseif type(items) ~= "table" then
+        items = nil
     end
-    
+    mail.items = items
+
     return true, mail
 end
 
@@ -140,24 +150,50 @@ function mail_mgr.claim_items(player_id, mail_id)
         return false
     end
     
-    -- 解析附件数据
-    local items = mail.items and tableUtils.deserialize_table(mail.items) or {}
+    -- 解析附件数据（dbS.select 已经对 text 字段反序列化，这里兼容旧字符串）
+    local items = mail.items
+    if type(items) == "string" and items ~= "" then
+        items = tableUtils.deserialize_table(items)
+    end
+    items = items or {}
     if #items == 0 then
         log.error("没有可领取的附件")
         return false
     end
     
     -- 发放物品
-    local ok, err = skynet.call(agent, "lua", "add_items", player_id, items)
+    local agent = locator.get_agent(player_id)
+    if not agent then
+        log.error("领取附件失败，玩家不在线: " .. tostring(player_id))
+        return false, "player offline"
+    end
+    local item_map = {}
+    for _, it in ipairs(items) do
+        local item_id = tonumber(it.item_id)
+        local count = tonumber(it.count)
+        if item_id and item_id > 0 and count and count > 0 then
+            item_map[item_id] = (item_map[item_id] or 0) + count
+        end
+    end
+    if not next(item_map) then
+        log.error("没有可领取的附件")
+        return false
+    end
+    local ok, err = skynet.call(agent, "lua", "add_items", {
+        player_id = player_id,
+        items = item_map,
+        reason = "mail_claim",
+    })
     if not ok then
         log.error("发放物品失败: " .. tostring(err))
         return false
     end
     
     -- 更新附件状态
-    skynet.call(dbS, "lua", "update", "mail", {
+    skynet.call(dbS, "lua", "update_where", "mail", {
         mail_id = mail_id,
         receiver_id = player_id,
+    }, {
         items_status = ITEMS_STATUS.CLAIMED
     })
     
@@ -186,9 +222,10 @@ function mail_mgr.delete_mail(player_id, mail_id)
         return false, "请先领取附件"
     end
     -- 标记删除
-    local ok = skynet.call(dbS, "lua", "update", "mail", {
+    local ok = skynet.call(dbS, "lua", "update_where", "mail", {
         mail_id = mail_id,
         receiver_id = player_id,
+    }, {
         is_deleted = 1
     })
     

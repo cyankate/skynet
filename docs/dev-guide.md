@@ -95,12 +95,28 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 
 - `op_log` 表（迁移 `[#5]`）：`op_id` 唯一主键、`status`、`result`、时间。
 - `dbS.commit_op(op_id, ops, result)`：`ops` 是 `{op="insert|update|upsert|delete", tbl=..., data/rows/cond}` 的列表；内部在同一事务里写 `op_log` + 业务行；重复 `op_id` 返回上次结果。
-- `dbS.transaction(ops)`：只做多表事务，不写 `op_log`。
+- `dbS.transaction(ops)`：只做多表事务，不写 `op_log`；`update_where` 支持 `require_affected` 条件状态流转。
+- `dbS.update_where(tbl, cond, data)`：按非主键条件更新；`dbS.count(tbl, cond)`：条件计数。
 - `dbS.op_get(op_id)`：查询操作是否已完成及结果。
 - `Player:commit_critical(op_id, {"bag"}, extra_ops, result)`：复用玩家保存锁，把容器快照 + `op_log` 同事务提交。
 - `Player:grant_items_critical(op_id, items, reason)`：单玩家发奖的幂等入口；提交失败时保留 pending，定时保存会跳过该容器，按同一 `op_id` 重试。
 - 支付奖励：`paymentS.handle_notify` 更新订单后尝试发奖；玩家离线时登录 agent 触发 `paymentS.claim_player_rewards` 补发；agent 侧按 `pay:<order_id>` 幂等。
 - outbox / 死信重放仍属于后续阶段。
+
+### 交易行（Phase 2 最小版）
+
+规则：**固定价、整堆交易、邮件交付、24 小时过期**。
+
+- 表：`trade_order`（订单与状态）、`trade_escrow`（卖家物品托管）；状态 `1=在售, 2=已购买, 3=已结算, 4=已取消`。
+- 上架：卖家 agent 扣背包物品，**扣物品 + 订单 + 托管 + op_log 同一个事务**（`Player:cost_items_critical`，op_id `trade:<order>:list`）。
+- 购买：买家 agent 扣货币，**扣货币 + 条件更新订单 LISTED→PURCHASED + op_log 同一个事务**；条件更新失败说明已被买走，内存货币回滚。
+- 取消：卖家可在 LISTED 时取消，物品通过邮件退回；订单与托管状态同事务更新。
+- 结算：`tradeS` 每 5 秒扫 `PURCHASED` 订单，依次执行 `deliver`（买家邮件收物品）、`credit`（卖家邮件收货币）、`settle`（订单/托管终态），每一步都有独立 `op_log`，可重试。
+- 过期：`tradeS` 扫 LISTED 且 `expire_time` 到期的订单，邮件退回卖家并取消订单。
+- 邮件领取：`mail_mgr.claim_items` 现在通过 `locator.get_agent` 找到玩家 agent，并把附件数组转成 `item_id -> count` 再 `add_items`。
+- 协议：`trade_list / trade_buy / trade_cancel / trade_query`（810-817），入口在 `net/trade_net.lua`。
+
+当前限制：只支持整堆交易（物品无唯一 UID）；邮件附件领取需要玩家在线；没有交易税、限购、竞价和卖家/买家订单列表查询。
 
 ## 常见反模式（新人别踩）
 

@@ -112,6 +112,7 @@ skynet.start(function()
     spawn("matchS")
     spawn("instanceS")
     spawn("pathfindingS")
+    spawn("tradeS")
     local map_id = shard.default_def().map_id
     watch(skynet.newservice("mapS", map_id), {
         entry = "mapS",

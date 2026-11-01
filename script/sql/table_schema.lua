@@ -1279,5 +1279,54 @@ local config = {
             ["updated_at"] = true,
         },
     },
+    ["trade_order"] = {
+        table_name = "trade_order",
+        fields = {
+            ["order_id"] = { type = "varchar(64)", is_required = true, is_primary = true, is_auto_increment = false, default = "nil", comment = "订单ID" },
+            ["seller_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "卖家" },
+            ["buyer_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "买家" },
+            ["item_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "物品ID" },
+            ["item_count"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "数量" },
+            ["price"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "价格" },
+            ["currency_item_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "801", comment = "货币物品ID" },
+            ["status"] = { type = "tinyint", is_required = true, is_primary = false, is_auto_increment = false, default = "1", comment = "1=在售,2=已购买,3=已结算,4=已取消,5=补偿中" },
+            ["create_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "创建时间" },
+            ["update_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "更新时间" },
+            ["expire_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "过期时间" },
+            ["version"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "1", comment = "版本" },
+        },
+        primary_keys = { "order_id" },
+        indexes = {
+            ["idx_seller"] = { unique = false, columns = { "seller_id" } },
+            ["idx_status"] = { unique = false, columns = { "status" } },
+            ["idx_expire"] = { unique = false, columns = { "expire_time" } },
+        },
+        non_primary_fields = {
+            ["seller_id"] = true, ["buyer_id"] = true, ["item_id"] = true,
+            ["item_count"] = true, ["price"] = true, ["currency_item_id"] = true,
+            ["status"] = true, ["create_time"] = true, ["update_time"] = true,
+            ["expire_time"] = true, ["version"] = true,
+        },
+    },
+    ["trade_escrow"] = {
+        table_name = "trade_escrow",
+        fields = {
+            ["order_id"] = { type = "varchar(64)", is_required = true, is_primary = true, is_auto_increment = false, default = "nil", comment = "订单ID" },
+            ["seller_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "卖家" },
+            ["item_id"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "物品ID" },
+            ["item_count"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "数量" },
+            ["status"] = { type = "tinyint", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "0=托管中,1=已退回,2=已结算" },
+            ["create_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "创建时间" },
+            ["update_time"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "更新时间" },
+        },
+        primary_keys = { "order_id" },
+        indexes = {
+            ["idx_seller"] = { unique = false, columns = { "seller_id" } },
+        },
+        non_primary_fields = {
+            ["seller_id"] = true, ["item_id"] = true, ["item_count"] = true,
+            ["status"] = true, ["create_time"] = true, ["update_time"] = true,
+        },
+    },
 }
 return config

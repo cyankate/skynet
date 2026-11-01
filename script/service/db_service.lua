@@ -839,6 +839,27 @@ local function build_upsert_sql(tbl, data)
     return sql
 end
 
+local function build_update_where_sql(tbl, data, cond)
+    local struct = table_schema[tbl]
+    local sets, conds = {}, {}
+    for name, info in pairs(struct.fields) do
+        if not info.is_auto_increment and data[name] ~= nil then
+            sets[#sets + 1] = string.format("`%s`=%s", name, sql_value(info, data[name]))
+        end
+    end
+    for name, value in pairs(cond or {}) do
+        local info = struct.fields[name]
+        if info then
+            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+        end
+    end
+    if #sets == 0 or #conds == 0 then
+        return nil, "invalid update_where"
+    end
+    return string.format("UPDATE `%s` SET %s WHERE %s",
+        tbl, table.concat(sets, ","), table.concat(conds, " AND "))
+end
+
 local function build_delete_sql(tbl, cond)
     local struct = table_schema[tbl]
     local conds = {}
@@ -854,7 +875,8 @@ local function build_delete_sql(tbl, cond)
     return string.format("DELETE FROM `%s` WHERE %s", tbl, table.concat(conds, " AND "))
 end
 
--- 多表事务：ops = { {op="insert|update|upsert|delete", tbl=..., data=...|rows=...|cond=...} }
+-- 多表事务：ops = { {op="insert|update|update_where|upsert|delete", tbl=..., data=...|rows=...|cond=...} }
+-- update_where 可带 require_affected：影响行数不足则回滚（用于条件状态流转）
 function CMD.transaction(ops, _options)
     if type(ops) ~= "table" or #ops == 0 then
         return nil, "empty ops"
@@ -865,7 +887,10 @@ function CMD.transaction(ops, _options)
         return nil, "no connection"
     end
 
-    local sqls = {}
+    local stmts = {}
+    local function add(sql, require_affected)
+        stmts[#stmts + 1] = { sql = sql, require = require_affected }
+    end
     for _, op in ipairs(ops) do
         local tbl = op.tbl
         local struct = tbl and table_schema[tbl]
@@ -879,7 +904,14 @@ function CMD.transaction(ops, _options)
                 release(db)
                 return nil, err
             end
-            sqls[#sqls + 1] = sql
+            add(sql)
+        elseif op.op == "update_where" then
+            local sql, err = build_update_where_sql(tbl, op.data, op.cond)
+            if not sql then
+                release(db)
+                return nil, err
+            end
+            add(sql, op.require_affected)
         else
             local rows = op.rows or (op.data and { op.data }) or {}
             if #rows == 0 then
@@ -901,7 +933,7 @@ function CMD.transaction(ops, _options)
                     release(db)
                     return nil, err
                 end
-                sqls[#sqls + 1] = sql
+                add(sql)
             end
         end
     end
@@ -911,12 +943,17 @@ function CMD.transaction(ops, _options)
         release(db)
         return nil, ret.err or ret.badresult
     end
-    for _, sql in ipairs(sqls) do
-        local r = db:query(sql)
+    for _, stmt in ipairs(stmts) do
+        local r = db:query(stmt.sql)
         if not r or r.badresult then
             db:query("ROLLBACK")
             release(db)
             return nil, (r and (r.err or r.badresult)) or "query failed"
+        end
+        if stmt.require and (r.affected_rows or 0) < stmt.require then
+            db:query("ROLLBACK")
+            release(db)
+            return nil, "conditional update failed"
         end
     end
     local commit = db:query("COMMIT")
@@ -927,6 +964,38 @@ function CMD.transaction(ops, _options)
     end
     release(db)
     return true
+end
+
+function CMD.count(tbl, cond)
+    local struct = tbl and table_schema[tbl]
+    if not struct then
+        return 0
+    end
+    local db = get_connection(0)
+    if not db then
+        return 0
+    end
+    local conds = {}
+    for name, value in pairs(cond or {}) do
+        local info = struct.fields[name]
+        if info then
+            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+        end
+    end
+    local where = #conds > 0 and (" WHERE " .. table.concat(conds, " AND ")) or ""
+    local r = db:query(string.format("SELECT COUNT(*) AS n FROM `%s`%s", tbl, where))
+    release(db)
+    if r and r[1] then
+        return tonumber(r[1].n) or 0
+    end
+    return 0
+end
+
+-- 按任意条件更新（不经过主键），不写 op_log
+function CMD.update_where(tbl, cond, data, options)
+    return CMD.transaction({
+        { op = "update_where", tbl = tbl, data = data, cond = cond },
+    }, options)
 end
 
 -- 按 op_id 查已完成的操作；返回 exists, result

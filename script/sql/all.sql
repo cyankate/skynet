@@ -227,3 +227,36 @@ CREATE TABLE IF NOT EXISTS `op_log` (
     `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`op_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
+
+-- 交易行订单表
+CREATE TABLE IF NOT EXISTS `trade_order` (
+    `order_id` varchar(64) NOT NULL COMMENT '订单ID',
+    `seller_id` int NOT NULL COMMENT '卖家',
+    `buyer_id` int NOT NULL DEFAULT '0' COMMENT '买家',
+    `item_id` int NOT NULL COMMENT '物品ID',
+    `item_count` int NOT NULL COMMENT '数量',
+    `price` int NOT NULL COMMENT '价格',
+    `currency_item_id` int NOT NULL DEFAULT '801' COMMENT '货币物品ID',
+    `status` tinyint NOT NULL DEFAULT '1' COMMENT '1=在售,2=已购买,3=已结算,4=已取消,5=补偿中',
+    `create_time` int NOT NULL COMMENT '创建时间',
+    `update_time` int NOT NULL COMMENT '更新时间',
+    `expire_time` int NOT NULL COMMENT '过期时间',
+    `version` int NOT NULL DEFAULT '1' COMMENT '版本',
+    PRIMARY KEY (`order_id`),
+    KEY `idx_seller` (`seller_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_expire` (`expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易行订单表';
+
+-- 交易行托管表
+CREATE TABLE IF NOT EXISTS `trade_escrow` (
+    `order_id` varchar(64) NOT NULL COMMENT '订单ID',
+    `seller_id` int NOT NULL COMMENT '卖家',
+    `item_id` int NOT NULL COMMENT '物品ID',
+    `item_count` int NOT NULL COMMENT '数量',
+    `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=托管中,1=已退回,2=已结算',
+    `create_time` int NOT NULL COMMENT '创建时间',
+    `update_time` int NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (`order_id`),
+    KEY `idx_seller` (`seller_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易行托管表';

@@ -30,6 +30,11 @@ function M.send_system_mail(receiver_id, title, content, items)
     return mail_mgr.send_system_mail(receiver_id, title, content, items)
 end
 
+-- DB 已写入新邮件后调用：让在线玩家刷新邮箱缓存
+function M.on_new_mail(player_id)
+    return mail_mgr.on_new_mail(player_id)
+end
+
 function M.send_global_mail(title, content, items, expire_days)
     return mail_mgr.send_global_mail(title, content, items, expire_days)
 end

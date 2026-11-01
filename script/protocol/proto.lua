@@ -306,6 +306,79 @@ local c2s_builder = builder.new()
         }
     })
 
+    -- 交易行（810-817）
+    :type("trade_order_info", {
+        order_id = "string",
+        seller_id = "integer",
+        item_id = "integer",
+        count = "integer",
+        price = "integer",
+        currency_item_id = "integer",
+        expire_time = "integer",
+    })
+
+    :protocol("trade_list", 810, {
+        request = {
+            item_id = "integer",
+            count = "integer",
+            price = "integer",
+            currency_item_id = "integer",
+        }
+    })
+
+    :protocol("trade_list_response", 811, {
+        request = {
+            result = "integer",
+            message = "string",
+            order_id = "string",
+        }
+    })
+
+    :protocol("trade_buy", 812, {
+        request = {
+            order_id = "string",
+        }
+    })
+
+    :protocol("trade_buy_response", 813, {
+        request = {
+            result = "integer",
+            message = "string",
+            order_id = "string",
+        }
+    })
+
+    :protocol("trade_cancel", 814, {
+        request = {
+            order_id = "string",
+        }
+    })
+
+    :protocol("trade_cancel_response", 815, {
+        request = {
+            result = "integer",
+            message = "string",
+            order_id = "string",
+        }
+    })
+
+    :protocol("trade_query", 816, {
+        request = {
+            page = "integer",
+            page_size = "integer",
+        }
+    })
+
+    :protocol("trade_query_response", 817, {
+        request = {
+            result = "integer",
+            message = "string",
+            page = "integer",
+            total = "integer",
+            orders = "*trade_order_info",
+        }
+    })
+
     -- 大地图 C2S（528-560；避开 talent 541）
     :protocol("map_list", 529, {
         request = {}

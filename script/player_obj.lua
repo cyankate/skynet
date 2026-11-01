@@ -145,6 +145,36 @@ function Player:commit_critical(op_id, container_names, extra_ops, result)
     end)
 end
 
+-- 单玩家关键扣物品：先扣内存，事务失败则恢复内存；op_id 幂等
+function Player:cost_items_critical(op_id, items, extra_ops, result, reason)
+    if type(op_id) ~= "string" or op_id == "" then
+        return false, "invalid op_id"
+    end
+    return self:exclusive(function()
+        local db = skynet.localname(".db")
+        if db then
+            local call_ok, exists, old = pcall(skynet.call, db, "lua", "op_get", op_id)
+            if call_ok and exists then
+                return true, old
+            end
+        end
+        local ok, err = item_mgr.cost_items(self, items, reason or "critical_cost")
+        if not ok then
+            return false, err
+        end
+        local commit_ok, res, cerr = self:commit_critical(op_id, { "bag" }, extra_ops, result)
+        if commit_ok then
+            return true, res
+        end
+        -- 事务失败：把扣掉的物品加回内存，避免玩家白丢（不跑礼包转换规则）
+        local restore_ok, rerr = item_mgr.restore_items(self, items, (reason or "critical_cost") .. "_rollback")
+        if not restore_ok then
+            log.error("critical cost rollback failed, op=%s err=%s", tostring(op_id), tostring(rerr))
+        end
+        return false, cerr or res
+    end)
+end
+
 -- 单玩家关键发奖：op_id 幂等；提交失败时保留 pending，定时保存先跳过背包
 function Player:grant_items_critical(op_id, items, reason)
     if type(op_id) ~= "string" or op_id == "" then

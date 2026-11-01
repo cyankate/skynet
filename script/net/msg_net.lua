@@ -9,6 +9,7 @@ local modules = {
     "net.guild_net",
     "net.mail_net",
     "net.task_net",
+    "net.trade_net",
     "net.map_net",
 }
 
