@@ -63,10 +63,40 @@ function Player:get_ctn(name)
     return self.ctns_[name]
 end
 
-function Player:save_to_db()
-    for _, ctn in pairs(self.ctns_) do
-        ctn:save()
+-- 玩家级串行队列：定时 save 和关键提交共用，避免旧快照覆盖新数据
+function Player:save_queue()
+    self.save_queue_ = self.save_queue_ or require("skynet.queue")()
+    return self.save_queue_
+end
+
+function Player:exclusive(fn, ...)
+    return self:save_queue()(fn, ...)
+end
+
+local function save_ctns(player)
+    local ok = true
+    for _, ctn in pairs(player.ctns_) do
+        local saved = ctn:save_now()
+        if not saved then
+            ok = false
+        end
     end
+    return ok
+end
+
+function Player:save_to_db()
+    skynet.fork(function()
+        self:exclusive(function()
+            save_ctns(self)
+        end)
+    end)
+end
+
+-- 同步保存：卸载、关服等需要确认落库的场景
+function Player:save_to_db_sync()
+    return self:exclusive(function()
+        return save_ctns(self)
+    end)
 end
 
 function Player:add_item(_item_id, _count)

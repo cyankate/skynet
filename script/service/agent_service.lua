@@ -177,7 +177,7 @@ local function unload_account_from_agent(account_key, account)
     local player_id = account.player_id
     local player = player_id and user_mgr.get_player_obj(player_id)
     if player and player.loaded_ then
-        player:save_to_db()
+        player:save_to_db_sync()
     end
     if player then
         M.handle_offline(player)

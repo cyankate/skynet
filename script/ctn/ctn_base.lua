@@ -148,24 +148,48 @@ end
 function CtnBase:save()
     if not self.loaded_ then
         log.error(string.format("[CtnBase] Invalid save, Data not loaded for ctn: %s", self.owner_))
-        return 
+        return
     end
-    
+
     skynet.fork(function()
         local ok, err = pcall(function()
             self:dosave()
         end)
-        
+
         if not ok then
             self:set_error(err)
-            log.error(string.format("[CtnBase] Failed to save data for ctn: %s, name: %s, error: %s", 
+            log.error(string.format("[CtnBase] Failed to save data for ctn: %s, name: %s, error: %s",
                 self.owner_, self.name_, err))
-            return 
+            return
         end
 
         self:clear_dirty()
         self.last_save_time_ = skynet.time()
     end)
+end
+
+-- 同步保存：由 Player 的保存锁串行调用，关键提交也走同一条路径
+function CtnBase:save_now()
+    if not self.loaded_ then
+        log.error(string.format("[CtnBase] Invalid save, Data not loaded for ctn: %s", self.owner_))
+        return false, "not loaded"
+    end
+    local ok, ret, err = pcall(self.dosave, self)
+    if not ok then
+        self:set_error(ret)
+        log.error(string.format("[CtnBase] Failed to save data for ctn: %s, name: %s, error: %s",
+            self.owner_, self.name_, tostring(ret)))
+        return false, ret
+    end
+    if ret == false then
+        self:set_error(err)
+        log.error(string.format("[CtnBase] Failed to save data for ctn: %s, name: %s, error: %s",
+            self.owner_, self.name_, tostring(err)))
+        return false, err
+    end
+    self:clear_dirty()
+    self.last_save_time_ = skynet.time()
+    return true
 end
 
 -- 保存数据到数据库

@@ -26,6 +26,7 @@
 - 加服务：entry → service → main.lua（服务名自动登记到 locator，layout 静态表只做兜底；见 docs/dev-guide.md「加一个服务」）
 - 服务崩溃：本进程由 `.supervisor` 自动重启（退避上限 10 次）；卡死由 30 秒心跳看门狗判断（连续 3 次不响应则通知并尝试 kill）；agent 池由 supervisor + 登录服协同恢复；`eventS` 暂不自动重启
 - 关键跨服务调用（绑定 / 上下线 / 结算 / 状态变更）用 `rpc.call_timeout`，不要裸 `skynet.send`；通知类消息才用 `send`
+- 同一玩家的定时保存与关键提交走 `Player:exclusive`，避免旧快照覆盖新数据
 
 ## 文档与检查
 

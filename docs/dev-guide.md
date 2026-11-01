@@ -84,6 +84,13 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 - 通知类（视野、AOI、ghost、日志、在线状态）继续用 `skynet.send`，丢了靠下一次同步或补偿。
 - 不要把 `send` 全量改成 `call`：会造成阻塞和级联故障。
 
+## 存档与一致性
+
+- **玩家级保存锁**：`Player:exclusive(fn)` 用 `skynet.queue` 串行化同一玩家的定时保存和关键提交；`Player:save_to_db()` 异步但串行，`Player:save_to_db_sync()` 用于卸载/关服等需要确认落库的场景。
+- **容器同步保存**：`CtnBase:save_now()`，由 Player 的锁串行调用；定时保存也走同一条路径，避免旧快照覆盖新提交。
+- **关键提交**：后续业务应复用 `Player:exclusive`，把“受影响的容器 + op_log”放在 `dbS` 的同一个事务里；只提交这次操作必须一起变的字段，其他模块继续等定时保存。
+- 现状：`CtnMf:dosave` 对已有行仍用 `skynet.send(update)`（发出去不等结果），关键路径后续要改用 `batch_update` 或同步事务。
+
 ## 常见反模式（新人别踩）
 
 - 不要 `skynet.localname(".gate")` / `localname(".locator")` / `localname(".shard.*")` —— 跨服务地址一律 `cluster.rpc` / `shard.addr`。
