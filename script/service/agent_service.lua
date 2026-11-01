@@ -283,6 +283,11 @@ function M.on_player_loaded(player_id)
     if paymentS then
         skynet.send(paymentS, "lua", "claim_player_rewards", player_id)
     end
+    -- 唤醒该玩家休眠的 outbox 投递
+    local outboxS = rpc.named_addr(".outbox")
+    if outboxS then
+        skynet.send(outboxS, "lua", "flush_player", player_id)
+    end
     notify_player_online(player)
 end
 

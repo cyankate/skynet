@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS `op_outbox` (
     `target_id` varchar(64) NOT NULL COMMENT '目标ID:玩家ID或服务名',
     `method` varchar(64) NOT NULL COMMENT '目标方法',
     `payload` text COMMENT '参数',
-    `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=待投递,1=完成,2=死信',
+    `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=待投递,1=完成,2=死信,3=玩家离线休眠',
     `retries` int NOT NULL DEFAULT '0' COMMENT '重试次数',
     `next_retry_at` int NOT NULL DEFAULT '0' COMMENT '下次重试时间',
     `last_error` varchar(255) DEFAULT '' COMMENT '最后错误',

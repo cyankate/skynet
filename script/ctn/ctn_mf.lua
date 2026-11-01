@@ -64,7 +64,7 @@ function CtnMf:doload()
     return true
 end
 
--- 保存数据到数据库：批量插入/更新，失败不再静默
+-- 保存数据到数据库：批量插入/更新，返回成功或失败
 function CtnMf:dosave()
     local datas, err_code = self:onsave()
     if not datas then
@@ -107,7 +107,7 @@ function CtnMf:dosave()
     return true
 end
 
--- 关键提交成功后，把对应行标记为已存在，后续定时保存走 update
+-- 把对应行标记为已入库，使定时保存走 update
 function CtnMf:mark_rows_saved(rows)
     for _, row in ipairs(rows or {}) do
         self.sub_inserted_[self:prikeys_str(row)] = true

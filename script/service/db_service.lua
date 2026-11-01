@@ -344,6 +344,27 @@ function CMD.select(_tbl, _cond, _options)
     return result
 end
 
+-- 字段校验 + SQL 转义（batch_* 与 transaction 共用）
+local function quote_field_value(field_name, info, value)
+    local field_type = info.type
+    if field_type == "int" and type(value) ~= "number" then
+        return nil, string.format("Field %s type error, not number", field_name)
+    end
+    if field_type:find("varchar") then
+        if type(value) ~= "string" then
+            return nil, string.format("Field %s type error, not string", field_name)
+        end
+        local limit = tonumber(string.match(field_type, "varchar%((%d+)%)"))
+        if limit and #value > limit then
+            return nil, string.format("Field %s type error, string length too long", field_name)
+        end
+    end
+    if field_type == "text" and type(value) == "table" then
+        value = tableUtils.serialize_table(value)
+    end
+    return mysql.quote_sql_str(tostring(value))
+end
+
 function CMD.batch_insert(_tbl, _data_list, _options)
     -- 参数验证
     if not _tbl or not _data_list then
@@ -436,37 +457,13 @@ function CMD.batch_insert(_tbl, _data_list, _options)
             for field_name, value in pairs(data) do
                 local idx = field_map[field_name]
                 if idx then
-                    local field_info = schema_fields[field_name]
-                    local field_type = field_info.type
-
-                    -- 检查数值类型
-                    if field_type == "int" and type(value) ~= "number" then
+                    local quoted, verr = quote_field_value(field_name, schema_fields[field_name], value)
+                    if not quoted then
                         success = false
-                        err_msg = string.format("Field %s type error, not number", field_name)
+                        err_msg = verr
                         break
                     end
-
-                    -- 检查varchar类型
-                    if field_type:find("varchar") then
-                        if type(value) ~= "string" then
-                            success = false
-                            err_msg = string.format("Field %s type error, not string", field_name)
-                            break
-                        end
-                        local limit = tonumber(string.match(field_type, "varchar%((%d+)%)"))
-                        if #value > limit then
-                            success = false
-                            err_msg = string.format("Field %s type error, string length too long", field_name)
-                            break
-                        end
-                    end
-
-                    -- 处理text类型
-                    if field_type == "text" and type(value) == "table" then
-                        values[idx] = mysql.quote_sql_str(tableUtils.serialize_table(value))
-                    else
-                        values[idx] = mysql.quote_sql_str(tostring(value))
-                    end
+                    values[idx] = quoted
                 end
             end
 
@@ -580,33 +577,13 @@ function CMD.batch_update(_tbl, _data_list, _options)
         -- 从第一条数据中收集非主键字段
         for field_name, _ in pairs(non_primary_fields) do
             if first_data[field_name] ~= nil then
-                -- 验证字段类型
                 local field_info = schema_fields[field_name]
-                local field_type = field_info.type
-                local value = first_data[field_name]
-
-                -- 检查数值类型
-                if field_type == "int" and type(value) ~= "number" then
+                local quoted, verr = quote_field_value(field_name, field_info, first_data[field_name])
+                if not quoted then
                     success = false
-                    err_msg = string.format("Field %s type error, not number", field_name)
+                    err_msg = verr
                     break
                 end
-
-                -- 检查varchar类型
-                if field_type:find("varchar") then
-                    if type(value) ~= "string" then
-                        success = false
-                        err_msg = string.format("Field %s type error, not string", field_name)
-                        break
-                    end
-                    local limit = tonumber(string.match(field_type, "varchar%((%d+)%)"))
-                    if #value > limit then
-                        success = false
-                        err_msg = string.format("Field %s type error, string length too long", field_name)
-                        break
-                    end
-                end
-
                 table.insert(update_fields, field_name)
             end
         end
@@ -632,7 +609,12 @@ function CMD.batch_update(_tbl, _data_list, _options)
                     err_msg = string.format("Primary key %s not found", pk)
                     break
                 end
-                local quoted_pk = mysql.quote_sql_str(tostring(data[pk]))
+                local quoted_pk, pk_err = quote_field_value(pk, schema_fields[pk], data[pk])
+                if not quoted_pk then
+                    success = false
+                    err_msg = pk_err
+                    break
+                end
                 table.insert(pk_values, quoted_pk)
                 table.insert(pk_conditions, string.format("`%s`=%s", pk, quoted_pk))
             end
@@ -646,30 +628,30 @@ function CMD.batch_update(_tbl, _data_list, _options)
                 local value = data[field_name]
                 if value ~= nil then
                     local field_info = schema_fields[field_name]
-                    local field_type = field_info.type
-
-                    -- 为每个字段构建CASE WHEN语句
                     if not case_whens[field_name] then
                         case_whens[field_name] = {}
                     end
-                    
+
                     local when_condition = table.concat(pk_conditions, " AND ")
-                    local quoted_value
-                    if field_type == "text" and type(value) == "table" then
-                        quoted_value = mysql.quote_sql_str(tableUtils.serialize_table(value))
-                    else
-                        quoted_value = mysql.quote_sql_str(tostring(value))
+                    local quoted_value, verr = quote_field_value(field_name, field_info, value)
+                    if not quoted_value then
+                        success = false
+                        err_msg = verr
+                        break
                     end
-                    
-                    table.insert(case_whens[field_name], 
-                        string.format("WHEN %s THEN %s", 
-                            when_condition, 
+
+                    table.insert(case_whens[field_name],
+                        string.format("WHEN %s THEN %s",
+                            when_condition,
                             quoted_value
                         )
                     )
                 end
             end
-            
+            if not success then
+                break
+            end
+
             -- 收集WHERE条件的值
             table.insert(where_values, table.concat(pk_values, ","))
         end
@@ -745,13 +727,7 @@ function CMD.update(_tbl, _data, _options)
     return CMD.batch_update(_tbl, {_data}, _options)
 end
 
-local function sql_value(info, value)
-    if info.type == "text" and type(value) == "table" then
-        value = tableUtils.serialize_table(value)
-    end
-    return mysql.quote_sql_str(tostring(value))
-end
-
+-- 必填字段检查
 local function check_required(struct, data)
     for name, info in pairs(struct.fields) do
         if info.is_required and not info.is_auto_increment and data[name] == nil then
@@ -770,8 +746,12 @@ local function build_insert_sql(tbl, data)
     local fields, values = {}, {}
     for name, info in pairs(struct.fields) do
         if not info.is_auto_increment and data[name] ~= nil then
+            local quoted, verr = quote_field_value(name, info, data[name])
+            if not quoted then
+                return nil, verr
+            end
             fields[#fields + 1] = "`" .. name .. "`"
-            values[#values + 1] = sql_value(info, data[name])
+            values[#values + 1] = quoted
         end
     end
     if #fields == 0 then
@@ -790,7 +770,11 @@ local function build_update_sql(tbl, data)
     local sets, conds = {}, {}
     for name, info in pairs(struct.fields) do
         if not info.is_auto_increment and data[name] ~= nil then
-            local q = string.format("`%s`=%s", name, sql_value(info, data[name]))
+            local quoted, verr = quote_field_value(name, info, data[name])
+            if not quoted then
+                return nil, verr
+            end
+            local q = string.format("`%s`=%s", name, quoted)
             if pk[name] then
                 conds[#conds + 1] = q
             else
@@ -821,8 +805,12 @@ local function build_upsert_sql(tbl, data)
     local fields, values, updates = {}, {}, {}
     for name, info in pairs(struct.fields) do
         if not info.is_auto_increment and data[name] ~= nil then
+            local quoted, verr = quote_field_value(name, info, data[name])
+            if not quoted then
+                return nil, verr
+            end
             fields[#fields + 1] = "`" .. name .. "`"
-            values[#values + 1] = sql_value(info, data[name])
+            values[#values + 1] = quoted
             if not pk[name] then
                 updates[#updates + 1] = string.format("`%s`=VALUES(`%s`)", name, name)
             end
@@ -844,13 +832,21 @@ local function build_update_where_sql(tbl, data, cond)
     local sets, conds = {}, {}
     for name, info in pairs(struct.fields) do
         if not info.is_auto_increment and data[name] ~= nil then
-            sets[#sets + 1] = string.format("`%s`=%s", name, sql_value(info, data[name]))
+            local quoted, verr = quote_field_value(name, info, data[name])
+            if not quoted then
+                return nil, verr
+            end
+            sets[#sets + 1] = string.format("`%s`=%s", name, quoted)
         end
     end
     for name, value in pairs(cond or {}) do
         local info = struct.fields[name]
         if info then
-            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+            local quoted, verr = quote_field_value(name, info, value)
+            if not quoted then
+                return nil, verr
+            end
+            conds[#conds + 1] = string.format("`%s`=%s", name, quoted)
         end
     end
     if #sets == 0 or #conds == 0 then
@@ -866,7 +862,11 @@ local function build_delete_sql(tbl, cond)
     for name, value in pairs(cond or {}) do
         local info = struct.fields[name]
         if info then
-            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+            local quoted, verr = quote_field_value(name, info, value)
+            if not quoted then
+                return nil, verr
+            end
+            conds[#conds + 1] = string.format("`%s`=%s", name, quoted)
         end
     end
     if #conds == 0 then
@@ -979,7 +979,13 @@ function CMD.count(tbl, cond)
     for name, value in pairs(cond or {}) do
         local info = struct.fields[name]
         if info then
-            conds[#conds + 1] = string.format("`%s`=%s", name, sql_value(info, value))
+            local quoted, err = quote_field_value(name, info, value)
+            if not quoted then
+                release(db)
+                log.error("dbS:count invalid condition: %s", tostring(err))
+                return 0
+            end
+            conds[#conds + 1] = string.format("`%s`=%s", name, quoted)
         end
     end
     local where = #conds > 0 and (" WHERE " .. table.concat(conds, " AND ")) or ""

@@ -1336,7 +1336,7 @@ local config = {
             ["target_id"] = { type = "varchar(64)", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "目标ID:玩家ID或服务名" },
             ["method"] = { type = "varchar(64)", is_required = true, is_primary = false, is_auto_increment = false, default = "nil", comment = "目标方法" },
             ["payload"] = { type = "text", is_required = false, is_primary = false, is_auto_increment = false, default = "nil", comment = "参数" },
-            ["status"] = { type = "tinyint", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "0=待投递,1=完成,2=死信" },
+            ["status"] = { type = "tinyint", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "0=待投递,1=完成,2=死信,3=玩家离线休眠" },
             ["retries"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "重试次数" },
             ["next_retry_at"] = { type = "int", is_required = true, is_primary = false, is_auto_increment = false, default = "0", comment = "下次重试时间" },
             ["last_error"] = { type = "varchar(255)", is_required = false, is_primary = false, is_auto_increment = false, default = "", comment = "最后错误" },

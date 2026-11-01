@@ -28,8 +28,7 @@
 - 关键跨服务调用（绑定 / 上下线 / 结算 / 状态变更）用 `rpc.call_timeout`，不要裸 `skynet.send`；通知类消息才用 `send`
 - 同一玩家的定时保存与关键提交走 `Player:exclusive`，避免旧快照覆盖新数据
 - 关键发奖/物品变更用 `Player:grant_items_critical`（op_id 幂等），不要在定时 save 之外直接写库
-- 交易行：固定价 + 整堆 + 邮件交付；上架/购买走 `Player:cost_items_critical`，结算由 `tradeS` worker 按 op_log 幂等推进
-- 离线/跨服务关键投递走 `op_outbox`（`outboxS` 重试，10 次进死信），不要在业务里裸 `send` 后不管
+- 交易行、支付发奖、outbox 的完整流程与状态机见 docs/dev-guide.md 的「交易行」「可靠投递 outbox」
 
 ## 文档与检查
 

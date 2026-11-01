@@ -117,7 +117,7 @@ function mail_mgr.get_mail_detail(player_id, mail_id)
         box:update_mail_status(mail_id, MAIL_STATUS.READ)
     end
     
-    -- 解析附件数据（dbS.select 已经对 text 字段反序列化，这里兼容旧字符串）
+    -- dbS.select 已反序列化 text；字符串按旧格式解析
     local items = mail.items
     if type(items) == "string" and items ~= "" then
         items = tableUtils.deserialize_table(items)
@@ -370,19 +370,26 @@ function mail_mgr.check_global_mails(player_id)
     return 0
 end
 
--- 清理过期邮件
+-- 清理过期邮件（expire_time = 0 表示永不过期）
 function mail_mgr.clean_expired_mails()
     local now = os.time()
-    local dbS = skynet.localname(".db")
-    -- 删除过期的个人邮件
-    db_call.call("delete", "mail", {
-        expire_time = {["<"] = now}
-    })
-    
-    -- 删除过期的全局邮件模板
-    db_call.call("delete", "global_mail", {
-        expire_time = {["<"] = now}
-    })
+    local mails = db_call.call("select", "mail", {
+        expire_time = {["<"] = now, ["!="] = 0},
+    }, { limit = 500 })
+    for _, mail in ipairs(mails or {}) do
+        if (mail.expire_time or 0) > 0 then
+            db_call.call("delete", "mail", { mail_id = mail.mail_id })
+        end
+    end
+
+    local globals = db_call.call("select", "global_mail", {
+        expire_time = {["<"] = now, ["!="] = 0},
+    }, { limit = 500 })
+    for _, mail in ipairs(globals or {}) do
+        if (mail.expire_time or 0) > 0 then
+            db_call.call("delete", "global_mail", { mail_id = mail.mail_id })
+        end
+    end
 end
 
 return mail_mgr 

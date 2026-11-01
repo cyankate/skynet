@@ -77,7 +77,7 @@ skynet.start(function()
     spawn("redisS", { entry = "redisS", kind = "named", kill_on_hang = false })
     spawn("mongoS", { entry = "mongoS", kind = "named", kill_on_hang = false })
     skynet.newservice("debug_console")
-    -- eventS 的订阅表在内存里，重启后订阅方不会自动重订阅（见后续改造）；先只感知不自动拉起
+    -- eventS 的订阅表在内存，重启后订阅方不会自动重新订阅，暂不自动拉起
     spawn("eventS", { entry = "eventS", kind = "named", restart = false })
     spawn("securityS")
     spawn("locatorS")

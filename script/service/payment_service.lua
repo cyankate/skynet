@@ -7,7 +7,7 @@ local rpc = require "cluster.rpc"
 local locator = require "cluster.locator"
 local item_def = require "define.item_def"
 local db_call = require "system.db_call"
-local tableUtils = require "utils.tableUtils"
+local mail_util = require "system.mail.mail_util"
 
 local PAYMENT_STATUS = { CREATED = 0, PROCESSING = 1, SUCCESS = 2, FAILED = 3, REFUND = 4 }
 local PAYMENT_CHANNEL = {
@@ -78,43 +78,46 @@ local function build_reward_items(product)
     return items
 end
 
-local function reward_outbox_op(order, items, now)
-    return {
-        op = "insert",
-        tbl = "op_outbox",
-        data = {
-            outbox_id = "pay:" .. tostring(order.order_id),
-            target_type = "agent",
-            target_id = tostring(order.player_id),
-            method = "grant_items_critical",
-            payload = tableUtils.serialize_table({
-                player_id = order.player_id,
-                op_id = "pay:" .. tostring(order.order_id),
-                items = items,
-                reason = "payment_reward",
-            }),
-            status = 0,
-            retries = 0,
-            next_retry_at = now,
-            last_error = "",
-            create_time = now,
-            update_time = now,
-        },
-    }
+local function reward_items_list(items)
+    local list = {}
+    for item_id, count in pairs(items) do
+        list[#list + 1] = { item_id = item_id, count = count }
+    end
+    return list
 end
 
--- 把发奖写入可靠投递 outbox；已存在则跳过
-function M.enqueue_reward(order, items)
-    local outbox_id = "pay:" .. tostring(order.order_id)
-    local rows = db_call.call("select", "op_outbox", { outbox_id = outbox_id }, { limit = 1 })
-    if rows and rows[1] then
+-- 同一订单的奖励邮件用确定性 mail_id，重复写入不会产生多封
+local function reward_mail_id(order)
+    return "p" .. tostring(order.id or order.order_id)
+end
+
+function M.reward_mail_exists(order)
+    local rows = db_call.call("select", "mail", { mail_id = reward_mail_id(order) }, { limit = 1 })
+    return rows and rows[1] ~= nil
+end
+
+function M.insert_reward_mail(order, items)
+    local ok = db_call.call("transaction", {
+        mail_util.mail_op(
+            order.player_id,
+            "支付奖励",
+            "您的支付奖励已到账",
+            reward_items_list(items),
+            os.time(),
+            reward_mail_id(order)
+        ),
+    })
+    if ok then
+        local mailS = skynet.localname(".mail")
+        if mailS then
+            skynet.send(mailS, "lua", "on_new_mail", order.player_id)
+        end
         return true
     end
-    local ok = db_call.call("transaction", { reward_outbox_op(order, items, os.time()) })
-    return ok and true or false
+    return false
 end
 
--- 发放订单奖励：op_id = pay:<order_id>，agent 侧幂等；离线时由 outbox worker 重试
+-- 在线直发；离线或直发失败写邮件；已有邮件则等玩家领取
 function M.grant_order_reward(order)
     if not order then
         return false
@@ -124,12 +127,12 @@ function M.grant_order_reward(order)
     if not next(items) then
         return true
     end
-    if not M.enqueue_reward(order, items) then
-        log.error("enqueue payment reward failed, order=%s", tostring(order.order_id))
+    if M.reward_mail_exists(order) then
+        return true
     end
     local agent = locator.get_agent(order.player_id)
     if not agent then
-        return false, "offline"
+        return M.insert_reward_mail(order, items)
     end
     local ok, result, err = rpc.call_timeout(agent, 500, "grant_items_critical", {
         player_id = order.player_id,
@@ -137,18 +140,17 @@ function M.grant_order_reward(order)
         items = items,
         reason = "payment_reward",
     })
-    if not ok or not result then
-        log.error("grant payment reward failed, order=%s err=%s",
-            tostring(order.order_id), tostring(err))
-        return false, err or "grant failed"
+    if ok and result then
+        return true
     end
-    db_call.call("update_where", "op_outbox", {
-        outbox_id = "pay:" .. tostring(order.order_id),
-    }, {
-        status = 1,
-        update_time = os.time(),
-    })
-    return true
+    -- 超时/失败时先回查 op，避免已经直发成功又补一封邮件
+    local exists = db_call.call("op_get", "pay:" .. tostring(order.order_id))
+    if exists then
+        return true
+    end
+    log.error("grant payment reward failed, order=%s err=%s, fallback to mail",
+        tostring(order.order_id), tostring(err))
+    return M.insert_reward_mail(order, items)
 end
 
 local function get_order(order_id)
@@ -255,18 +257,26 @@ function M.handle_notify(channel, notify_data)
     local ops = {
         { op = "update_where", tbl = "payment", data = update_data, cond = { order_id = order_id } },
     }
+    local agent = is_payment_success and locator.get_agent(order.player_id) or nil
     if is_payment_success then
-        local product = find_product(order.product_id)
-        local items = build_reward_items(product)
-        if next(items) then
-            ops[#ops + 1] = reward_outbox_op(order, items, os.time())
+        local items = build_reward_items(find_product(order.product_id))
+        if next(items) and not agent then
+            -- 离线：奖励邮件和支付状态同事务落库，玩家上线领取
+            ops[#ops + 1] = mail_util.mail_op(
+                order.player_id,
+                "支付奖励",
+                "您的支付奖励已到账",
+                reward_items_list(items),
+                os.time(),
+                reward_mail_id(order)
+            )
         end
     end
     local result = db_call.call("transaction", ops)
     if not result then return { code = 5, message = "更新订单状态失败" } end
     log_payment(order_id, status, is_payment_success and "支付成功" or "支付失败")
-    if is_payment_success then
-        -- 订单和 outbox 已同事务落库；在线直接发，离线由 outbox worker 重试
+    if is_payment_success and agent then
+        -- 在线直发；直发失败会自动回退为邮件
         M.grant_order_reward(order)
     end
     return { code = 0, message = "处理成功" }

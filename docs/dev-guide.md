@@ -80,7 +80,7 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 ## 跨服务调用与关键消息
 
 - 关键路径（账号绑定、上下线、结算、物品/支付）用 `rpc.call_timeout(addr, timeout, method, ...)`：`timeout` 单位 0.01 秒，返回 `completed, ret1, ret2`；超时返回 `false, nil, "timeout"`，不会把调用方一起拖死。
-- 超时后远端仍可能继续处理，**重试必须幂等**；agent 的 `start` 已用 `req_id` + `script/utils/idempotent.lua` 去重，支付/物品类后续要接同一套或落库 outbox。
+- 超时后远端仍可能继续处理，**重试必须幂等**；agent 的 `start` 已用 `req_id` + `script/utils/idempotent.lua` 去重，关键发奖/扣物品已接入 `op_log` + 邮件/outbox。
 - 通知类（视野、AOI、ghost、日志、在线状态）继续用 `skynet.send`，丢了靠下一次同步或补偿。
 - 不要把 `send` 全量改成 `call`：会造成阻塞和级联故障。
 
@@ -100,16 +100,16 @@ agent 池由 supervisor 统一创建和重启（`.agent.<id>` 有名字，登录
 - `dbS.op_get(op_id)`：查询操作是否已完成及结果。
 - `Player:commit_critical(op_id, {"bag"}, extra_ops, result)`：复用玩家保存锁，把容器快照 + `op_log` 同事务提交。
 - `Player:grant_items_critical(op_id, items, reason, extra_ops)`：单玩家发奖的幂等入口；提交失败时保留 pending，定时保存会跳过该容器，按同一 `op_id` 重试。
-- 支付奖励：`paymentS.handle_notify` 更新订单后写 `op_outbox` 并尝试发奖；在线直接发，离线由 `outboxS` 重试；agent 侧按 `pay:<order_id>` 幂等。
+- 支付奖励：在线直发；离线时把奖励邮件和支付状态放在同一个事务里，玩家上线领取；直发失败也回退为邮件。agent 侧按 `pay:<order_id>`、邮件按确定性 `mail_id` 幂等。奖励邮件 `expire_time=0`，**永不过期**。
 - 邮件领取：`agent.claim_mail_items` 把附件、邮件已领取标记和 `op_log` 放在同一个事务里。
 
 ### 可靠投递 outbox
 
-- 表 `op_outbox`（迁移 `[#7]`）：`status` 0=待投递、1=完成、2=死信。
-- `outboxS` 每 5 秒扫待投递记录：
-  - 目标是玩家 agent 时，离线则顺延 60 秒再试；
-  - 投递失败按退避重试，10 次后进入死信；
-  - 支持 `target_type = agent / service`。
+- 表 `op_outbox`（迁移 `[#7]`）：`status` 0=待投递、1=完成、2=死信、3=玩家离线休眠。
+- `outboxS` 每 5 秒只扫 `status=0`：
+  - 目标是玩家 agent 但玩家离线时，置为 `status=3` 休眠，**不参与轮询**；
+  - 玩家登录后由 agent 调 `outboxS.flush_player(player_id)` 唤醒；
+  - 服务目标不可达或投递失败按退避重试，10 次后进入死信。
 - 死信查询/重放：`call .outbox "list_dead"`、`call .outbox "replay", outbox_id`。
 
 ### 交易行（Phase 2 最小版）

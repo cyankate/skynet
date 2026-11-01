@@ -12,7 +12,7 @@ local M = service_ctx.get("outbox.outbox_service", {})
 local TICK = 500
 local BATCH = 20
 local MAX_RETRIES = 10
-local OFFLINE_DELAY = 60
+local OFFLINE_STATUS = 3 -- 玩家离线：休眠，登录时 flush
 
 local function resolve(row)
     if row.target_type == "agent" then
@@ -27,10 +27,12 @@ local function delay_for(retries)
     return math.min(300, 5 * 2 ^ math.max(0, retries - 1))
 end
 
-local function postpone(row, now, reason)
+-- 玩家离线：休眠，不参与扫描；登录时 flush_player 唤醒
+local function set_dormant(row, now)
     db_call.call("update_where", "op_outbox", { outbox_id = row.outbox_id }, {
-        next_retry_at = now + OFFLINE_DELAY,
-        last_error = tostring(reason or "target offline"):sub(1, 255),
+        status = OFFLINE_STATUS,
+        next_retry_at = 0,
+        last_error = "target offline",
         update_time = now,
     })
 end
@@ -61,7 +63,11 @@ end
 local function deliver(row, now)
     local addr = resolve(row)
     if not addr then
-        postpone(row, now, "target offline")
+        if row.target_type == "agent" then
+            set_dormant(row, now)
+        else
+            mark_retry(row, now, "target offline")
+        end
         return
     end
     local payload = row.payload
@@ -124,6 +130,20 @@ function M.replay(outbox_id)
         retries = 0,
         next_retry_at = now,
         last_error = "",
+        update_time = now,
+    })
+end
+
+-- 玩家登录后唤醒其休眠的投递记录
+function M.flush_player(player_id)
+    local now = os.time()
+    return db_call.call("update_where", "op_outbox", {
+        target_type = "agent",
+        target_id = tostring(player_id),
+        status = OFFLINE_STATUS,
+    }, {
+        status = 0,
+        next_retry_at = now,
         update_time = now,
     })
 end
